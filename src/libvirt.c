@@ -846,6 +846,8 @@ virConnectCheckURIMissingSlash(const char *uristr, virURIPtr uri)
 }
 
 
+// create connection and select ConnectDriver based on uri
+// if name is "", use default ConnectDriver!!!
 static virConnectPtr
 virConnectOpenInternal(const char *name,
                        virConnectAuthPtr auth,
@@ -857,10 +859,12 @@ virConnectOpenInternal(const char *name,
     virConfPtr conf = NULL;
     char *uristr = NULL;
 
+    // create a new client connection struct that holds meta of it
     ret = virGetConnect();
     if (ret == NULL)
         return NULL;
 
+    // for each connection, we load config!!! why not load once???
     if (virConfLoadConfig(&conf, "libvirt.conf") < 0)
         goto failed;
 
@@ -892,6 +896,7 @@ virConnectOpenInternal(const char *name,
         if (VIR_STRDUP(uristr, name) < 0)
             goto failed;
     } else {
+        // get default uri
         if (virConnectGetDefaultURI(conf, &uristr) < 0)
             goto failed;
 
@@ -961,6 +966,7 @@ virConnectOpenInternal(const char *name,
     /* Cleansing flags */
     ret->flags = flags & VIR_CONNECT_RO;
 
+    // check ConnectDriver table, select ConnectDriver based on uri
     for (i = 0; i < virConnectDriverTabCount; i++) {
         /* We're going to probe the remote driver next. So we have already
          * probed all other client-side-only driver before, but none of them
@@ -1017,6 +1023,7 @@ virConnectOpenInternal(const char *name,
             for (s = 0; virConnectDriverTab[i]->uriSchemes[s] != NULL; s++) {
                 if (STREQ(ret->uri->scheme, virConnectDriverTab[i]->uriSchemes[s])) {
                     VIR_DEBUG("Matched URI scheme '%s'", ret->uri->scheme);
+                    // find the driver, jump out
                     matchScheme = true;
                     break;
                 }
@@ -1029,6 +1036,7 @@ virConnectOpenInternal(const char *name,
             VIR_DEBUG("Matching any URI scheme for '%s'", ret->uri ? ret->uri->scheme : "");
         }
 
+        // bind connection with ConnectDriver
         ret->driver = virConnectDriverTab[i]->hypervisorDriver;
         ret->interfaceDriver = virConnectDriverTab[i]->interfaceDriver;
         ret->networkDriver = virConnectDriverTab[i]->networkDriver;
@@ -1069,6 +1077,7 @@ virConnectOpenInternal(const char *name,
     virConfFree(conf);
     VIR_FREE(uristr);
 
+    // return the new connection
     return ret;
 
  failed:

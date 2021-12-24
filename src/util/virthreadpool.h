@@ -33,6 +33,9 @@ typedef virThreadPool *virThreadPoolPtr;
 
 typedef void (*virThreadPoolJobFunc)(void *jobdata, void *opaque);
 
+// there are only two thread pools
+// rpc server creates one
+// qemu_driver creates one
 # define virThreadPoolNew(min, max, prio, func, opaque) \
     virThreadPoolNewFull(min, max, prio, func, #func, opaque)
 

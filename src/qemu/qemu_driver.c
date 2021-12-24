@@ -912,6 +912,7 @@ qemuStateInitialize(bool privileged,
     /* must be initialized before trying to reconnect to all the
      * running domains since there might occur some QEMU monitor
      * events that will be dispatched to the worker pool */
+    // only one worker for this pool
     qemu_driver->workerPool = virThreadPoolNew(0, 1, 0, qemuProcessEventHandler, qemu_driver);
     if (!qemu_driver->workerPool)
         goto error;
@@ -21849,6 +21850,21 @@ static virHypervisorDriver qemuHypervisorDriver = {
 };
 
 
+// as each ConnectDriver should implement all xxDriver defined
+// xxDriver can be shared by different ConnectDrivers
+// these xxDrivers that can be shared call virSetSharedNetworkDriver() to set shared drivers
+// all shared drivers
+//
+// virSharedInterfaceDriver
+// virSharedNetworkDriver
+// virSharedNodeDeviceDriver
+// virSharedStorageDriver
+// etc
+//
+// ConnectDriver who wants to use these shared xxDriver call virRegisterConnectDriver() with shared flag: True
+//
+// NOTE: only qemuConnectDriver and lxcConnectDriver use shared drivers, others not!!!
+// that means qemu/lxc can supports full API while other ConnectDriver only limits its scope!!!
 static virConnectDriver qemuConnectDriver = {
     .localOnly = true,
     .uriSchemes = (const char *[]){ "qemu", NULL },
@@ -21866,6 +21882,7 @@ static virStateDriver qemuStateDriver = {
 
 int qemuRegister(void)
 {
+    // register qemu connect driver, use shared drivers for other except .hypervisorDriver
     if (virRegisterConnectDriver(&qemuConnectDriver,
                                  true) < 0)
         return -1;

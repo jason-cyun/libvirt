@@ -21,6 +21,7 @@
  * Author: Daniel P. Berrange <berrange@redhat.com>
  */
 
+#include <gperftools/profiler.h>
 #include <config.h>
 
 #include <unistd.h>
@@ -306,6 +307,7 @@ static int daemonInitialize(void)
      * driver, since their resources must be auto-started before any
      * domains can be auto-started.
      */
+// load each Connect driver module depends on configure
 #ifdef WITH_NETWORK
     if (virDriverLoadModule("network", "networkRegister", false) < 0)
         return -1;
@@ -335,6 +337,7 @@ static int daemonInitialize(void)
         return -1;
 #endif
 #ifdef WITH_QEMU
+    // each module must define register function passed here!!!
     if (virDriverLoadModule("qemu", "qemuRegister", false) < 0)
         return -1;
 #endif
@@ -1063,6 +1066,7 @@ int main(int argc, char **argv) {
         {0, 0, 0, 0}
     };
 
+    ProfilerStart("my.prof");
     if (virGettextInitialize() < 0 ||
         virInitialize() < 0) {
         fprintf(stderr, _("%s: initialization failed\n"), argv[0]);
@@ -1273,6 +1277,7 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
 
+    // rpc pool of several workers
     if (!(srv = virNetServerNew("libvirtd", 1,
                                 config->min_workers,
                                 config->max_workers,
@@ -1511,5 +1516,7 @@ int main(int argc, char **argv) {
     VIR_FREE(remote_config_file);
     daemonConfigFree(config);
 
+    ProfilerFlush();
+    ProfilerStop();
     return ret;
 }

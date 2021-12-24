@@ -359,6 +359,9 @@ virNetServerPtr virNetServerNew(const char *name,
         return NULL;
 
     if (max_workers &&
+            // create rpc server pool for rpc call(each call is a job)
+            // min/max worker comes from conf
+            // default min: 5, max: 20
         !(srv->workers = virThreadPoolNew(min_workers, max_workers,
                                           priority_workers,
                                           virNetServerHandleJob,

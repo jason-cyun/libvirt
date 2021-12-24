@@ -39,6 +39,7 @@ struct _virNetMessage {
     size_t bufferLength;
     size_t bufferOffset;
 
+    // decoded header from buffer above
     virNetMessageHeader header;
 
     virNetMessageFreeCallback cb;

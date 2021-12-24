@@ -203,6 +203,7 @@ static void *virThreadHelper(void *data)
     else
         virThreadJobSet(local.funcName);
 
+    // call handler for different threads
     local.func(local.opaque);
 
     if (!local.worker)
@@ -238,6 +239,7 @@ int virThreadCreateFull(virThreadPtr thread,
     if (!joinable)
         pthread_attr_setdetachstate(&attr, 1);
 
+    // create pthread with enter point virThreadHelper, args as data to it
     err = pthread_create(&thread->thread, &attr, virThreadHelper, args);
     if (err != 0) {
         VIR_FREE(args);

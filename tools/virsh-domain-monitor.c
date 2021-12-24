@@ -2382,6 +2382,7 @@ cmdDomIfAddr(vshControl *ctl, const vshCmd *cmd)
     return ret;
 }
 
+// dom monitor group
 const vshCmdDef domMonitoringCmds[] = {
     {.name = "domblkerror",
      .handler = cmdDomBlkError,

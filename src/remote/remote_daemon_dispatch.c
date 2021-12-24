@@ -1814,6 +1814,7 @@ remoteDispatchConnectOpen(virNetServerPtr server ATTRIBUTE_UNUSED,
         goto cleanup;
     }
 
+    // rpc for connectionopen with uri as argument
     name = args->name ? *args->name : NULL;
 
     /* If this connection arrived on a readonly socket, force

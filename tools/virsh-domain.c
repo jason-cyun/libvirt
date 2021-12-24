@@ -13718,6 +13718,7 @@ cmdDomFSInfo(vshControl *ctl, const vshCmd *cmd)
     return ret >= 0;
 }
 
+// dom management group
 const vshCmdDef domManagementCmds[] = {
     {.name = "attach-device",
      .handler = cmdAttachDevice,

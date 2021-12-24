@@ -51,6 +51,7 @@ virDriverLoadModule(const char *name,
 
     VIR_DEBUG("Module load %s", name);
 
+    // load driver module dynamically from shared library!!!
     if (!(modfile = virFileFindResourceFull(name,
                                             "libvirt_driver_",
                                             ".so",
@@ -59,6 +60,7 @@ virDriverLoadModule(const char *name,
                                             "LIBVIRT_DRIVER_DIR")))
         return -1;
 
+    // mode file with path
     ret = virModuleLoad(modfile, regfunc, required);
 
     VIR_FREE(modfile);

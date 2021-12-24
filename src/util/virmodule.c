@@ -114,12 +114,15 @@ virModuleLoad(const char *path,
         }
     }
 
+    // load shared library with dlopen()
     if (!(rethandle = virModuleLoadFile(path)))
         goto cleanup;
 
+    // get register fucntion address
     if (!(regsym = virModuleLoadFunc(rethandle, path, regfunc)))
         goto cleanup;
 
+    // call register function here
     if ((*regsym)() < 0) {
         /* regsym() should report an error itself, but lets
          * just make sure */

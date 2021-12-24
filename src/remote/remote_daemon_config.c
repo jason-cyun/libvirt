@@ -145,6 +145,7 @@ daemonConfigNew(bool privileged ATTRIBUTE_UNUSED)
 
     data->mdns_adv = 0;
 
+    // default value of config item
     data->min_workers = 5;
     data->max_workers = 20;
     data->max_clients = 5000;

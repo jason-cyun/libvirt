@@ -955,9 +955,11 @@ virDomainObjListCollect(virDomainObjListPtr domlist,
         return -1;
     }
 
+    // added all domains
     virHashForEach(domlist->objs, virDomainObjListCollectIterator, &data);
     virObjectRWUnlock(domlist);
 
+    // filter out some depends on flags set from user
     virDomainObjListFilter(&data.vms, &data.nvms, conn, filter, flags);
 
     *nvms = data.nvms;

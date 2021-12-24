@@ -1275,6 +1275,7 @@ virNetClientCallDispatch(virNetClientPtr client)
     switch (client->msg.header.type) {
     case VIR_NET_REPLY: /* Normal RPC replies */
     case VIR_NET_REPLY_WITH_FDS: /* Normal RPC replies with FDs */
+        // update thiscall msg based on msg recevied from client->msg
         return virNetClientCallDispatchReply(client);
 
     case VIR_NET_MESSAGE: /* Async notifications */
@@ -1303,6 +1304,7 @@ virNetClientIOWriteMessage(virNetClientPtr client,
     ssize_t ret = 0;
 
     if (thecall->msg->bufferOffset < thecall->msg->bufferLength) {
+        // write data to client socket for sending
         ret = virNetSocketWrite(client->sock,
                                 thecall->msg->buffer + thecall->msg->bufferOffset,
                                 thecall->msg->bufferLength - thecall->msg->bufferOffset);
@@ -1326,6 +1328,7 @@ virNetClientIOWriteMessage(virNetClientPtr client,
         if (thecall->expectReply)
             thecall->mode = VIR_NET_CLIENT_MODE_WAIT_RX;
         else
+            // send all data
             thecall->mode = VIR_NET_CLIENT_MODE_COMPLETE;
     }
 
@@ -1349,6 +1352,7 @@ virNetClientIOHandleOutput(virNetClientPtr client)
                    */
 
     while (thecall) {
+        // send this call to remote server
         ssize_t ret = virNetClientIOWriteMessage(client, thecall);
         if (ret < 0)
             return ret;
@@ -1399,6 +1403,7 @@ virNetClientIOHandleInput(virNetClientPtr client)
         ssize_t ret;
 
         if (client->msg.nfds == 0) {
+            // read data from client sock
             ret = virNetClientIOReadMessage(client);
 
             if (ret < 0)
@@ -1450,6 +1455,8 @@ virNetClientIOHandleInput(virNetClientPtr client)
                 }
 
                 ret = virNetClientCallDispatch(client);
+                // as save data from client->msg to thiscall->msg
+                // can reset client->msg as free
                 virNetMessageClear(&client->msg);
                 /*
                  * We've completed one call, but we don't want to
@@ -1597,6 +1604,7 @@ static int virNetClientIOEventLoop(virNetClientPtr client,
     int closeReason;
     int ret;
 
+    // fd[0] is client sock connected with server
     fds[0].fd = virNetSocketGetFD(client->sock);
     fds[1].fd = client->wakeupReadFD;
 
@@ -1709,6 +1717,7 @@ static int virNetClientIOEventLoop(virNetClientPtr client,
             closeReason = VIR_CONNECT_CLOSE_REASON_ERROR;
 
         if (fds[0].revents & POLLOUT) {
+            // send data to server, then go down
             if (virNetClientIOHandleOutput(client) < 0) {
                 virNetClientMarkClose(client, closeReason);
                 error = true;
@@ -1717,6 +1726,8 @@ static int virNetClientIOEventLoop(virNetClientPtr client,
         }
 
         if (fds[0].revents & POLLIN) {
+            // go into infinit loop for reading data from remote server
+            // if data on client socket fd is available to read
             if (virNetClientIOHandleInput(client) < 0) {
                 virNetClientMarkClose(client, closeReason);
                 error = true;
@@ -1877,6 +1888,7 @@ static int virNetClientIO(virNetClientPtr client,
               client->waitDispatch);
 
     /* Stick ourselves on the end of the wait queue */
+    // add thiscall to waitDispatch queue
     virNetClientCallQueue(&client->waitDispatch, thiscall);
 
     /* Check to see if another thread is dispatching */
@@ -1949,9 +1961,11 @@ static int virNetClientIO(virNetClientPtr client,
      * cause the event loop thread to be blocked on the
      * mutex for the duration of the call
      */
+    // update monitor event for this client socket in poll
     virNetClientIOUpdateCallback(client, false);
 
     virResetLastError();
+    // poll on client fd
     rv = virNetClientIOEventLoop(client, thiscall);
 
     if (client->sock)
@@ -2127,6 +2141,7 @@ static int virNetClientSendInternal(virNetClientPtr client,
         return -1;
 
     call->haveThread = true;
+    // call->msg = msg
     ret = virNetClientIO(client, call);
 
     /* If queued, the call will be finished and freed later by another thread;

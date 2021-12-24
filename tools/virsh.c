@@ -841,6 +841,7 @@ static const vshCmdDef virshCmds[] = {
 };
 
 static const vshCmdGrp cmdGroups[] = {
+    // all virsh groups
     {VIRSH_CMD_GRP_DOM_MANAGEMENT, "domain", domManagementCmds},
     {VIRSH_CMD_GRP_DOM_MONITORING, "monitor", domMonitoringCmds},
     {VIRSH_CMD_GRP_HOST_AND_HV, "host", hostAndHypervisorCmds},
@@ -918,6 +919,7 @@ main(int argc, char **argv)
     if (!vshInit(ctl, cmdGroups, NULL))
         exit(EXIT_FAILURE);
 
+    // get cmd based on args
     if (!virshParseArgv(ctl, argc, argv) ||
         !virshInit(ctl)) {
         virshDeinit(ctl);

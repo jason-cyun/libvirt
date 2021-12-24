@@ -88,9 +88,11 @@ void virThreadOnExit(void);
 
 typedef void (*virThreadFunc)(void *opaque);
 
+// create non worker thread
 # define virThreadCreate(thread, joinable, func, opaque) \
     virThreadCreateFull(thread, joinable, func, #func, false, opaque)
 
+// worker thread never quits, while non-worker thread just run one time exits after do his job
 int virThreadCreateFull(virThreadPtr thread,
                         bool joinable,
                         virThreadFunc func,

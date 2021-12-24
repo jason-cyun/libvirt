@@ -583,7 +583,9 @@ vshCmdDefSearchGrp(const char *cmdname)
     const vshCmdGrp *g;
     const vshCmdDef *c;
 
+    // check all groups
     for (g = cmdGroups; g->name; g++) {
+        // check all command in this group
         for (c = g->commands; c->name; c++) {
             if (STREQ(c->name, cmdname))
                 return c;
@@ -609,6 +611,8 @@ vshCmdDefSearchSet(const char *cmdname)
 const vshCmdDef *
 vshCmddefSearch(const char *cmdname)
 {
+    // search command based on cmdname from user's input
+    // NOTE: vish command are grouped, each group has many commands aiming for similar function like monitor, network etc
     if (cmdGroups)
         return vshCmdDefSearchGrp(cmdname);
     else

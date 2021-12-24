@@ -57,22 +57,32 @@ struct _virThreadPoolJobList {
 struct _virThreadPool {
     bool quit;
 
+    // job executed function called by each worker in the same pool
     virThreadPoolJobFunc jobFunc;
     const char *jobFuncName;
     void *jobOpaque;
+    // job list of this pool
     virThreadPoolJobList jobList;
+    // pending job counts in the pool
     size_t jobQueueDepth;
 
+    // mutex of this pool
     virMutex mutex;
+    // condition of this pool, used for waking up worker when job comes in the pool
     virCond cond;
     virCond quit_cond;
 
+    // As workers can expand dynamically, here are worker limit
     size_t maxWorkers;
     size_t minWorkers;
+    // free worker, when there is no job, freeWorkers == nWorkers
     size_t freeWorkers;
+    // current workers, nWorkers increases when expand, decrease when thread quits
     size_t nWorkers;
+    // all pthreads(workers)
     virThreadPtr workers;
 
+    // prio workers
     size_t maxPrioWorkers;
     size_t nPrioWorkers;
     virThreadPtr prioWorkers;
@@ -116,16 +126,21 @@ static void virThreadPoolWorker(void *opaque)
          */
         if (virThreadPoolWorkerQuitHelper(*curWorkers, *maxLimit))
             goto out;
+
+        // pool is not quiting, joblist is empty, i have nothing to do
         while (!pool->quit &&
                ((!priority && !pool->jobList.head) ||
                 (priority && !pool->jobList.firstPrio))) {
             if (!priority)
                 pool->freeWorkers++;
+            // block here, until job comes in
             if (virCondWait(cond, &pool->mutex) < 0) {
                 if (!priority)
                     pool->freeWorkers--;
                 goto out;
             }
+            // starts to work, not free anymore
+            // go to next loop, in that case, joblist is not empty, jump out!!!
             if (!priority)
                 pool->freeWorkers--;
 
@@ -139,19 +154,23 @@ static void virThreadPoolWorker(void *opaque)
         if (priority) {
             job = pool->jobList.firstPrio;
         } else {
+            //  normal job
             job = pool->jobList.head;
         }
 
         if (job == pool->jobList.firstPrio) {
             virThreadPoolJobPtr tmp = job->next;
             while (tmp) {
+                // find next priority job
                 if (tmp->priority)
                     break;
                 tmp = tmp->next;
             }
+            // reset the firt priority job in the list
             pool->jobList.firstPrio = tmp;
         }
 
+        // reset head, tail etc
         if (job->prev)
             job->prev->next = job->next;
         else
@@ -164,6 +183,8 @@ static void virThreadPoolWorker(void *opaque)
         pool->jobQueueDepth--;
 
         virMutexUnlock(&pool->mutex);
+        // call pool handler for this job, that means all job belongs to the same pool
+        // use the same handler.
         (pool->jobFunc)(job->data, pool->jobOpaque);
         VIR_FREE(job);
         virMutexLock(&pool->mutex);
@@ -174,6 +195,7 @@ static void virThreadPoolWorker(void *opaque)
         pool->nPrioWorkers--;
     else
         pool->nWorkers--;
+    // no worker in the pool, signal pool to quit
     if (pool->nWorkers == 0 && pool->nPrioWorkers == 0)
         virCondSignal(&pool->quit_cond);
     virMutexUnlock(&pool->mutex);
@@ -198,6 +220,7 @@ virThreadPoolExpand(virThreadPoolPtr pool, size_t gain, bool priority)
         data->cond = priority ? &pool->prioCond : &pool->cond;
         data->priority = priority;
 
+        // create a worker thread and run it now with handler virThreadPoolWorker
         if (virThreadCreateFull(&(*workers)[i],
                                 false,
                                 virThreadPoolWorker,
@@ -250,6 +273,7 @@ virThreadPoolNewFull(size_t minWorkers,
     pool->maxWorkers = maxWorkers;
     pool->maxPrioWorkers = prioWorkers;
 
+    // initialization worker is minWorkers, later on we may increase workers
     if (virThreadPoolExpand(pool, minWorkers, false) < 0)
         goto error;
 
@@ -387,8 +411,10 @@ int virThreadPoolSendJob(virThreadPoolPtr pool,
     if (pool->quit)
         goto error;
 
+    // each worker is a pthread
     if (pool->freeWorkers - pool->jobQueueDepth <= 0 &&
         pool->nWorkers < pool->maxWorkers &&
+        // increase one worker
         virThreadPoolExpand(pool, 1, false) < 0)
         goto error;
 
@@ -443,6 +469,7 @@ virThreadPoolSetParameters(virThreadPoolPtr pool,
     }
 
     if (minWorkers >= 0) {
+        // expand worker based user setting if needed
         if ((size_t) minWorkers > pool->nWorkers &&
             virThreadPoolExpand(pool, minWorkers - pool->nWorkers,
                                 false) < 0)

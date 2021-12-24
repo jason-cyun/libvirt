@@ -39,6 +39,7 @@ VIR_LOG_INIT("rpc.netserverprogram");
 struct _virNetServerProgram {
     virObject parent;
 
+    // program like a service, procs are all rpc APIs
     unsigned program;
     unsigned version;
     virNetServerProgramProcPtr procs;
@@ -389,6 +390,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
         goto error;
     }
 
+    // dispatcher is the rpc function registered and identified by proc number
     dispatcher = virNetServerProgramGetProc(prog, msg->header.proc);
 
     if (!dispatcher) {
@@ -415,6 +417,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
     if (VIR_ALLOC_N(ret, dispatcher->ret_len) < 0)
         goto error;
 
+    // arg is decoded payload
     if (virNetMessageDecodePayload(msg, dispatcher->arg_filter, arg) < 0)
         goto error;
 
