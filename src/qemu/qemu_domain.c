@@ -6924,6 +6924,7 @@ qemuDomainObjEndJob(virQEMUDriverPtr driver, virDomainObjPtr obj)
               qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
               obj, obj->def->name);
 
+    // end monitor job(normal job) so that other normal job can run
     qemuDomainObjResetJob(priv);
     if (qemuDomainTrackJob(job))
         qemuDomainObjSaveJob(driver, obj);
@@ -6945,6 +6946,7 @@ qemuDomainObjEndAgentJob(virDomainObjPtr obj)
               qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
               obj, obj->def->name);
 
+    // end agent job so next agent job can run!!!
     qemuDomainObjResetAgentJob(priv);
     /* We indeed need to wake up ALL threads waiting because
      * grabbing a job requires checking more variables. */

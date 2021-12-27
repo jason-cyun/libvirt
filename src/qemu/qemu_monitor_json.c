@@ -99,9 +99,9 @@ typedef struct {
 } qemuEventHandler;
 
 static qemuEventHandler eventHandlers[] = {
-    // qemu monitor event handler(preprocessing), then call monitorCallbacks for processing
-    // while for event that takes longer time, monitorCallbacks transfer that event to another thread for processing
-    // eventHandlers  and monitorCallbacks runs in event thread.
+    // qemu monitor event handler(preprocessing, parse json and prepare parameters for monitorCallbacks), then call monitorCallbacks for processing
+    // For event that takes longer time, monitorCallback transfers that event to another thread for processing
+    // eventHandlers and monitorCallbacks runs in event thread.
     { "ACPI_DEVICE_OST", qemuMonitorJSONHandleAcpiOstInfo, },
     { "BALLOON_CHANGE", qemuMonitorJSONHandleBalloonChange, },
     { "BLOCK_IO_ERROR", qemuMonitorJSONHandleIOError, },
@@ -187,17 +187,17 @@ qemuMonitorJSONIOProcessEvent(qemuMonitorPtr mon,
                                                      &micros));
     }
 
-    // add qemu monitor event to event queue which will be used for qemu monitor event notify if someone is listening
+    // add qemu monitor event to event queue which will be used for event notification if user registered qemu event
     qemuMonitorEmitEvent(mon, type, seconds, micros, details);
     VIR_FREE(details);
 
     // qemu defines several events, libvirt handle some qemu events
     // BLOCK_IO_ERROR, BLOCK_JOB_COMPLETED, DEVICE_DELETED, MIGRATION,
-    // RESET, RESUMEm,SHUTDOWN,STOP, SUSPEND, VNC_CONNECTED etc
+    // RESET, RESUME,SHUTDOWN,STOP, SUSPEND, VNC_CONNECTED etc
     //
     // here handler is used for preprocessing for json data from qemu
     // as different monitor events have different json data, should treat them separately
-    // this is called preprocessing(parse value from json string), then we pass the parsed data to monitorCallbacks
+    // this is called preprocessing(parse value from json string), then we pass(emit) the parsed data to monitorCallbacks
     // which will handle monitor event carefully
     handler = bsearch(type, eventHandlers, ARRAY_CARDINALITY(eventHandlers),
                       sizeof(eventHandlers[0]), qemuMonitorEventCompare);
@@ -219,7 +219,7 @@ qemuMonitorJSONIOProcessLine(qemuMonitorPtr mon,
     int ret = -1;
 
     /* process one line of reply
-     * actually the whole reply is in one line!!!
+     * actually a whole reply is in one line but may be read several times from monitor socket
      */
     VIR_DEBUG("Line [%s]", line);
 
@@ -237,19 +237,18 @@ qemuMonitorJSONIOProcessLine(qemuMonitorPtr mon,
     } else if (virJSONValueObjectHasKey(obj, "event") == 1) {
         PROBE(QEMU_MONITOR_RECV_EVENT,
               "mon=%p event=%s", mon, line);
-        // event returned on monitor fd without we sending any qmp or send async command like shutdown
+        // event may be returned on monitor fd without we sending any qmp or send async command like shutdown
         // it's report by qemu process on monitor fd on some change
-        // like serial change, eof etc
+        // like serial change, eof, os shutdown etc
         // process async event from qemu-process
         ret = qemuMonitorJSONIOProcessEvent(mon, obj);
     } else if (virJSONValueObjectHasKey(obj, "error") == 1 ||
                virJSONValueObjectHasKey(obj, "return") == 1) {
-        // got return/error for QMP sent command
+        // got return/error for QMP command sent
         PROBE(QEMU_MONITOR_RECV_REPLY,
               "mon=%p reply=%s", mon, line);
         if (msg) {
-            // got reply for this command, set it finished
-            // get all reply from qemu process
+            // got the whole reply for this command, set it finished
             msg->rxObject = obj;
             msg->finished = 1;
             obj = NULL;
@@ -321,6 +320,7 @@ qemuMonitorJSONCommandWithFd(qemuMonitorPtr mon,
 
     memset(&msg, 0, sizeof(msg));
 
+    // general part for all QMP command
     if (virJSONValueObjectHasKey(cmd, "execute") == 1) {
         /* auto generate command ID */
         if (!(id = qemuMonitorNextCommandID(mon)))
@@ -335,6 +335,7 @@ qemuMonitorJSONCommandWithFd(qemuMonitorPtr mon,
 
     if (!(cmdstr = virJSONValueToString(cmd, false)))
         goto cleanup;
+    // add \r\n for json string
     if (virAsprintf(&msg.txBuffer, "%s\r\n", cmdstr) < 0)
         goto cleanup;
     msg.txLength = strlen(msg.txBuffer);
@@ -342,8 +343,6 @@ qemuMonitorJSONCommandWithFd(qemuMonitorPtr mon,
 
     VIR_DEBUG("Send command '%s' for write with FD %d", cmdstr, scm_fd);
 
-    // block until get reply from monitor fds
-    // reply is handled in event thread, then wake up me
     ret = qemuMonitorSend(mon, &msg);
 
     VIR_DEBUG("Receive command reply ret=%d rxObject=%p",
@@ -416,6 +415,7 @@ static int
 qemuMonitorJSONCheckError(virJSONValuePtr cmd,
                           virJSONValuePtr reply)
 {
+    // check error details from qemu reply
     if (virJSONValueObjectHasKey(reply, "error")) {
         virJSONValuePtr error = virJSONValueObjectGet(reply, "error");
         char *cmdstr = virJSONValueToString(cmd, false);
@@ -648,6 +648,7 @@ static void qemuMonitorJSONHandleShutdown(qemuMonitorPtr mon, virJSONValuePtr da
     if (data && virJSONValueObjectGetBoolean(data, "guest", &guest) == 0)
         guest_initiated = guest ? VIR_TRISTATE_BOOL_YES : VIR_TRISTATE_BOOL_NO;
 
+    // parse value from json, then emit to monitor callback
     qemuMonitorEmitShutdown(mon, guest_initiated);
 }
 
@@ -810,7 +811,7 @@ qemuMonitorJSONHandleIOError(qemuMonitorPtr mon, virJSONValuePtr data)
     int actionID;
 
     /* Throughout here we try our best to carry on upon errors,
-       since it's imporatant to get as much info as possible out
+       since it's important to get as much info as possible out
        to the application */
 
     if ((action = virJSONValueObjectGetString(data, "action")) == NULL) {
@@ -828,6 +829,9 @@ qemuMonitorJSONHandleIOError(qemuMonitorPtr mon, virJSONValuePtr data)
         VIR_WARN("unknown disk io error action '%s'", action);
         actionID = VIR_DOMAIN_EVENT_IO_ERROR_NONE;
     }
+
+
+    // parse io error into from json, then emit to monitor callback
 
     qemuMonitorEmitIOError(mon, device, actionID, reason);
 }
@@ -1436,6 +1440,7 @@ int
 qemuMonitorJSONStartCPUs(qemuMonitorPtr mon)
 {
     int ret;
+    // build specific command
     virJSONValuePtr cmd = qemuMonitorJSONMakeCommand("cont", NULL);
     virJSONValuePtr reply = NULL;
     size_t i = 0;
@@ -1444,6 +1449,7 @@ qemuMonitorJSONStartCPUs(qemuMonitorPtr mon)
         return -1;
 
     do {
+        // send qmp with general function
         ret = qemuMonitorJSONCommand(mon, cmd, &reply);
 
         if (ret != 0)
@@ -1481,6 +1487,7 @@ qemuMonitorJSONStopCPUs(qemuMonitorPtr mon)
     if (qemuMonitorJSONCommand(mon, cmd, &reply) < 0)
         goto cleanup;
 
+    // check if error reported by qemu not error when handling command
     if (qemuMonitorJSONCheckError(cmd, reply) < 0)
         goto cleanup;
 
@@ -1506,15 +1513,19 @@ qemuMonitorJSONGetStatus(qemuMonitorPtr mon,
     if (reason)
         *reason = VIR_DOMAIN_PAUSED_UNKNOWN;
 
+    // build command
     if (!(cmd = qemuMonitorJSONMakeCommand("query-status", NULL)))
         return -1;
 
+    // send command and wait/get reply
     if (qemuMonitorJSONCommand(mon, cmd, &reply) < 0)
         goto cleanup;
 
+    // check error reported by qemu
     if (qemuMonitorJSONCheckReply(cmd, reply, VIR_JSON_TYPE_OBJECT) < 0)
         goto cleanup;
 
+    // parse reply and return required value to caller
     data = virJSONValueObjectGetObject(reply, "return");
 
     if (virJSONValueObjectGetBoolean(data, "running", running) < 0) {

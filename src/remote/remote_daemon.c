@@ -21,7 +21,6 @@
  * Author: Daniel P. Berrange <berrange@redhat.com>
  */
 
-#include <gperftools/profiler.h>
 #include <config.h>
 
 #include <unistd.h>

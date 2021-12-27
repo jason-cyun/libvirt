@@ -48,6 +48,7 @@ int qemuMonitorJSONHumanCommandWithFd(qemuMonitorPtr mon,
 
 int qemuMonitorJSONSetCapabilities(qemuMonitorPtr mon);
 
+// API that build json string and send command to monitor fd and blocks on reply, then return result or error
 int qemuMonitorJSONStartCPUs(qemuMonitorPtr mon);
 int qemuMonitorJSONStopCPUs(qemuMonitorPtr mon);
 int qemuMonitorJSONGetStatus(qemuMonitorPtr mon,

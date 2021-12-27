@@ -72,10 +72,11 @@ struct _qemuMonitor {
 
     virCond notify;
 
+    // monitor socket fd
     int fd;
 
     /* Represents the watch number to be used for updating and
-     * unregistering the monitor @fd for events in the event loop:
+     * deregister the monitor @fd for events in the event loop:
      * > 0: valid watch number
      * = 0: not registered
      * < 0: an error occurred during the registration of @fd */
@@ -173,6 +174,7 @@ static int qemuMonitorOnceInit(void)
 VIR_ONCE_GLOBAL_INIT(qemuMonitor)
 
 
+// migration status reported by qemu event
 VIR_ENUM_IMPL(qemuMonitorMigrationStatus,
               QEMU_MONITOR_MIGRATION_STATUS_LAST,
               "inactive", "setup",
@@ -181,11 +183,95 @@ VIR_ENUM_IMPL(qemuMonitorMigrationStatus,
               "completed", "failed",
               "cancelling", "cancelled")
 
+// vm status returned for `query-status` command
 VIR_ENUM_IMPL(qemuMonitorVMStatus,
               QEMU_MONITOR_VM_STATUS_LAST,
               "debug", "inmigrate", "internal-error", "io-error", "paused",
               "postmigrate", "prelaunch", "finish-migrate", "restore-vm",
               "running", "save-vm", "shutdown", "watchdog", "guest-panicked")
+
+// io status of block returned for `query-block`
+// # -> { "execute": "query-block" }
+// <- {
+//       "return":[
+//          {
+//             "io-status": "ok",
+//             "device":"ide0-hd0",
+//             "locked":false,
+//             "removable":false,
+//             "inserted":{
+//                "ro":false,
+//                "drv":"qcow2",
+//                "encrypted":false,
+//                "file":"disks/test.qcow2",
+//                "backing_file_depth":1,
+//                "bps":1000000,
+//                "bps_rd":0,
+//                "bps_wr":0,
+//                "iops":1000000,
+//                "iops_rd":0,
+//                "iops_wr":0,
+//                "bps_max": 8000000,
+//                "bps_rd_max": 0,
+//                "bps_wr_max": 0,
+//                "iops_max": 0,
+//                "iops_rd_max": 0,
+//                "iops_wr_max": 0,
+//                "iops_size": 0,
+//                "detect_zeroes": "on",
+//                "write_threshold": 0,
+//                "image":{
+//                   "filename":"disks/test.qcow2",
+//                   "format":"qcow2",
+//                   "virtual-size":2048000,
+//                   "backing_file":"base.qcow2",
+//                   "full-backing-filename":"disks/base.qcow2",
+//                   "backing-filename-format":"qcow2",
+//                   "snapshots":[
+//                      {
+//                         "id": "1",
+//                         "name": "snapshot1",
+//                         "vm-state-size": 0,
+//                         "date-sec": 10000200,
+//                         "date-nsec": 12,
+//                         "vm-clock-sec": 206,
+//                         "vm-clock-nsec": 30
+//                      }
+//                   ],
+//                   "backing-image":{
+//                       "filename":"disks/base.qcow2",
+//                       "format":"qcow2",
+//                       "virtual-size":2048000
+//                   }
+//                }
+//             },
+//             "qdev": "ide_disk",
+//             "type":"unknown"
+//          },
+//          {
+//             "io-status": "ok",
+//             "device":"ide1-cd0",
+//             "locked":false,
+//             "removable":true,
+//             "qdev": "/machine/unattached/device[23]",
+//             "tray_open": false,
+//             "type":"unknown"
+//          },
+//          {
+//             "device":"floppy0",
+//             "locked":false,
+//             "removable":true,
+//             "qdev": "/machine/unattached/device[20]",
+//             "type":"unknown"
+//          },
+//          {
+//             "device":"sd0",
+//             "locked":false,
+//             "removable":true,
+//             "type":"unknown"
+//          }
+//       ]
+//    }
 
 typedef enum {
     QEMU_MONITOR_BLOCK_IO_STATUS_OK,
@@ -201,10 +287,14 @@ VIR_ENUM_IMPL(qemuMonitorBlockIOStatus,
               QEMU_MONITOR_BLOCK_IO_STATUS_LAST,
               "ok", "failed", "nospace")
 
+// status returned for `query-dump` command
 VIR_ENUM_IMPL(qemuMonitorDumpStatus,
               QEMU_MONITOR_DUMP_STATUS_LAST,
               "none", "active", "completed", "failed")
 
+// escape char(\r, \n, \\, ") when passing command to monitor for HMP(old way)
+// as for HMP plain text is sent
+// NOTE: this is not needed form monitor json
 char *
 qemuMonitorEscapeArg(const char *in)
 {
@@ -259,6 +349,7 @@ qemuMonitorEscapeArg(const char *in)
 }
 
 
+// HMP needed.
 char *
 qemuMonitorUnescapeArg(const char *in)
 {
@@ -322,6 +413,7 @@ qemuMonitorEscapeNonPrintable(const char *text)
 static void
 qemuMonitorDispose(void *obj)
 {
+    // free fields of monitor firstly when freeing monitor object
     qemuMonitorPtr mon = obj;
 
     VIR_DEBUG("mon=%p", mon);
@@ -329,6 +421,7 @@ qemuMonitorDispose(void *obj)
         (mon->cb->destroy)(mon, mon->vm, mon->callbackOpaque);
     virObjectUnref(mon->vm);
 
+    // free memory allocated
     virResetError(&mon->lastError);
     virCondDestroy(&mon->notify);
     VIR_FREE(mon->buffer);
@@ -348,6 +441,7 @@ qemuMonitorOpenUnix(const char *monitor,
     virTimeBackOffVar timebackoff;
     int ret = -1;
 
+    // socket type is STREAM
     if ((monfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         virReportSystemError(errno,
                              "%s", _("failed to create socket"));
@@ -367,7 +461,7 @@ qemuMonitorOpenUnix(const char *monitor,
         if (virTimeBackOffStart(&timebackoff, 1, timeout * 1000) < 0)
             goto error;
         while (virTimeBackOffWait(&timebackoff)) {
-            // monfd  with block mode
+            // monfd with block mode
             ret = connect(monfd, (struct sockaddr *)&addr, sizeof(addr));
 
             if (ret == 0)
@@ -376,7 +470,7 @@ qemuMonitorOpenUnix(const char *monitor,
             if ((errno == ENOENT || errno == ECONNREFUSED) &&
                 (!cpid || virProcessKill(cpid, 0) == 0)) {
                 // as signal is 0, here only check if process exists or not, == 0 exists
-                // if exist, retry again.
+                // exist means qemu-process starts, but monitor server is not ready, retry again.
                 // the loop
                 /* ENOENT       : Socket may not have shown up yet
                  * ECONNREFUSED : Leftover socket hasn't been removed yet */
@@ -394,7 +488,7 @@ qemuMonitorOpenUnix(const char *monitor,
             goto error;
         }
     } else {
-        // no, retry and timeout, server should be ready, otherwise, failed
+        // no, retry and timeout for connect API(timeout controlled by kernel), server should be ready, otherwise, failed
         ret = connect(monfd, (struct sockaddr *) &addr, sizeof(addr));
         if (ret < 0) {
             virReportSystemError(errno, "%s",
@@ -438,7 +532,6 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
 
     // there should be only for QMP command waiting for its reply
     // the QMP command is saved at mon->msg, after sending QMP command to qemu
-    // the reply is for this QMP saved at mon->msg
     //
     /* See if there's a message & whether its ready for its reply
      * ie whether its completed writing all its data */
@@ -460,7 +553,7 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
     PROBE_QUIET(QEMU_MONITOR_IO_PROCESS, "mon=%p buf=%s len=%zu",
                 mon, mon->buffer, mon->bufferOffset);
 
-    // if mon->buffer is part of data, len(used) is 0!!!
+    // if mon->buffer is part of reply(as it's STREAM socket), len(used) is 0!!!
     len = qemuMonitorJSONIOProcess(mon,
                                    mon->buffer, mon->bufferOffset,
                                    msg);
@@ -468,7 +561,7 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
         return -1;
 
     if (len && mon->waitGreeting)
-        // only set once for the first recv from monitor socket
+        // only set once for the first recv from monitor socket, the first received msg from qmp monitor is always greeting!!!
         mon->waitGreeting = false;
 
     if (len < mon->bufferOffset) {
@@ -476,7 +569,7 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
         memmove(mon->buffer, mon->buffer + len, mon->bufferOffset - len);
         mon->bufferOffset -= len;
     } else {
-        // all buffer is used, reset buffer!!!
+        // all buffer is used when parsing and parsed object saved at mon->msg.rxObject!!!, free buffer as it's not needed any more
         VIR_FREE(mon->buffer);
         mon->bufferOffset = mon->bufferLength = 0;
     }
@@ -484,12 +577,17 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
     VIR_DEBUG("Process done %d used %d", (int)mon->bufferOffset, len);
 #endif
 
-    /* As the monitor mutex was unlocked in qemuMonitorJSONIOProcess()
-     * while dealing with qemu event, mon->msg could be changed which
-     * means the above 'msg' may be invalid, thus we use 'mon->msg' here */
+    /* we we heve monitor locked
+     * but As the monitor mutex was unlocked in qemuMonitorJSONIOProcess()
+     * while dealing with qemu event(QEMU_MONITOR_CALLBACK), relock after process event
+     * so mon->msg could be changed which means the above 'msg' may be invalid, thus we use 'mon->msg' here
+     */
 
     /* MonitorIO data can be QMP reply
      */
+
+    // here leader process after got reply
+    // wake up worker who blocks on this reply
     if (mon->msg && mon->msg->finished)
         virCondBroadcast(&mon->notify);
     // leader process after got reply(return/error from monitor fd)
@@ -611,6 +709,7 @@ qemuMonitorIORead(qemuMonitorPtr mon)
                                  QEMU_MONITOR_MAX_RESPONSE);
             return -1;
         }
+        // reallocate receiving buffer if not enough.
         if (VIR_REALLOC_N(mon->buffer,
                           mon->bufferLength + 1024) < 0)
             return -1;
@@ -624,7 +723,7 @@ qemuMonitorIORead(qemuMonitorPtr mon)
         int got;
         got = read(mon->fd,
                    mon->buffer + mon->bufferOffset,
-                   avail - 1);
+                   avail - 1); // 1 byte for separator, see below
         if (got < 0) {
             if (errno == EAGAIN)
                 break;
@@ -639,6 +738,7 @@ qemuMonitorIORead(qemuMonitorPtr mon)
         ret += got;
         avail -= got;
         mon->bufferOffset += got;
+        // for each read part, insert `\0` as separator!!!
         mon->buffer[mon->bufferOffset] = '\0';
     }
 
@@ -668,6 +768,7 @@ qemuMonitorUpdateWatch(qemuMonitorPtr mon)
             events |= VIR_EVENT_HANDLE_WRITABLE;
     }
 
+    // reset fd with new socket events
     virEventUpdateHandle(mon->watch, events);
 }
 
@@ -706,9 +807,9 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
         error = true;
     } else {
         if (events & VIR_EVENT_HANDLE_WRITABLE) {
-            // send QMP command to qemu process, this event is dynamically
+            // send QMP command to qemu process, monitor write event only when we put qmp to send
             // that means poll monitor write event is set only when we have QMP command to send
-            // remove it when got reply for QMP command
+            // remove it when we send qmp command
             if (qemuMonitorIOWrite(mon) < 0) {
                 error = true;
                 if (errno == ECONNRESET)
@@ -737,6 +838,8 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
                  * give time for that data to be consumed */
                 events = 0;
 
+                // process reply for each read, but as reply may be part
+                // if so process does NOT parse at all.
                 if (qemuMonitorIOProcess(mon) < 0)
                     error = true;
             }
@@ -767,6 +870,7 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
         }
     }
 
+    // error due to processing(read or write) or error reported by kernel
     if (error || eof) {
         if (hangup && mon->logFunc != NULL) {
             /* Check if an error message from qemu is available and if so, use
@@ -789,20 +893,23 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
             if (virGetLastErrorCode() == VIR_ERR_OK)
                 virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                                _("Error while processing monitor IO"));
+            // copy last error set by virReportError or virReportSystemError
             virCopyLastError(&mon->lastError);
             virResetLastError();
         }
 
         VIR_DEBUG("Error on monitor %s", NULLSTR(mon->lastError.message));
         /* If IO process resulted in an error & we have a message,
-         * then wakeup that waiter */
+         * then wakeup that waiter
+         * that means waiter is waken when get reply or error happens
+         */
         if (mon->msg && !mon->msg->finished) {
             mon->msg->finished = 1;
             virCondSignal(&mon->notify);
         }
     }
 
-    // if no pending QMP command, remove write event
+    // if no pending QMP command for sending, remove write event
     qemuMonitorUpdateWatch(mon);
 
     /* We have to unlock to avoid deadlock against command thread,
@@ -814,7 +921,7 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
 
         /* Make sure anyone waiting wakes up now */
         virCondSignal(&mon->notify);
-        virObjectUnlock(mon);
+        virObjectUnlock(mon); // monitor is unlocked
         VIR_DEBUG("Triggering EOF callback");
         (eofNotify)(mon, vm, mon->callbackOpaque);
         virObjectUnref(mon);
@@ -824,17 +931,18 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
 
         /* Make sure anyone waiting wakes up now */
         virCondSignal(&mon->notify);
-        virObjectUnlock(mon);
+        virObjectUnlock(mon); // monitor is unlocked
         VIR_DEBUG("Triggering error callback");
         (errorNotify)(mon, vm, mon->callbackOpaque);
         virObjectUnref(mon);
     } else {
-        virObjectUnlock(mon);
+        virObjectUnlock(mon); // monitor is  unlocked
         virObjectUnref(mon);
     }
 }
 
 
+// initialize monitor object
 static qemuMonitorPtr
 qemuMonitorOpenInternal(virDomainObjPtr vm,
                         int fd,
@@ -867,7 +975,7 @@ qemuMonitorOpenInternal(virDomainObjPtr vm,
                        _("cannot initialize monitor condition"));
         goto cleanup;
     }
-    // only unix monitor type supports sending fds to qemu by in QMP command!!!
+    // only unix monitor type supports sending fds to qemu with sendmsg() SCM_RIGHTS!! msghdr!!!!
     mon->fd = fd;
     mon->hasSendFD = hasSendFD;
     mon->vm = virObjectRef(vm);
@@ -884,6 +992,7 @@ qemuMonitorOpenInternal(virDomainObjPtr vm,
                        "%s", _("Unable to set monitor close-on-exec flag"));
         goto cleanup;
     }
+    // non block for montior fd after connected
     if (virSetNonBlock(mon->fd) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s", _("Unable to put monitor into non-blocking mode"));
@@ -894,7 +1003,7 @@ qemuMonitorOpenInternal(virDomainObjPtr vm,
     virObjectLock(mon);
     // register monitor fd to event loop
     // after register, we should get greeting message immediately!!!
-    // monitor io handler will runs in event thread to processs it
+    // monitor io handler runs in event thread
     if (!qemuMonitorRegister(mon)) {
         virObjectUnlock(mon);
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -961,7 +1070,7 @@ qemuMonitorOpen(virDomainObjPtr vm,
     switch (config->type) {
     case VIR_DOMAIN_CHR_TYPE_UNIX:
         hasSendFD = true;
-        // connect unix socket with monitor: retry and timeout
+        // connect unix socket with monitor: retry and timeout for connecting
         if ((fd = qemuMonitorOpenUnix(config->data.nix.path,
                                       vm->pid, retry, timeout)) < 0)
             return NULL;
@@ -1036,6 +1145,7 @@ void
 qemuMonitorUnregister(qemuMonitorPtr mon)
 {
     if (mon->watch) {
+        // remove monitor from event store
         virEventRemoveHandle(mon->watch);
         mon->watch = 0;
     }
@@ -1054,6 +1164,7 @@ qemuMonitorClose(qemuMonitorPtr mon)
     qemuMonitorSetDomainLogLocked(mon, NULL, NULL, NULL);
 
     if (mon->fd >= 0) {
+        // remove fd from event loop
         qemuMonitorUnregister(mon);
         VIR_FORCE_CLOSE(mon->fd);
     }
@@ -1095,6 +1206,7 @@ qemuMonitorNextCommandID(qemuMonitorPtr mon)
 {
     char *id;
 
+    // unique ID for each QMP command
     ignore_value(virAsprintf(&id, "libvirt-%d", ++mon->nextSerial));
     return id;
 }
@@ -1123,6 +1235,8 @@ qemuMonitorSend(qemuMonitorPtr mon,
     }
 
     // save msg to monitorptr, later on event thread will send it to monitor fd
+    // NOTE: this is only one pending qmp command, so mon->msg saves the pending command
+    // that means if got reply from qemu process, the reply is for this command
     mon->msg = msg;
     // save msg to monitorptr, later on event thread will send it to monitor fd
     // NOTE: this is only one pending qmp command, so mon->msg saves the pending command
@@ -1138,10 +1252,11 @@ qemuMonitorSend(qemuMonitorPtr mon,
 
     while (!mon->msg->finished) {
         // block here, until get reply/error in event thread who will wake me up
-        // monitor is unlock when free and get lock again when it's waken
+        // monitor is unlocked when free and get lock again when it's waken
         //
         //============================================================================================
         //NOTE: vm lock is released before when entering monitor and only allow on QMP command is running
+        //
         // ----------Why not hold monitor lock until get reply, let's say mon->notify condition uses separate lock, no need monitor job condition?------------------------------------------------
         // If so, let's see what happens
         // now we only hold monitor lock
@@ -1150,12 +1265,12 @@ qemuMonitorSend(qemuMonitorPtr mon,
         // 1. Prepare something(may update vm field) which is not allowed as some fields may be related to last QMP command
         // 2. As it holds vm lock, any other API that needs VM lock will be blocked as well.
         //
-        // At last before QMP reply, any API that needs VM lock may be blocked...
+        // At last before QMP reply, any API that needs VM lock will be locked...
         //
         // ----------with monitor job condition-------------------------------------------------------
-        // In such case, before reply comes, we released vm lock and monitor lock.
+        // In such case, before reply comes, we release vm lock and monitor lock.
         // If another QMP API is called, it checks one QMP is running, it will be blocked and releases vm lock(qemuDomainObjEnterMonitor is never called at all).
-        // So any other API that needs vm lock can run immediately!!!
+        // So any other API that needs vm lock can run if it gets lock.
         //============================================================================================
         if (virCondWait(&mon->notify, &mon->parent.lock) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -1174,8 +1289,10 @@ qemuMonitorSend(qemuMonitorPtr mon,
     ret = 0;
 
  cleanup:
-    // as we got reply, hence we can clear msg(QMP comman saved for pending reply)
-    // where is the replay data and who sends it to client
+    // as we got reply, hence we can clear msg(QMP command saved for pending reply)
+    // but msg is not freed at all, as msg has the reply(msg.rxObject)
+    // here only unbind it with monitor as it's finished(got reply or error)
+    // the caller then end monitor job so that next monitor job can run!!!
     mon->msg = NULL;
     // remove write event, as we sent the command completely and got the reply as well!!!
     // add/remove write event of monitor fd is done by rpc worker thread
@@ -1382,8 +1499,8 @@ qemuMonitorHMPCommandWithFd(qemuMonitorPtr mon,
 
 
 /* Ensure proper locking around callbacks.  */
-//  not cb->callback, callback is not function name
-//  callback is passed in as parameter
+// NOTE: event callback, monitor lock is released during processing event!!!
+// callback is passed in as parameter
 #define QEMU_MONITOR_CALLBACK(mon, ret, callback, ...) \
     do { \
         virObjectRef(mon); \
@@ -2083,6 +2200,7 @@ qemuMonitorGetCPUInfo(qemuMonitorPtr mon,
         (qemuMonitorJSONGetHotpluggableCPUs(mon, &hotplugcpus, &nhotplugcpus)) < 0)
         goto cleanup;
 
+    // get reply
     rc = qemuMonitorJSONQueryCPUs(mon, &cpuentries, &ncpuentries, hotplug,
                                   fast);
 
@@ -2135,6 +2253,7 @@ qemuMonitorGetCpuHalted(qemuMonitorPtr mon,
 
     QEMU_CHECK_MONITOR_NULL(mon);
 
+    // get repy and return to caller who will send reply back to client
     rc = qemuMonitorJSONQueryCPUs(mon, &cpuentries, &ncpuentries, false,
                                   fast);
 
@@ -3570,6 +3689,7 @@ qemuMonitorVMStatusToPausedReason(const char *status)
         return VIR_DOMAIN_PAUSED_UNKNOWN;
     }
 
+    // convert vm status got from qemu to domain status defined by libvirt
     switch ((qemuMonitorVMStatus) st) {
     case QEMU_MONITOR_VM_STATUS_DEBUG:
     case QEMU_MONITOR_VM_STATUS_INTERNAL_ERROR:

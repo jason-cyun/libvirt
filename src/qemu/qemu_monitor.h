@@ -49,13 +49,16 @@ typedef int (*qemuMonitorPasswordHandler)(qemuMonitorPtr mon,
                                           void *opaque);
 
 struct _qemuMonitorMessage {
+    // fd sent to server by sendmsg() SCM_RIGHTS
+    // it's not monitor fd
     int txFD;
 
     char *txBuffer;
     int txOffset;
     int txLength;
 
-    /* Used by the text monitor reply / error */
+    /* NOTE: these two are not used at all
+     * Used by the text monitor reply / error */
     char *rxBuffer;
     int rxLength;
     /* Used by the JSON monitor to hold reply / error */
@@ -112,6 +115,7 @@ struct _qemuMonitorEventPanicInfo {
 char *qemuMonitorGuestPanicEventInfoFormatMsg(qemuMonitorEventPanicInfoPtr info);
 void qemuMonitorEventPanicInfoFree(qemuMonitorEventPanicInfoPtr info);
 
+// qemu event callback handler
 typedef void (*qemuMonitorDestroyCallback)(qemuMonitorPtr mon,
                                            virDomainObjPtr vm,
                                            void *opaque);
@@ -247,6 +251,7 @@ typedef int (*qemuMonitorDomainBlockThresholdCallback)(qemuMonitorPtr mon,
                                                        void *opaque);
 
 
+// dump status returned by 'query-dump'
 typedef enum {
     QEMU_MONITOR_DUMP_STATUS_NONE,
     QEMU_MONITOR_DUMP_STATUS_ACTIVE,
@@ -307,6 +312,7 @@ struct _qemuMonitorCallbacks {
     qemuMonitorDomainDumpCompletedCallback domainDumpCompleted;
 };
 
+// escape for HMP(old way)
 char *qemuMonitorEscapeArg(const char *in);
 char *qemuMonitorUnescapeArg(const char *in);
 
@@ -363,6 +369,7 @@ int qemuMonitorHMPCommandWithFd(qemuMonitorPtr mon,
 # define qemuMonitorHMPCommand(mon, cmd, reply) \
     qemuMonitorHMPCommandWithFd(mon, cmd, -1, reply)
 
+// Emit parsed event json and prepare parameter for event callback!!!
 int qemuMonitorEmitEvent(qemuMonitorPtr mon, const char *event,
                          long long seconds, unsigned int micros,
                          const char *details);
@@ -433,9 +440,14 @@ int qemuMonitorEmitDumpCompleted(qemuMonitorPtr mon,
                                  qemuMonitorDumpStatsPtr stats,
                                  const char *error);
 
+
+
+// below are QMP functions provided for other component
+// these APIS calls qemu_monitor_json which build json string and send command, wait reply and return
 int qemuMonitorStartCPUs(qemuMonitorPtr mon);
 int qemuMonitorStopCPUs(qemuMonitorPtr mon);
 
+// vm status returned by `query-status`
 typedef enum {
     QEMU_MONITOR_VM_STATUS_DEBUG,
     QEMU_MONITOR_VM_STATUS_INMIGRATE,
@@ -639,6 +651,7 @@ int qemuMonitorGetMigrationParams(qemuMonitorPtr mon,
 int qemuMonitorSetMigrationParams(qemuMonitorPtr mon,
                                   virJSONValuePtr params);
 
+// migration status reported by migration event
 typedef enum {
     QEMU_MONITOR_MIGRATION_STATUS_INACTIVE,
     QEMU_MONITOR_MIGRATION_STATUS_SETUP,
