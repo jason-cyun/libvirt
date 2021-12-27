@@ -655,6 +655,23 @@ virStateInitialize(bool privileged,
     if (virInitialize() < 0)
         return -1;
 
+    /*
+     * there are two kinds of driver, connect driver and state driver
+     * connect driver is just group of functioin, whiel state driver
+     * defines struct and hold the state related to this driver
+     *
+     * state driver:
+     * qemu state driver
+     * remote state driver
+     * interface state driver
+     * storage state driver
+     * node device state driver
+     * bridge state driver
+     * nwfilter state driver
+     * secret state driver
+     *
+     * call states driver initializer like allocate memory etc
+     */
     for (i = 0; i < virStateDriverTabCount; i++) {
         if (virStateDriverTab[i]->stateInitialize) {
             VIR_DEBUG("Running global init for %s state driver",
@@ -846,13 +863,15 @@ virConnectCheckURIMissingSlash(const char *uristr, virURIPtr uri)
 }
 
 
-// create connection and select ConnectDriver based on uri
-// if name is "", use default ConnectDriver!!!
 static virConnectPtr
 virConnectOpenInternal(const char *name,
                        virConnectAuthPtr auth,
                        unsigned int flags)
 {
+    /*
+     * create connection and select ConnectDriver based on uri
+     * if name is "", use default ConnectDriver!!!
+     */
     size_t i;
     int res;
     virConnectPtr ret;
