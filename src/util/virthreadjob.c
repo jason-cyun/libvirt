@@ -63,6 +63,8 @@ virThreadJobGet(void)
 }
 
 
+// this is set by each worker thread, when it starts to run, only set once during the lifetime of a thread
+// Thread 19520 is running worker virNetServerHandleJob
 void
 virThreadJobSetWorker(const char *worker)
 {
@@ -78,6 +80,9 @@ virThreadJobSetWorker(const char *worker)
 }
 
 
+// this is set by each thread(worker, non-worker), when it gets the rpc call(caller) to run
+// Thread 19525 is now running job daemonRunStateInit
+// Thread 19520 (virNetServerHandleJob) is now running job adminDispatchConnectOpen
 void
 virThreadJobSet(const char *caller)
 {

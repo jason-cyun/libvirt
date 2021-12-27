@@ -361,7 +361,19 @@ virNetServerPtr virNetServerNew(const char *name,
     if (max_workers &&
             // create rpc server pool for rpc call(each call is a job)
             // min/max worker comes from conf
-            // default min: 5, max: 20
+            // default min: 5, max: 20, prio: 5
+            // so here 10 threads is created for libvirtd server!!
+            //
+            //
+            /*
+             * $ virt-admin server-threadpool-info libvirtd
+             *   minWorkers     : 5
+             *   maxWorkers     : 20
+             *   nWorkers       : 5
+             *   freeWorkers    : 5
+             *   prioWorkers    : 5
+             *   jobQueueDepth  : 0
+             */
         !(srv->workers = virThreadPoolNew(min_workers, max_workers,
                                           priority_workers,
                                           virNetServerHandleJob,

@@ -6387,6 +6387,27 @@ qemuDomainObjCanSetJob(qemuDomainObjPrivatePtr priv,
                        qemuDomainJob job,
                        qemuDomainAgentJob agentJob)
 {
+    /* only allow one sync qemu job for monitor fd
+     * only allow sync agent jobr for agent fd
+     * say if one qemu job is running, we can start agent job as well!!!
+     *
+     * priv hold the previous job, job/agentJob is the one plan to run
+     *
+     * job == QEMU_JOB_NONE or agentJob == QEMU_AGENT_JOB_NONE means this time no need to send QMP or QGA command to agent!!!
+     * priv->job.active == QEMU_JOB_NONE or priv->job.agentActive == QEMU_AGENT_JOB_NONE means there is no pending qemu job or agent job!!!
+     *
+     * cases:  previous job              current job
+     *         QEMU_JOB_NONE             no matter what:       can run
+     *         not QEMU_JOB_NONE         QEMU_JOB_NONE         can run
+     *         not QEMU_JOB_NONE         not QEMU_JOB_NONE     wait
+     *
+     * cases:  previous agent job        current
+     *         QEMU_AGENT_JOB_NONE       no matter what:       can run
+     *         not QEMU_AGENT_JOB_NONE   QEMU_AGENT_JOB_NONE   can run
+     *         not QEMU_AGENT_JOB_NONE   not QEMU_JOB_NONE     wait
+     *
+     * if job and agentJob both are not NONE passed in, it runs only when there are no job and agent job!!!
+     */
     return ((job == QEMU_JOB_NONE ||
              priv->job.active == QEMU_JOB_NONE) &&
             (agentJob == QEMU_AGENT_JOB_NONE ||
@@ -6490,18 +6511,24 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
     ignore_value(virTimeMillisNow(&now));
 
     if (job) {
+        /* qemu job, qmp command, discard previous job saved */
         qemuDomainObjResetJob(priv);
 
         if (job != QEMU_JOB_ASYNC) {
+            /* sync qemu job */
             VIR_DEBUG("Started job: %s (async=%s vm=%p name=%s)",
                       qemuDomainJobTypeToString(job),
                       qemuDomainAsyncJobTypeToString(priv->job.asyncJob),
                       obj, obj->def->name);
+            // save the pending job(which not done yet) to privateData
+            // later on another sync job try to start, it will block above
+            // there should be one only for sync qemu job
             priv->job.active = job;
             priv->job.owner = virThreadSelfID();
             priv->job.ownerAPI = virThreadJobGet();
             priv->job.started = now;
         } else {
+            /* async qemu job, what does it mean */
             VIR_DEBUG("Started async job: %s (vm=%p name=%s)",
                       qemuDomainAsyncJobTypeToString(asyncJob),
                       obj, obj->def->name);
@@ -6525,6 +6552,7 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
                   obj, obj->def->name,
                   qemuDomainJobTypeToString(priv->job.active),
                   qemuDomainAsyncJobTypeToString(priv->job.asyncJob));
+        /* agent job is always sync */
         priv->job.agentActive = agentJob;
         priv->job.agentOwner = virThreadSelfID();
         priv->job.agentOwnerAPI = virThreadJobGet();
@@ -6817,6 +6845,7 @@ qemuDomainObjEndJobWithAgent(virQEMUDriverPtr driver,
               qemuDomainAsyncJobTypeToString(priv->job.asyncJob),
               obj, obj->def->name);
 
+    /* reset both jobs */
     qemuDomainObjResetJob(priv);
     qemuDomainObjResetAgentJob(priv);
     if (qemuDomainTrackJob(job))
@@ -6889,6 +6918,9 @@ qemuDomainObjEnterMonitorInternal(virQEMUDriverPtr driver,
 
     VIR_DEBUG("Entering monitor (mon=%p vm=%p name=%s)",
               priv->mon, obj, obj->def->name);
+    /* get monitor lock, hence there is only one job for QMP
+     * other QMP async job blocks here
+     */
     virObjectLock(priv->mon);
     virObjectRef(priv->mon);
     ignore_value(virTimeMillisNow(&priv->monStart));
@@ -6907,6 +6939,7 @@ qemuDomainObjExitMonitorInternal(virQEMUDriverPtr driver,
     hasRefs = virObjectUnref(priv->mon);
 
     if (hasRefs)
+        /* release monitor lock */
         virObjectUnlock(priv->mon);
 
     virObjectLock(obj);

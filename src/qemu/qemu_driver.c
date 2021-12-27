@@ -595,6 +595,7 @@ qemuStateInitialize(bool privileged,
     virCPUDefPtr hostCPU = NULL;
     unsigned int microcodeVersion = 0;
 
+    // allocate state struct of qemu driver
     if (VIR_ALLOC(qemu_driver) < 0)
         return -1;
 
@@ -605,15 +606,18 @@ qemuStateInitialize(bool privileged,
         return -1;
     }
 
+    // inhibitCallback == daemonInhibitCallback
+    // inhibitOpaque == virNetDaemonPtr daemon ptr
     qemu_driver->inhibitCallback = callback;
     qemu_driver->inhibitOpaque = opaque;
 
     qemu_driver->privileged = privileged;
 
+    // initialize hash table of domain
     if (!(qemu_driver->domains = virDomainObjListNew()))
         goto error;
 
-    /* Init domain events */
+    /* Init domain events event queue */
     qemu_driver->domainEventState = virObjectEventStateNew();
     if (!qemu_driver->domainEventState)
         goto error;
@@ -622,12 +626,16 @@ qemuStateInitialize(bool privileged,
     if (privileged)
         qemu_driver->hostsysinfo = virSysinfoRead();
 
+    // set log dir, run dir used for driver
     if (!(qemu_driver->config = cfg = virQEMUDriverConfigNew(privileged)))
         goto error;
 
+    // load conf from disk for qemu driver from /qemu.conf
+    // like log level, vnc adddress, migration port etc
     if (virAsprintf(&driverConf, "%s/qemu.conf", cfg->configBaseDir) < 0)
         goto error;
 
+    // set conf parameters to cfg based on value from conf file or default
     if (virQEMUDriverConfigLoadFile(cfg, driverConf, privileged) < 0)
         goto error;
     VIR_FREE(driverConf);
@@ -912,7 +920,8 @@ qemuStateInitialize(bool privileged,
     /* must be initialized before trying to reconnect to all the
      * running domains since there might occur some QEMU monitor
      * events that will be dispatched to the worker pool */
-    // only one worker for this pool
+    // only one worker for this pool to handle QMP command and reponse
+    // as min: 0, that mean thread is created only when the first qemu event happens(event from qemu process by monitor fd), then keep it there
     qemu_driver->workerPool = virThreadPoolNew(0, 1, 0, qemuProcessEventHandler, qemu_driver);
     if (!qemu_driver->workerPool)
         goto error;
@@ -1058,6 +1067,7 @@ qemuStateCleanup(void)
     if (!qemu_driver)
         return -1;
 
+    // block here this is still working in this pool
     virThreadPoolFree(qemu_driver->workerPool);
     virObjectUnref(qemu_driver->config);
     virObjectUnref(qemu_driver->hostdevMgr);
@@ -4793,6 +4803,8 @@ processMonitorEOFEvent(virQEMUDriverPtr driver,
 }
 
 
+// this is called by woker when this is qemuProcessEvent in the joblist
+// each qemu worker call me with one qemuProcessEvent which is stored at job->data
 static void qemuProcessEventHandler(void *data, void *opaque)
 {
     struct qemuProcessEvent *processEvent = data;
@@ -21342,6 +21354,7 @@ qemuDomainSetBlockThreshold(virDomainPtr dom,
     if (virDomainSetBlockThresholdEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
+    /* for sync job, block here for same type(qemu, agent) */
     if (qemuDomainObjBeginJob(driver, vm, QEMU_JOB_MODIFY) < 0)
         goto cleanup;
 

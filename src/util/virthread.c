@@ -151,6 +151,7 @@ int virCondDestroy(virCondPtr c)
 int virCondWait(virCondPtr c, virMutexPtr m)
 {
     int ret;
+    /* wait without timeout */
     if ((ret = pthread_cond_wait(&c->cond, &m->lock)) != 0) {
         errno = ret;
         return -1;
@@ -166,6 +167,7 @@ int virCondWaitUntil(virCondPtr c, virMutexPtr m, unsigned long long whenms)
     ts.tv_sec = whenms / 1000;
     ts.tv_nsec = (whenms % 1000) * 1000000;
 
+    /* wait with timeout */
     if ((ret = pthread_cond_timedwait(&c->cond, &m->lock, &ts)) != 0) {
         errno = ret;
         return -1;
@@ -199,8 +201,12 @@ static void *virThreadHelper(void *data)
     VIR_FREE(args);
 
     if (local.worker)
+        // for worker thread set thread handler function name to thread local zone
+        // when a thread run, it shows which handler it calls for this job!!!
         virThreadJobSetWorker(local.funcName);
     else
+        // for non-worker thread set thread handler function name to thread local zone
+        // when a thread run, it shows which handler it calls for this job, as it's non-worker thread
         virThreadJobSet(local.funcName);
 
     // call handler for different threads

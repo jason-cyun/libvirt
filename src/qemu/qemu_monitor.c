@@ -427,6 +427,10 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
     int len;
     qemuMonitorMessagePtr msg = NULL;
 
+    // there should be only for QMP command waiting for its reply
+    // the QMP command is saved at mon->msg, after sending QMP command to qemu
+    // the reply is for this QMP saved at mon->msg
+    //
     /* See if there's a message & whether its ready for its reply
      * ie whether its completed writing all its data */
     if (mon->msg && mon->msg->txOffset == mon->msg->txLength)
@@ -472,6 +476,8 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
      * means the above 'msg' may be invalid, thus we use 'mon->msg' here */
     if (mon->msg && mon->msg->finished)
         virCondBroadcast(&mon->notify);
+    // leader process after got reply(return/error from monitor fd)
+    // wake up worker who blocks on this reply
     return len;
 }
 
@@ -511,6 +517,7 @@ qemuMonitorIOWriteWithFD(qemuMonitorPtr mon,
     memcpy(CMSG_DATA(cmsg), &fd, sizeof(int));
 
     do {
+        /* send QMP to qemu process by monitor fd */
         ret = sendmsg(mon->fd, &msg, 0);
     } while (ret < 0 && errno == EINTR);
 
@@ -683,6 +690,9 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
         error = true;
     } else {
         if (events & VIR_EVENT_HANDLE_WRITABLE) {
+            // send QMP command to qemu process, this event is dynamically
+            // that means poll monitor write event is set only when we have QMP command to send
+            // remove it when got reply for QMP command
             if (qemuMonitorIOWrite(mon) < 0) {
                 error = true;
                 if (errno == ECONNRESET)
@@ -693,6 +703,9 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
 
         if (!error &&
             events & VIR_EVENT_HANDLE_READABLE) {
+            /* call read() to read data from monitor
+             * read all data or got EOF
+             */
             int got = qemuMonitorIORead(mon);
             events &= ~VIR_EVENT_HANDLE_READABLE;
             if (got < 0) {
@@ -771,6 +784,7 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
         }
     }
 
+    // if no pending QMP command, remove write event
     qemuMonitorUpdateWatch(mon);
 
     /* We have to unlock to avoid deadlock against command thread,
@@ -970,6 +984,10 @@ bool
 qemuMonitorRegister(qemuMonitorPtr mon)
 {
     virObjectRef(mon);
+    // monitor fd of this VM, this is only one for each VM
+    // we set its callback with qemuMonitorIO which is called in leader thread!!!
+    // we always monitor read event of this fd
+    // monitor write event only when there is qmp command ready to send
     if ((mon->watch = virEventAddHandle(mon->fd,
                                         VIR_EVENT_HANDLE_HANGUP |
                                         VIR_EVENT_HANDLE_ERROR |
@@ -1076,6 +1094,12 @@ qemuMonitorSend(qemuMonitorPtr mon,
     }
 
     mon->msg = msg;
+    // save msg to monitorptr, later on event thread will send it to monitor fd
+    // NOTE: this is only one pending qmp command, so mon->msg saves the pending command
+    // that means if got reply from qemu process, the reply is for this command
+
+    // add write event for monitor fd and wake up event thread(leader thread) to run
+    // who will write qmp command to monitor fd.
     qemuMonitorUpdateWatch(mon);
 
     PROBE(QEMU_MONITOR_SEND_MSG,
@@ -1083,6 +1107,8 @@ qemuMonitorSend(qemuMonitorPtr mon,
           mon, mon->msg->txBuffer, mon->msg->txFD);
 
     while (!mon->msg->finished) {
+        // block here, until get reply/error in event thread
+        // when event thread got reply/error from qemu, it will wake me up
         if (virCondWait(&mon->notify, &mon->parent.lock) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Unable to wait on monitor condition"));
@@ -1100,7 +1126,11 @@ qemuMonitorSend(qemuMonitorPtr mon,
     ret = 0;
 
  cleanup:
+    // as we got reply, hence we can clear msg(QMP comman saved for pending reply)
+    // where is the replay data and who sends it to client
     mon->msg = NULL;
+    // remove write event, as we sent the command completely and got the reply as well!!!
+    // add/remove write event of monitor fd is done by rpc worker thread
     qemuMonitorUpdateWatch(mon);
 
     return ret;
@@ -1304,6 +1334,8 @@ qemuMonitorHMPCommandWithFd(qemuMonitorPtr mon,
 
 
 /* Ensure proper locking around callbacks.  */
+//  not cb->callback, callback is not function name
+//  callback is passed in as parameter
 #define QEMU_MONITOR_CALLBACK(mon, ret, callback, ...) \
     do { \
         virObjectRef(mon); \
@@ -1324,6 +1356,8 @@ qemuMonitorEmitEvent(qemuMonitorPtr mon, const char *event,
     int ret = -1;
     VIR_DEBUG("mon=%p event=%s", mon, event);
 
+    // call domainEvent callback set at monitorCallbacks with qemuProcessHandleEvent
+    // qemuProcessHandleEvent is called here, add an new event to driver->domainEventState
     QEMU_MONITOR_CALLBACK(mon, ret, domainEvent, mon->vm, event, seconds,
                           micros, details);
     return ret;
@@ -2262,9 +2296,15 @@ qemuMonitorGetAllBlockStatsInfo(qemuMonitorPtr mon,
 
     QEMU_CHECK_MONITOR(mon);
 
+    /* create 10 hash table entries, each entry is void *
+     * can points to any data
+     */
     if (!(*ret_stats = virHashCreate(10, virHashValueFree)))
         goto error;
 
+    /* call qmp json library to create QMP with json format
+     * and send it to monitor fd
+     */
     ret = qemuMonitorJSONGetAllBlockStatsInfo(mon, *ret_stats,
                                               backingChain);
 

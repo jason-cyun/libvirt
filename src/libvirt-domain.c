@@ -29,6 +29,7 @@
 #include "virlog.h"
 #include "virtypedparam.h"
 
+/* meta data for log of this file, used for matching */
 VIR_LOG_INIT("libvirt.domain");
 
 #define VIR_FROM_THIS VIR_FROM_DOMAIN

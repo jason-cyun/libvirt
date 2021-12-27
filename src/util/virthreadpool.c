@@ -437,6 +437,7 @@ int virThreadPoolSendJob(virThreadPoolPtr pool,
 
     pool->jobQueueDepth++;
 
+    // wake up worker who waits on this condition!!!
     virCondSignal(&pool->cond);
     if (priority)
         virCondSignal(&pool->prioCond);

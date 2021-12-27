@@ -352,12 +352,16 @@ qemuBlockNodeNamesDetect(virQEMUDriverPtr driver,
     if (!virQEMUCapsGet(priv->qemuCaps, QEMU_CAPS_QUERY_NAMED_BLOCK_NODES))
         return 0;
 
+    // get monitor lock
     if (qemuDomainObjEnterMonitorAsync(driver, vm, asyncJob) < 0)
         return -1;
 
     data = qemuMonitorQueryNamedBlockNodes(qemuDomainGetMonitor(vm));
+    /* block until get reply */
     blockstats = qemuMonitorQueryBlockstats(qemuDomainGetMonitor(vm));
 
+
+    // release monitor lock
     if (qemuDomainObjExitMonitor(driver, vm) < 0 || !data || !blockstats)
         goto cleanup;
 

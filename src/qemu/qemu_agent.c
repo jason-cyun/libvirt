@@ -840,6 +840,7 @@ static int qemuAgentSend(qemuAgentPtr mon,
         unsigned long long now;
         if (virTimeMillisNow(&now) < 0)
             return -1;
+        /* use default timeout 5s for qemu agent command */
         if (seconds == VIR_DOMAIN_QEMU_AGENT_COMMAND_DEFAULT)
             seconds = QEMU_AGENT_WAIT_TIME;
         then = now + seconds * 1000ull;
@@ -919,6 +920,7 @@ qemuAgentGuestSync(qemuAgentPtr mon)
 
     VIR_DEBUG("Sending guest-sync command with ID: %llu", id);
 
+    /* for sync command with timeout */
     send_ret = qemuAgentSend(mon, &sync_msg,
                              VIR_DOMAIN_QEMU_AGENT_COMMAND_DEFAULT);
 
@@ -1080,6 +1082,9 @@ qemuAgentCommand(qemuAgentPtr mon,
         return -1;
     }
 
+    /* before send qemu agent command, we send sync to make sure
+     * this is reply from agent, for this command timeout is 5s
+     */
     if (qemuAgentGuestSync(mon) < 0)
         return -1;
 
@@ -1359,6 +1364,7 @@ qemuAgentArbitraryCommand(qemuAgentPtr mon,
                           char **result,
                           int timeout)
 {
+    /* for arbitrary qemu agent command, the timeout is set by user !!! */
     int ret = -1;
     virJSONValuePtr cmd = NULL;
     virJSONValuePtr reply = NULL;

@@ -846,6 +846,8 @@ static int daemonStateInit(virNetDaemonPtr dmn)
 {
     virThread thr;
     virObjectRef(dmn);
+    // create a temporary pthread of driver initialization
+    // that means after initialization, this thread quits
     if (virThreadCreate(&thr, false, daemonRunStateInit, dmn) < 0) {
         virObjectUnref(dmn);
         return -1;
@@ -1066,7 +1068,6 @@ int main(int argc, char **argv) {
         {0, 0, 0, 0}
     };
 
-    ProfilerStart("my.prof");
     if (virGettextInitialize() < 0 ||
         virInitialize() < 0) {
         fprintf(stderr, _("%s: initialization failed\n"), argv[0]);
@@ -1441,6 +1442,7 @@ int main(int argc, char **argv) {
     }
 
     /* Initialize drivers & then start accepting new clients from network */
+    // driver holds the state!
     if (daemonStateInit(dmn) < 0) {
         ret = VIR_DAEMON_ERR_INIT;
         goto cleanup;
@@ -1516,7 +1518,5 @@ int main(int argc, char **argv) {
     VIR_FREE(remote_config_file);
     daemonConfigFree(config);
 
-    ProfilerFlush();
-    ProfilerStop();
     return ret;
 }

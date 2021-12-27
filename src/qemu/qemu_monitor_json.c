@@ -141,6 +141,7 @@ qemuMonitorEventCompare(const void *key, const void *elt)
     return strcmp(type, handler->type);
 }
 
+// event handler for event got from monitor fd returned by qemu
 static int
 qemuMonitorJSONIOProcessEvent(qemuMonitorPtr mon,
                               virJSONValuePtr obj)
@@ -171,12 +172,17 @@ qemuMonitorJSONIOProcessEvent(qemuMonitorPtr mon,
         ignore_value(virJSONValueObjectGetNumberUint(timestamp, "microseconds",
                                                      &micros));
     }
+    // add new event to driver->domainEventState queue
     qemuMonitorEmitEvent(mon, type, seconds, micros, details);
     VIR_FREE(details);
 
+    // qemu defines sveral events, libvirt handle somes
+    // BLOCK_IO_ERROR, BLOCK_JOB_COMPLETED, DEVICE_DELETED, MIGRATION,
+    // RESET, RESUMEm,SHUTDOWN,STOP, SUSPEND, VNC_CONNECTED etc
     handler = bsearch(type, eventHandlers, ARRAY_CARDINALITY(eventHandlers),
                       sizeof(eventHandlers[0]), qemuMonitorEventCompare);
     if (handler) {
+        // call event handler if found
         VIR_DEBUG("handle %s handler=%p data=%p", type,
                   handler->handler, data);
         (handler->handler)(mon, data);
@@ -192,6 +198,9 @@ qemuMonitorJSONIOProcessLine(qemuMonitorPtr mon,
     virJSONValuePtr obj = NULL;
     int ret = -1;
 
+    /* process one line of reply
+     * acutally the whole reply is in one line!!!
+     */
     VIR_DEBUG("Line [%s]", line);
 
     if (!(obj = virJSONValueFromString(line)))
@@ -208,12 +217,17 @@ qemuMonitorJSONIOProcessLine(qemuMonitorPtr mon,
     } else if (virJSONValueObjectHasKey(obj, "event") == 1) {
         PROBE(QEMU_MONITOR_RECV_EVENT,
               "mon=%p event=%s", mon, line);
+        // event returned on monitor fd without we sending any qmp
+        // it's report by qemu process on monitor fd on some change
+        // like serial change, eof etc
         ret = qemuMonitorJSONIOProcessEvent(mon, obj);
     } else if (virJSONValueObjectHasKey(obj, "error") == 1 ||
                virJSONValueObjectHasKey(obj, "return") == 1) {
+        // got return/error for QMP sent command
         PROBE(QEMU_MONITOR_RECV_REPLY,
               "mon=%p reply=%s", mon, line);
         if (msg) {
+            // got reply for this command, set it finished
             msg->rxObject = obj;
             msg->finished = 1;
             obj = NULL;
@@ -250,6 +264,7 @@ int qemuMonitorJSONIOProcess(qemuMonitorPtr mon,
                 return -1;
             used += got + strlen(LINE_ENDING);
             line[got] = '\0'; /* kill \n */
+            /* process line by line as reply may contain several lines */
             if (qemuMonitorJSONIOProcessLine(mon, line, msg) < 0) {
                 VIR_FREE(line);
                 return -1;
@@ -284,8 +299,10 @@ qemuMonitorJSONCommandWithFd(qemuMonitorPtr mon,
     memset(&msg, 0, sizeof(msg));
 
     if (virJSONValueObjectHasKey(cmd, "execute") == 1) {
+        /* auto generate command ID */
         if (!(id = qemuMonitorNextCommandID(mon)))
             goto cleanup;
+        /* append command id to QMP */
         if (virJSONValueObjectAppendString(cmd, "id", id) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Unable to append command 'id' string"));
@@ -302,6 +319,7 @@ qemuMonitorJSONCommandWithFd(qemuMonitorPtr mon,
 
     VIR_DEBUG("Send command '%s' for write with FD %d", cmdstr, scm_fd);
 
+    // block until get reply
     ret = qemuMonitorSend(mon, &msg);
 
     VIR_DEBUG("Receive command reply ret=%d rxObject=%p",
@@ -314,6 +332,7 @@ qemuMonitorJSONCommandWithFd(qemuMonitorPtr mon,
                            _("Missing monitor reply object"));
             ret = -1;
         } else {
+            // save returned value from msg.rxObject to reply
             *reply = msg.rxObject;
         }
     }
@@ -2278,6 +2297,7 @@ qemuMonitorJSONGetOneBlockStatsInfo(virJSONValuePtr dev,
             goto cleanup; \
         } \
     }
+    /* extract filed from json to bstats */
     QEMU_MONITOR_BLOCK_STAT_GET("rd_bytes", bstats->rd_bytes, true);
     QEMU_MONITOR_BLOCK_STAT_GET("wr_bytes", bstats->wr_bytes, true);
     QEMU_MONITOR_BLOCK_STAT_GET("rd_operations", bstats->rd_req, true);
@@ -2295,6 +2315,7 @@ qemuMonitorJSONGetOneBlockStatsInfo(virJSONValuePtr dev,
             bstats->wr_highest_offset_valid = true;
     }
 
+    /* add bstats(void*) to hash table */
     if (virHashAddEntry(hash, entry_name, bstats) < 0)
         goto cleanup;
     bstats = NULL;
@@ -2320,6 +2341,7 @@ qemuMonitorJSONQueryBlockstats(qemuMonitorPtr mon)
     virJSONValuePtr reply = NULL;
     virJSONValuePtr ret = NULL;
 
+    /* build QMP command with json string */
     if (!(cmd = qemuMonitorJSONMakeCommand("query-blockstats", NULL)))
         return NULL;
 
@@ -3949,6 +3971,7 @@ int qemuMonitorJSONDelDevice(qemuMonitorPtr mon,
     if (qemuMonitorJSONCommand(mon, cmd, &reply) < 0)
         goto cleanup;
 
+    // check relpy key in return value 'error' 'return' etc
     if (qemuMonitorJSONCheckError(cmd, reply) < 0)
         goto cleanup;
 

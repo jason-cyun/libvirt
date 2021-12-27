@@ -152,6 +152,7 @@ qemuProcessHandleAgentEOF(qemuAgentPtr agent,
         goto unlock;
     }
 
+    /* VM shutdown, reset agent to NULL, agentError = false */
     qemuAgentClose(agent);
     priv->agent = NULL;
     priv->agentError = false;
@@ -936,6 +937,9 @@ qemuProcessHandleBlockJob(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         processEvent->action = type;
         processEvent->status = status;
 
+        // send job to the thread pool, wakup the worker to process it
+        // the data of job is processEvent whih is passed to thread pool's
+        // callback set when createa a thread pool.
         if (virThreadPoolSendJob(driver->workerPool, 0, processEvent) < 0) {
             ignore_value(virObjectUnref(vm));
             goto error;
@@ -1291,6 +1295,7 @@ qemuProcessHandleDeviceDeleted(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
     processEvent->data = data;
     processEvent->vm = virObjectRef(vm);
 
+    // send to qemu driver worker to handler event as well, update driver state, if needed here
     if (virThreadPoolSendJob(driver->workerPool, 0, processEvent) < 0) {
         ignore_value(virObjectUnref(vm));
         goto error;
@@ -1615,6 +1620,7 @@ qemuProcessHandleDumpCompleted(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
 }
 
 
+// set monitor callbacks
 static qemuMonitorCallbacks monitorCallbacks = {
     .eofNotify = qemuProcessHandleMonitorEOF,
     .errorNotify = qemuProcessHandleMonitorError,
@@ -6808,6 +6814,7 @@ void qemuProcessStop(virQEMUDriverPtr driver,
     priv->nbdPort = 0;
 
     if (priv->agent) {
+        /* reset qemu agent as qemu process is stopped */
         qemuAgentClose(priv->agent);
         priv->agent = NULL;
     }

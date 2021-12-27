@@ -88,7 +88,8 @@ void virThreadOnExit(void);
 
 typedef void (*virThreadFunc)(void *opaque);
 
-// create non worker thread
+// create non worker thread, non worker thread may quit or not quit as worker thread does!!
+// non-worker thread that never quits: udevEventHandleThread, but most non-worker thread quits immediately!!!
 # define virThreadCreate(thread, joinable, func, opaque) \
     virThreadCreateFull(thread, joinable, func, #func, false, opaque)
 

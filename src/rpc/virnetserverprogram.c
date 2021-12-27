@@ -437,6 +437,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
      *
      *   'args and 'ret'
      */
+    // ret is used for saving the return value
     rv = (dispatcher->func)(server, client, msg, &rerr, arg, ret);
 
     if (virIdentitySetCurrent(NULL) < 0)
