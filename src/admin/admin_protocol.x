@@ -95,6 +95,10 @@ struct admin_connect_open_args {
     unsigned int flags;
 };
 
+struct admin_connect_get_version_ret {
+    unsigned hyper ver;
+};
+
 struct admin_connect_get_lib_version_ret {
     unsigned hyper libVer;
 };
@@ -316,5 +320,10 @@ enum admin_procedure {
     /**
      * @generate: both
      */
-    ADMIN_PROC_CONNECT_SET_LOGGING_FILTERS = 17
+    ADMIN_PROC_CONNECT_SET_LOGGING_FILTERS = 17,
+
+    /**
+     * @generate: both
+     */
+    ADMIN_PROC_CONNECT_GET_VERSION = 18
 };

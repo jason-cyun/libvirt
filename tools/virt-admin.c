@@ -251,6 +251,29 @@ cmdURI(vshControl *ctl, const vshCmd *cmd ATTRIBUTE_UNUSED)
 }
 
 /*
+ * "test" command
+ */
+
+static bool
+cmdTestVersion(vshControl *ctl, const vshCmd *cmd ATTRIBUTE_UNUSED)
+{
+    unsigned long long testVersion;
+    int ret;
+
+    vshAdmControlPtr priv = ctl->privData;
+
+    ret = virAdmConnectGetTestVersion(priv->conn, &testVersion);
+    if (ret < 0) {
+        vshError(ctl, "%s", _("failed to get the test version"));
+    } else {
+        vshPrint(ctl, _("Test version: %llu\n"), testVersion);
+    }
+
+    return true;
+}
+
+
+/*
  * "version" command
  */
 
@@ -1364,6 +1387,12 @@ static const vshCmdDef vshAdmCmds[] = {
      .handler = cmdURI,
      .opts = NULL,
      .info = info_uri,
+     .flags = 0
+    },
+    {.name = "test",
+     .handler = cmdTestVersion,
+     .opts = NULL,
+     .info = info_version,
      .flags = 0
     },
     {.name = "version",

@@ -535,6 +535,32 @@ int virAdmConnectUnregisterCloseCallback(virAdmConnectPtr conn,
 }
 
 /**
+ * virAdmConnectGetTestVersion:
+ * @conn: pointer to an active admin connection
+ * @testVer: stores the current test version number
+ *
+ * Retrieves the remote side test version used by the daemon.
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+int virAdmConnectGetTestVersion(virAdmConnectPtr conn,
+                                unsigned long long *testVer)
+{
+    virResetLastError();
+
+    virCheckAdmConnectReturn(conn, -1);
+    virCheckNonNullArgReturn(testVer, -1);
+
+    if (remoteAdminConnectGetVersion(conn, testVer) < 0)
+        goto error;
+
+    return 0;
+ error:
+    virDispatchError(NULL);
+    return -1;
+}
+
+/**
  * virAdmConnectGetLibVersion:
  * @conn: pointer to an active admin connection
  * @libVer: stores the current remote libvirt version number

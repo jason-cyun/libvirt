@@ -174,6 +174,17 @@ adminDispatchConnectClose(virNetServerPtr server ATTRIBUTE_UNUSED,
     return 0;
 }
 
+// This function is called by admin_server_dispatch_stubs.h which is auto generated
+// hence we must use that name auto generated
+static int
+adminConnectGetVersion(virNetDaemonPtr dmn ATTRIBUTE_UNUSED,
+                       unsigned long long *Ver)
+{
+    if (Ver)
+        *Ver = 1000;
+    return 0;
+}
+
 static int
 adminConnectGetLibVersion(virNetDaemonPtr dmn ATTRIBUTE_UNUSED,
                           unsigned long long *libVer)
