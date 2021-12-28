@@ -1,4 +1,5 @@
 /*
+ * client side rpc call!!
  * remote_driver.c: driver to provide access to libvirtd running
  *   on a remote machine
  *
@@ -1735,6 +1736,8 @@ remoteNodeGetCellsFreeMemory(virConnectPtr conn,
 static int
 remoteConnectListDomains(virConnectPtr conn, int *ids, int maxids)
 {
+
+    /* this is called by client trigger rpc call */
     int rv = -1;
     size_t i;
     remote_connect_list_domains_args args;
@@ -1752,6 +1755,8 @@ remoteConnectListDomains(virConnectPtr conn, int *ids, int maxids)
     args.maxids = maxids;
 
     memset(&ret, 0, sizeof(ret));
+    // call: like call rpc API, with args as input, ret as output
+    // REMOTE_PROC_CONNECT_LIST_DOMAINS is the function identifier in remote program
     if (call(conn, priv, 0, REMOTE_PROC_CONNECT_LIST_DOMAINS,
              (xdrproc_t) xdr_remote_connect_list_domains_args, (char *) &args,
              (xdrproc_t) xdr_remote_connect_list_domains_ret, (char *) &ret) == -1)
@@ -6665,6 +6670,10 @@ callFull(virConnectPtr conn ATTRIBUTE_UNUSED,
     virNetClientPtr client = priv->client;
     priv->localUses++;
 
+    /* As libvirtd registers these three programs
+     * each program provides several api, we need
+     * to know which program we're calling
+     */
     if (flags & REMOTE_CALL_QEMU)
         prog = priv->qemuProgram;
     else if (flags & REMOTE_CALL_LXC)
@@ -6677,6 +6686,10 @@ callFull(virConnectPtr conn ATTRIBUTE_UNUSED,
      * callbacks for those are invoked
      */
     remoteDriverUnlock(priv);
+    /* client calls callFull() without know the program
+     * after know its
+     * client calls virNetClientProgramCall()
+     */
     rv = virNetClientProgramCall(prog,
                                  client,
                                  counter,

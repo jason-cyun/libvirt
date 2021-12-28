@@ -1093,6 +1093,7 @@ qemuMonitorSend(qemuMonitorPtr mon,
         return -1;
     }
 
+    // save msg to monitorptr, later on event thread will send it to monitor fd
     mon->msg = msg;
     // save msg to monitorptr, later on event thread will send it to monitor fd
     // NOTE: this is only one pending qmp command, so mon->msg saves the pending command

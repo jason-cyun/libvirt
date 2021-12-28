@@ -961,6 +961,7 @@ static const struct _domblkstat_sequence domblkstat_output[] = {
 static bool
 cmdDomblkstat(vshControl *ctl, const vshCmd *cmd)
 {
+    // virsh domblkstat centos
     virDomainPtr dom;
     const char *name = NULL, *device = NULL;
     virDomainBlockStatsStruct stats;

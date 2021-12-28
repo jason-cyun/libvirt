@@ -1108,6 +1108,9 @@ virNetClientCallDispatchReply(virNetClientPtr client)
     /* Ok, definitely got an RPC reply now find
        out which waiting call is associated with it */
     thecall = client->waitDispatch;
+    /* all calls in the queue, find the call of this reply by key(program, ver, serial)
+     * each call has a unique serial
+     */
     while (thecall &&
            !(thecall->msg->header.prog == client->msg.header.prog &&
              thecall->msg->header.vers == client->msg.header.vers &&
@@ -1124,6 +1127,7 @@ virNetClientCallDispatchReply(virNetClientPtr client)
     if (VIR_REALLOC_N(thecall->msg->buffer, client->msg.bufferLength) < 0)
         return -1;
 
+    // update thiscall->msg from client->msg which is reply from server */
     memcpy(thecall->msg->buffer, client->msg.buffer, client->msg.bufferLength);
     memcpy(&thecall->msg->header, &client->msg.header, sizeof(client->msg.header));
     thecall->msg->bufferLength = client->msg.bufferLength;
@@ -1134,6 +1138,7 @@ virNetClientCallDispatchReply(virNetClientPtr client)
     client->msg.nfds = 0;
     client->msg.fds = NULL;
 
+    /* make this call complete */
     thecall->mode = VIR_NET_CLIENT_MODE_COMPLETE;
 
     return 0;
@@ -1381,6 +1386,7 @@ virNetClientIOReadMessage(virNetClientPtr client)
 
     wantData = client->msg.bufferLength - client->msg.bufferOffset;
 
+    /* save reply at client->msg */
     ret = virNetSocketRead(client->sock,
                            client->msg.buffer + client->msg.bufferOffset,
                            wantData);
@@ -1454,6 +1460,7 @@ virNetClientIOHandleInput(virNetClientPtr client)
                     }
                 }
 
+                /* dispatch the reply to proper call */
                 ret = virNetClientCallDispatch(client);
                 // as save data from client->msg to thiscall->msg
                 // can reset client->msg as free
@@ -1501,6 +1508,9 @@ static bool virNetClientIOEventLoopPollEvents(virNetClientCallPtr call,
 static bool virNetClientIOEventLoopRemoveDone(virNetClientCallPtr call,
                                               void *opaque)
 {
+    /* for each waiting calls, this function is call after get one reply
+     * opaque is the call of thread who is running poll()
+     */
     virNetClientCallPtr thiscall = opaque;
 
     if (call == thiscall)
@@ -1520,6 +1530,10 @@ static bool virNetClientIOEventLoopRemoveDone(virNetClientCallPtr call,
      * later...
      */
     if (call->haveThread) {
+        /* for call which is triggered by thread who is not running poll
+         * if this call is completed, that means the reply is for me
+         * wake up the thread who triggers this call as it's blocked on the condition
+         */
         VIR_DEBUG("Waking up sleep %p", call);
         virCondSignal(&call->cond);
     } else {
@@ -1667,6 +1681,7 @@ static int virNetClientIOEventLoop(virNetClientPtr client,
         ignore_value(pthread_sigmask(SIG_BLOCK, &blockedsigs, &oldmask));
 
     repoll:
+        /* poll with timeout(client keepalive interval) set from conf file */
         ret = poll(fds, ARRAY_CARDINALITY(fds), timeout);
         if (ret < 0 && (errno == EAGAIN || errno == EINTR))
             goto repoll;
@@ -1726,7 +1741,7 @@ static int virNetClientIOEventLoop(virNetClientPtr client,
         }
 
         if (fds[0].revents & POLLIN) {
-            // go into infinit loop for reading data from remote server
+            // go into next loop for reading data from remote server
             // if data on client socket fd is available to read
             if (virNetClientIOHandleInput(client) < 0) {
                 virNetClientMarkClose(client, closeReason);
@@ -1736,13 +1751,16 @@ static int virNetClientIOEventLoop(virNetClientPtr client,
         }
 
         /* Iterate through waiting calls and if any are
-         * complete, remove them from the dispatch list.
+         * complete, remove them from the dispatch list, and wake up blocking thread
          */
         virNetClientCallRemovePredicate(&client->waitDispatch,
                                         virNetClientIOEventLoopRemoveDone,
                                         thiscall);
 
         /* Now see if *we* are done */
+        /* after reading reply, if we have all reply from above virNetClientIOHandleInput
+         * VIR_NET_CLIENT_MODE_COMPLETE is set, then we jump out poll
+         */
         if (thiscall->mode == VIR_NET_CLIENT_MODE_COMPLETE) {
             virNetClientCallRemove(&client->waitDispatch, thiscall);
             virNetClientIOEventLoopPassTheBuck(client, thiscall);
@@ -1888,14 +1906,20 @@ static int virNetClientIO(virNetClientPtr client,
               client->waitDispatch);
 
     /* Stick ourselves on the end of the wait queue */
-    // add thiscall to waitDispatch queue
+    /* please note: these are could be several pending command waiting for libvirt's replay
+     * all this command, linked at waitDispatch queue with order, the later in the tail
+     */
     virNetClientCallQueue(&client->waitDispatch, thiscall);
 
     /* Check to see if another thread is dispatching */
     if (client->haveTheBuck) {
+        /* if another thread is polling,we do not need to run poll()
+         * as we already put thiscall to the queue
+         * we only need to wait to see if we got reply
+         */
         char ignore = 1;
 
-        /* Force other thread to wakeup from poll */
+        /* Force other thread to wakeup from poll, as we put thiscall, want it to be sent out soon */
         if (safewrite(client->wakeupSendFD, &ignore, sizeof(ignore)) != sizeof(ignore)) {
             virNetClientCallRemove(&client->waitDispatch, thiscall);
             virReportSystemError(errno, "%s",
@@ -1914,6 +1938,9 @@ static int virNetClientIO(virNetClientPtr client,
         VIR_DEBUG("Going to sleep head=%p call=%p",
                   client->waitDispatch, thiscall);
         /* Go to sleep while other thread is working... */
+        /* as another thread is polling, after that thread got reply from server
+         * it will update corresponding thiscall with reply, and wake me up!!!
+         */
         if (virCondWait(&thiscall->cond, &client->parent.lock) < 0) {
             virNetClientCallRemove(&client->waitDispatch, thiscall);
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -1930,6 +1957,7 @@ static int virNetClientIO(virNetClientPtr client,
          *     our reply
          */
         if (thiscall->mode == VIR_NET_CLIENT_MODE_COMPLETE) {
+            /* wake up by polling thread after it gots reply for me */
             rv = 0;
             /*
              * We avoided catching the buck and our reply is ready !
@@ -1941,6 +1969,9 @@ static int virNetClientIO(virNetClientPtr client,
 
         /* Grr, someone passed the buck to us ... */
     } else {
+        /* if no other thread is polling, set hasTheBuck to true
+         * then we call poll()
+         */
         client->haveTheBuck = true;
     }
 
@@ -1965,9 +1996,11 @@ static int virNetClientIO(virNetClientPtr client,
     virNetClientIOUpdateCallback(client, false);
 
     virResetLastError();
-    // poll on client fd
+    // poll on client fd, so that we can send this call out
+    // and block until get reply!!
     rv = virNetClientIOEventLoop(client, thiscall);
 
+    // go here means we got reply from server
     if (client->sock)
         virNetClientIOUpdateCallback(client, true);
 
@@ -2137,9 +2170,12 @@ static int virNetClientSendInternal(virNetClientPtr client,
         return -1;
     }
 
+    //  build ClientCall
     if (!(call = virNetClientCallNew(msg, expectReply, nonBlock)))
         return -1;
 
+    // have thread set to true, that mean if another thread is polling
+    // it should signal me when get reply for me as I block on thiscall->cond
     call->haveThread = true;
     // call->msg = msg
     ret = virNetClientIO(client, call);

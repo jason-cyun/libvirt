@@ -287,6 +287,9 @@ int virNetClientProgramCall(virNetClientProgramPtr prog,
     if (!(msg = virNetMessageNew(false)))
         return -1;
 
+    /* set rpc header info
+     * with program, proc etc
+     */
     msg->header.prog = prog->program;
     msg->header.vers = prog->version;
     msg->header.status = VIR_NET_OK;
@@ -313,6 +316,7 @@ int virNetClientProgramCall(virNetClientProgramPtr prog,
         }
     }
 
+    /* encode header */
     if (virNetMessageEncodeHeader(msg) < 0)
         goto error;
 
@@ -320,6 +324,7 @@ int virNetClientProgramCall(virNetClientProgramPtr prog,
         virNetMessageEncodeNumFDs(msg) < 0)
         goto error;
 
+    /* encode args as payload for request */
     if (virNetMessageEncodePayload(msg, args_filter, args) < 0)
         goto error;
 

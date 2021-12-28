@@ -63,6 +63,11 @@ virConnectListDomains(virConnectPtr conn, int *ids, int maxids)
     virCheckNonNullArgGoto(ids, error);
     virCheckNonNegativeArgGoto(maxids, error);
 
+    /*
+     * this function can be used in client and server side
+     * for client who uses this library like virsh: driver is remote driver
+     * while for server side, library is qemu driver is qemu is used to start vm
+     */
     if (conn->driver->connectListDomains) {
         int ret = conn->driver->connectListDomains(conn, ids, maxids);
         if (ret < 0)
@@ -5391,6 +5396,10 @@ int
 virDomainBlockStats(virDomainPtr dom, const char *disk,
                     virDomainBlockStatsPtr stats, size_t size)
 {
+    /* this can be called by client and server side with different driver
+     * for client driver is remote
+     * for server driver is qemu
+     */
     virConnectPtr conn;
     virDomainBlockStatsStruct stats2 = { -1, -1, -1, -1, -1 };
 
