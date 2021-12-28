@@ -176,6 +176,10 @@ static virQEMUDriverPtr qemu_driver;
 static virDomainObjPtr
 qemuDomObjFromDomain(virDomainPtr domain)
 {
+    /* virDomain and virDomainObi are two separate hash tables
+     * virDomain hash table stored at daemon
+     * virDomainObj hash table stored at driver->domains
+     */
     virDomainObjPtr vm;
     virQEMUDriverPtr driver = domain->conn->privateData;
     char uuidstr[VIR_UUID_STRING_BUFLEN];
@@ -11110,6 +11114,7 @@ qemuDomainBlocksStatsGather(virQEMUDriverPtr driver,
     }
 
     qemuDomainObjEnterMonitor(driver, vm);
+    /* call QMP function defined at qemu- */
     nstats = qemuMonitorGetAllBlockStatsInfo(priv->mon, &blockstats, false);
     if (qemuDomainObjExitMonitor(driver, vm) < 0 || nstats < 0)
         goto cleanup;
@@ -11147,6 +11152,9 @@ qemuDomainBlockStats(virDomainPtr dom,
                      const char *path,
                      virDomainBlockStatsPtr stats)
 {
+    /* This is called by remote daemon dispatch stubs
+     * client remote driver---->remote daemon----->driver--->qemu
+     */
     virQEMUDriverPtr driver = dom->conn->privateData;
     qemuBlockStatsPtr blockstats = NULL;
     int ret = -1;
@@ -11167,6 +11175,10 @@ qemuDomainBlockStats(virDomainPtr dom,
     if (qemuDomainBlocksStatsGather(driver, vm, path, &blockstats) < 0)
         goto endjob;
 
+    /* convert data from qemu_xx to vir_xx
+     * later on in rpc helper function
+     * convert vir to xx_ret
+     */
     stats->rd_req = blockstats->rd_req;
     stats->rd_bytes = blockstats->rd_bytes;
     stats->wr_req = blockstats->wr_req;
