@@ -109,6 +109,7 @@ struct _virLogOutput {
     char *name;
 };
 
+/* this is only one default output */
 static char *virLogDefaultOutput;
 static virLogOutputPtr *virLogOutputs;
 static size_t virLogNbOutputs;
@@ -170,6 +171,9 @@ virLogSetDefaultOutputToJournald(void)
     if (priority == VIR_LOG_DEBUG)
         priority = VIR_LOG_INFO;
 
+    /* set default priority for each output: journald, file, stderr, syslog
+     * note: this can be overridden by output set in conf file
+     */
     return virAsprintf(&virLogDefaultOutput, "%d:journald", priority);
 }
 
@@ -340,6 +344,9 @@ virLogSetDefaultPriority(virLogPriority priority)
     if (virLogInitialize() < 0)
         return -1;
 
+    /* set default log priority from conf file
+     * no set in conf file, default: VIRT_LOG_WARN
+     */
     virLogDefaultPriority = priority;
     return 0;
 }
@@ -503,21 +510,33 @@ static void
 virLogSourceUpdate(virLogSourcePtr source)
 {
     virLogLock();
+    /* if no user filter defined, virLogFiltersSerial is 1
+     * source->serial default is zero
+     */
     if (source->serial < virLogFiltersSerial) {
+        /* log_level set at config file is set as virLogDefaultPriority
+         * also as the source->priority
+         */
         unsigned int priority = virLogDefaultPriority;
         unsigned int flags = 0;
         size_t i;
 
         for (i = 0; i < virLogNbFilters; i++) {
             if (fnmatch(virLogFilters[i]->match, source->name, 0) == 0) {
+                /* use the first matched filter */
                 priority = virLogFilters[i]->priority;
                 flags = virLogFilters[i]->flags;
                 break;
             }
         }
 
+        /* update priority of the source to filter priority or default VIR_LOG_WARN
+         * source can be seen as of source file with VIR_LOG_INIT, default priority ERROR
+         * but here we update source priority to WARN!!!
+         */
         source->priority = priority;
         source->flags = flags;
+        /* update only once, if no dynamically add new filter like by virt-admin */
         source->serial = virLogFiltersSerial;
     }
     virLogUnlock();
@@ -603,7 +622,14 @@ virLogVMessage(virLogSourcePtr source,
      * with a log message emission.
      */
     if (source->serial < virLogFiltersSerial)
+        /* update source priority based on filter
+         */
         virLogSourceUpdate(source);
+
+    /* priority is different for differnt log function
+     * like VIR_LOG_INFO() VIR_LOG_DEBUG
+     * filter is the first gate whether to pass or not
+     */
     if (priority < source->priority)
         goto cleanup;
     filterflags = source->flags;
@@ -1866,6 +1892,7 @@ virLogSetOutputs(const char *src)
     if (virLogInitialize() < 0)
         return -1;
 
+    /* use output set in conf file, otherwise default */
     if (src && *src)
         outputstr = src;
 

@@ -610,6 +610,7 @@ daemonSetupLogging(struct daemonConfig *config,
      * setup a default one.
      */
     ignore_value(virLogSetFilters(config->log_filters));
+    /* set output set in conf file */
     ignore_value(virLogSetOutputs(config->log_outputs));
 
     /* If there are some environment variables defined, use those instead */
@@ -623,10 +624,13 @@ daemonSetupLogging(struct daemonConfig *config,
 
     /* Define the default output. This is only applied if there was no setting
      * from either the config or the environment.
+     *
+     * set default output as well
      */
     if (virLogSetDefaultOutput("libvirtd.log", godaemon, privileged) < 0)
         return -1;
 
+    // if no user output set in conf file, use default output which use log level as priority */
     if (virLogGetNbOutputs() == 0)
         virLogSetOutputs(virLogGetDefaultOutput());
 
