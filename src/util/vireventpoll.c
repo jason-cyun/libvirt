@@ -51,6 +51,13 @@ static int virEventPollInterruptLocked(void);
 
 /* State for a single file handle being monitored */
 struct virEventPollHandle {
+    /* watch: identifier, watch 1<--->1 fds
+     * fd: monitored socket
+     * events: poll EVENT of this fd that will be monitored
+     * cb if event happens
+     * opaque: any data related to this fd
+     * deleted: marked it deleted, later on cleanup it
+     */
     int watch;
     int fd;
     int events;
@@ -62,6 +69,13 @@ struct virEventPollHandle {
 
 /* State for a single timer being generated */
 struct virEventPollTimeout {
+    /* timer: id for this timeout
+     * expiresAt: when expires
+     * cb: called when it expires
+     * ff: called when it's deleted
+     * opaque: any data related to this timeout
+     * deleted: marked it deleted, later on cleanup it
+     */
     int timer;
     int frequency;
     unsigned long long expiresAt;
@@ -78,12 +92,18 @@ struct virEventPollTimeout {
 /* State for the main event loop */
 struct virEventPollLoop {
     virMutex lock;
-    int running;
+    int running; /* leader is running, not blocked on poll */
     virThread leader;
+    /* wake up leader by pipe if it's blocked */
     int wakeupfd[2];
+
+    /* allocate handles and current used count */
     size_t handlesCount;
     size_t handlesAlloc;
+    /*all fds monitored by poll */
     struct virEventPollHandle *handles;
+
+    /* allocate timeouts and current used count */
     size_t timeoutsCount;
     size_t timeoutsAlloc;
     struct virEventPollTimeout *timeouts;
@@ -197,6 +217,7 @@ int virEventPollRemoveHandle(int watch)
 
         if (eventLoop.handles[i].watch == watch) {
             EVENT_DEBUG("mark delete %zu %d", i, eventLoop.handles[i].fd);
+            // mark this fd as deleted from handle slot
             eventLoop.handles[i].deleted = 1;
             virEventPollInterruptLocked();
             virMutexUnlock(&eventLoop.lock);
@@ -237,6 +258,8 @@ int virEventPollAddTimeout(int frequency,
 
     eventLoop.timeouts[eventLoop.timeoutsCount].timer = nextTimer++;
     eventLoop.timeouts[eventLoop.timeoutsCount].frequency = frequency;
+    // cb is called when it expires
+    // ff is called when it's deleted
     eventLoop.timeouts[eventLoop.timeoutsCount].cb = cb;
     eventLoop.timeouts[eventLoop.timeoutsCount].ff = ff;
     eventLoop.timeouts[eventLoop.timeoutsCount].opaque = opaque;
@@ -346,6 +369,7 @@ static int virEventPollCalculateTimeout(int *timeout)
         EVENT_DEBUG("Got a timeout scheduled for %llu", eventLoop.timeouts[i].expiresAt);
         if (then == 0 ||
             eventLoop.timeouts[i].expiresAt < then)
+            // got the minimum timeout of all fds
             then = eventLoop.timeouts[i].expiresAt;
     }
 
@@ -385,6 +409,8 @@ static struct pollfd *virEventPollMakePollFDs(int *nfds) {
     *nfds = 0;
     for (i = 0; i < eventLoop.handlesCount; i++) {
         if (eventLoop.handles[i].events && !eventLoop.handles[i].deleted)
+            // count fds that needs to be monitored
+            // event set and fd is not marked as deleted
             (*nfds)++;
     }
 
@@ -401,6 +427,7 @@ static struct pollfd *virEventPollMakePollFDs(int *nfds) {
                     eventLoop.handles[i].deleted);
         if (!eventLoop.handles[i].events || eventLoop.handles[i].deleted)
             continue;
+        // set non deleted fd that wants event
         fds[*nfds].fd = eventLoop.handles[i].fd;
         fds[*nfds].events = eventLoop.handles[i].events;
         fds[*nfds].revents = 0;
@@ -444,6 +471,7 @@ static int virEventPollDispatchTimeouts(void)
          * requested
          */
         if (eventLoop.timeouts[i].expiresAt <= (now+20)) {
+            /* check all timeout to see who expires */
             virEventTimeoutCallback cb = eventLoop.timeouts[i].cb;
             int timer = eventLoop.timeouts[i].timer;
             void *opaque = eventLoop.timeouts[i].opaque;
@@ -454,6 +482,7 @@ static int virEventPollDispatchTimeouts(void)
                   "timer=%d",
                   timer);
             virMutexUnlock(&eventLoop.lock);
+            // call timeout handler with opaque
             (cb)(timer, opaque);
             virMutexLock(&eventLoop.lock);
         }
@@ -484,11 +513,13 @@ static int virEventPollDispatchHandles(int nfds, struct pollfd *fds)
         while (i < eventLoop.handlesCount &&
                (eventLoop.handles[i].fd != fds[n].fd ||
                 eventLoop.handles[i].events == 0)) {
+            // find the fd saved at eventLoop as it holds the cb and data of this fd
             i++;
         }
         if (i == eventLoop.handlesCount)
             break;
 
+        // find the fd(watch) that has event, if it's marked as deleted, skip the event
         VIR_DEBUG("i=%zu w=%d", i, eventLoop.handles[i].watch);
         if (eventLoop.handles[i].deleted) {
             EVENT_DEBUG("Skip deleted n=%zu w=%d f=%d", i,
@@ -536,6 +567,7 @@ static void virEventPollCleanupTimeouts(void)
         PROBE(EVENT_POLL_PURGE_TIMEOUT,
               "timer=%d",
               eventLoop.timeouts[i].timer);
+        // cleanup deleted timeout
         if (eventLoop.timeouts[i].ff) {
             virFreeCallback ff = eventLoop.timeouts[i].ff;
             void *opaque = eventLoop.timeouts[i].opaque;
@@ -589,16 +621,19 @@ static void virEventPollCleanupHandles(void)
             virFreeCallback ff = eventLoop.handles[i].ff;
             void *opaque = eventLoop.handles[i].opaque;
             virMutexUnlock(&eventLoop.lock);
+            // callback when fd is deleted from handle slot
             ff(opaque);
             virMutexLock(&eventLoop.lock);
         }
 
         if ((i+1) < eventLoop.handlesCount) {
+            // move the back forward as fd at index i is deleted
             memmove(eventLoop.handles+i,
                     eventLoop.handles+i+1,
                     sizeof(struct virEventPollHandle)*(eventLoop.handlesCount
                                                    -(i+1)));
         }
+        // decrease handlesCount
         eventLoop.handlesCount--;
     }
 
@@ -608,6 +643,7 @@ static void virEventPollCleanupHandles(void)
         (gap > eventLoop.handlesCount && gap > EVENT_ALLOC_EXTENT)) {
         EVENT_DEBUG("Found %zu out of %zu handles slots used, releasing %zu",
                     eventLoop.handlesCount, eventLoop.handlesAlloc, gap);
+        // shrink allocated handles if there are more free slots
         VIR_SHRINK_N(eventLoop.handles, eventLoop.handlesAlloc, gap);
     }
 }
@@ -629,6 +665,7 @@ int virEventPollRunOnce(void)
     virEventPollCleanupHandles();
 
     if (!(fds = virEventPollMakePollFDs(&nfds)) ||
+        /* calculate minimum timeout of all */
         virEventPollCalculateTimeout(&timeout) < 0)
         goto error;
 
@@ -638,6 +675,7 @@ int virEventPollRunOnce(void)
     PROBE(EVENT_POLL_RUN,
           "nhandles=%d timeout=%d",
           nfds, timeout);
+    /* poll returns due to event or timeout */
     ret = poll(fds, nfds, timeout);
     if (ret < 0) {
         EVENT_DEBUG("Poll got error event %d", errno);
@@ -650,18 +688,24 @@ int virEventPollRunOnce(void)
     EVENT_DEBUG("Poll got %d event(s)", ret);
 
     virMutexLock(&eventLoop.lock);
+    // check timeout, call expired one's handler
     if (virEventPollDispatchTimeouts() < 0)
         goto error;
 
+    // run callbacks for all fds which has events happened
     if (ret > 0 &&
         virEventPollDispatchHandles(nfds, fds) < 0)
         goto error;
 
+    // cleanupHandles as some fd may be deleted, we should free the slots used by them
     virEventPollCleanupTimeouts();
+    // cleanup deleted timeout and call its free handler
     virEventPollCleanupHandles();
 
+    // after process all events, make eventLoop not running
     eventLoop.running = 0;
     virMutexUnlock(&eventLoop.lock);
+    // free fds for each run
     VIR_FREE(fds);
     return 0;
 

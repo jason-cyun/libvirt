@@ -597,6 +597,9 @@ static void
 virNetDaemonSignalHandler(int sig, siginfo_t * siginfo,
                           void* context ATTRIBUTE_UNUSED)
 {
+    /* This is signal handler, can interrupt event thread at any time
+     * here, we write the singal number to event thread for later handling
+     */
     int origerrno;
     int r;
     siginfo_t tmp;
@@ -710,6 +713,10 @@ virNetDaemonAddSignalHandler(virNetDaemonPtr dmn,
     if (VIR_ALLOC(sigdata) < 0)
         goto error;
 
+    /* setup signal handle function
+     * when event thread gets signal from socket(write by signal handler)
+     * func is called by event thread
+     */
     sigdata->signum = signum;
     sigdata->func = func;
     sigdata->opaque = opaque;
@@ -847,6 +854,8 @@ virNetDaemonRun(virNetDaemonPtr dmn)
         }
 
         virObjectUnlock(dmn);
+        // block on poll if no event, otherwise
+        // run events of all monitored fd, then go next loop
         if (virEventRunDefaultImpl() < 0) {
             virObjectLock(dmn);
             VIR_DEBUG("Loop iteration error, exiting");
