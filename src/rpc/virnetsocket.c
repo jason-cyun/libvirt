@@ -90,6 +90,7 @@ struct _virNetSocket {
     virFreeCallback ff;
 
     virSocketAddr localAddr;
+    /* for listen socket, remoteAddr is NULL */
     virSocketAddr remoteAddr;
     char *localAddrStrSASL;
     char *remoteAddrStrSASL;
@@ -344,6 +345,7 @@ int virNetSocketNewListenTCP(const char *nodename,
 
     struct addrinfo *runp = ai;
     while (runp) {
+        /* for each address create a socket */
         virSocketAddr addr;
 
         memset(&addr, 0, sizeof(addr));
@@ -381,6 +383,7 @@ int virNetSocketNewListenTCP(const char *nodename,
         }
 #endif
 
+        /* bind socket with address */
         if (bind(fd, runp->ai_addr, runp->ai_addrlen) < 0) {
             if (errno != EADDRINUSE) {
                 virReportSystemError(errno, "%s", _("Unable to bind to port"));
@@ -403,6 +406,9 @@ int virNetSocketNewListenTCP(const char *nodename,
         if (VIR_EXPAND_N(socks, nsocks, 1) < 0)
             goto error;
 
+        /* create virtNetSocket to hold this new fd with extra data
+         * for listen socket remote is NULL
+         */
         if (!(socks[nsocks-1] = virNetSocketNew(&addr, NULL, false, fd, -1, 0)))
             goto error;
         runp = runp->ai_next;
@@ -453,6 +459,7 @@ int virNetSocketNewListenUNIX(const char *path,
 
     addr.len = sizeof(addr.data.un);
 
+    /* unix socket with stream */
     if ((fd = socket(PF_UNIX, SOCK_STREAM, 0)) < 0) {
         virReportSystemError(errno, "%s", _("Failed to create socket"));
         goto error;

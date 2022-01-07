@@ -414,6 +414,9 @@ daemonSetupNetworking(virNetServerPtr srv,
         goto cleanup;
     }
 
+    /* libvirt always listen on unix sockt for rpc
+     * and listen on tcp/tls tcp rpc if user sets it
+     */
     if (!(svc = virNetServerServiceNewFDOrUNIX(sock_path,
                                                unix_sock_rw_mask,
                                                unix_sock_gid,
@@ -448,6 +451,7 @@ daemonSetupNetworking(virNetServerPtr srv,
         goto cleanup;
 
     if (sock_path_adm) {
+        /* admin socket is always UNIX socket */
         VIR_DEBUG("Registering unix socket %s", sock_path_adm);
         if (!(svcAdm = virNetServerServiceNewUNIX(sock_path_adm,
                                                   unix_sock_adm_mask,
@@ -464,6 +468,7 @@ daemonSetupNetworking(virNetServerPtr srv,
     }
 
     if (ipsock) {
+        /* rpc on tcp, and it's not readonly */
         if (config->listen_tcp) {
             VIR_DEBUG("Registering TCP socket %s:%s",
                       config->listen_addr, config->tcp_port);
@@ -483,6 +488,7 @@ daemonSetupNetworking(virNetServerPtr srv,
         }
 
         if (config->listen_tls) {
+            /* rpc on tls */
             virNetTLSContextPtr ctxt = NULL;
 
             if (config->ca_file ||
@@ -1425,6 +1431,10 @@ int main(int argc, char **argv) {
     virHookCall(VIR_HOOK_DRIVER_DAEMON, "-", VIR_HOOK_DAEMON_OP_START,
                 0, "start", NULL, NULL);
 
+    /* ipsock is set with true if listen option is set from command line for conf file
+     * by default, there is ip sock, only rpc on unix socket
+     * turn it on with listen option, then libvirt will accept on tcp for rpc
+     */
     if (daemonSetupNetworking(srv, srvAdm,
                               config,
                               sock_file,

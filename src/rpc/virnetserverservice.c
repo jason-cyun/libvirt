@@ -149,10 +149,12 @@ virNetServerServicePtr virNetServerServiceNewTCP(const char *nodename,
         return NULL;
 
     svc->auth = auth;
+    /* for tcp, it's not readonly */
     svc->readonly = readonly;
     svc->nrequests_client_max = nrequests_client_max;
     svc->tls = virObjectRef(tls);
 
+    /* create tcp sockets based on config listen_addr(nodename)*/
     if (virNetSocketNewListenTCP(nodename,
                                  service,
                                  family,
@@ -205,14 +207,19 @@ virNetServerServicePtr virNetServerServiceNewUNIX(const char *path,
         return NULL;
 
     svc->auth = auth;
+    /* service readonly flag */
     svc->readonly = readonly;
     svc->nrequests_client_max = nrequests_client_max;
     svc->tls = virObjectRef(tls);
 
     if (VIR_ALLOC_N(svc->socks, 1) < 0)
         goto error;
+    /* for unix sock nsocks is always 1, as there is only one path for unix sock
+     * but for inet4, there could be several ip address, one has on sock
+     */
     svc->nsocks = 1;
 
+    /* UNIX sock with STREAM */
     if (virNetSocketNewListenUNIX(path,
                                   mask,
                                   -1,
