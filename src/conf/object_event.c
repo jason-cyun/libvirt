@@ -793,7 +793,7 @@ virObjectEventStateQueueRemote(virObjectEventStatePtr state,
     }
 
     virObjectLock(state);
-
+    /* at client side, the built event has remoteID which is callbackID in server */
     event->remoteID = remoteID;
     if (virObjectEventQueuePush(state->queue, event) < 0) {
         VIR_DEBUG("Error adding event to queue");

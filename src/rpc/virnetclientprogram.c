@@ -241,6 +241,9 @@ int virNetClientProgramDispatch(virNetClientProgramPtr prog,
         return -1;
     }
 
+    /* get event handler by event proc set by server
+     * wihch indicates kind of event
+     */
     event = virNetClientProgramGetEvent(prog, msg->header.proc);
 
     if (!event) {
@@ -255,6 +258,12 @@ int virNetClientProgramDispatch(virNetClientProgramPtr prog,
     if (virNetMessageDecodePayload(msg, event->msg_filter, evdata) < 0)
         goto cleanup;
 
+    /* call event handler defined at static virNetClientProgramEvent remoteEvents[] = {}
+     * remoteDomainBuildEventLifecycle
+     * remoteDomainBuildEventIOErrorReason
+     * remoteDomainBuildEventCallbackDeviceRemovalFailed
+     * etc
+     */
     event->func(prog, client, evdata, prog->eventOpaque);
 
     xdr_free(event->msg_filter, evdata);

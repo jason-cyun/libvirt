@@ -2175,6 +2175,7 @@ virDomainEventStateRegisterClient(virConnectPtr conn,
     /* remoteConnectDomainEventRegister->virDomainEventStateRegisterClient
      * This is called at client side, conn is connection at client side
      * state is conn->privateData->eventState!!!
+     * client side callback managed at conn->privateData->eventState
      */
     char uuidstr[VIR_UUID_STRING_BUFLEN];
 

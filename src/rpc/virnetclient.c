@@ -1150,6 +1150,9 @@ static int virNetClientCallDispatchMessage(virNetClientPtr client)
     virNetClientProgramPtr prog = NULL;
 
     for (i = 0; i < client->nprograms; i++) {
+        /* different programs have event that it supports
+         * like remote program: static virNetClientProgramEvent remoteEvents[] = {} at virnetclient.c
+         */
         if (virNetClientProgramMatches(client->programs[i],
                                        &client->msg)) {
             prog = client->programs[i];
@@ -1284,6 +1287,7 @@ virNetClientCallDispatch(virNetClientPtr client)
         return virNetClientCallDispatchReply(client);
 
     case VIR_NET_MESSAGE: /* Async notifications */
+        /* event from server */
         return virNetClientCallDispatchMessage(client);
 
     case VIR_NET_STREAM: /* Stream protocol */

@@ -428,6 +428,7 @@ remoteConnectNotifyEventConnectionClosed(virNetClientProgramPtr prog ATTRIBUTE_U
                                          virNetClientPtr client ATTRIBUTE_UNUSED,
                                          void *evdata, void *opaque);
 
+/* thi is the builder for event comes from server side */
 static virNetClientProgramEvent remoteEvents[] = {
     { REMOTE_PROC_DOMAIN_EVENT_LIFECYCLE,
       remoteDomainBuildEventLifecycle,
@@ -4383,6 +4384,11 @@ remoteConnectDomainEventRegister(virConnectPtr conn,
 
     remoteDriverLock(priv);
 
+    /* Client side API, conn is connection at client side
+     * this API only registers VIR_DOMAIN_EVENT_ID_LIFECYCLE event by rpc call
+     * if it's not regtistered by this client
+     * remoteConnectDomainEventRegisterAny can register any event!
+     */
     if ((count = virDomainEventStateRegisterClient(conn, priv->eventState,
                                                    NULL,
                                                    VIR_DOMAIN_EVENT_ID_LIFECYCLE,
@@ -4492,9 +4498,13 @@ remoteDomainBuildEventLifecycleHelper(virConnectPtr conn,
     if (!dom)
         return;
 
+    /* build event from message sent by server
+     * create new event, set dispatcher, type, detail etc
+     */
     event = virDomainEventLifecycleNewFromDom(dom, msg->event, msg->detail);
     virObjectUnref(dom);
 
+    /* after build the spefic event, push it to the event queue */
     virObjectEventStateQueueRemote(priv->eventState, event, callbackID);
 }
 static void
@@ -5913,6 +5923,7 @@ remoteConnectDomainEventRegisterAny(virConnectPtr conn,
 
     remoteDriverLock(priv);
 
+    /* for client side, callback is passed by user!!! */
     if ((count = virDomainEventStateRegisterClient(conn, priv->eventState,
                                                    dom, eventID, callback,
                                                    opaque, freecb, false,
