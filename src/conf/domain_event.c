@@ -1680,6 +1680,12 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
                                   virConnectObjectEventGenericCallback cb,
                                   void *cbopaque)
 {
+    /* This is called by event timer handler which runs in event thread(leader thread)
+     * for each domain event type
+     * dispatcher for domain event, as different domain events has different meta
+     * here we convert generic event to specfic event and call it's callback(event callback)
+     * defined at remote_daemon_dispatch.c domainEventCallbacks[]
+     */
     virDomainPtr dom = virGetDomain(conn, event->meta.name,
                                     event->meta.uuid, event->meta.id);
 
@@ -1691,6 +1697,9 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
         {
             virDomainEventLifecyclePtr lifecycleEvent;
 
+            /* pass speific event info to speific callback
+             * remoteRelayDomainEventLifecycle
+             */
             lifecycleEvent = (virDomainEventLifecyclePtr)event;
             ((virConnectDomainEventCallback)cb)(conn, dom,
                                                 lifecycleEvent->type,
@@ -1730,6 +1739,7 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
         {
             virDomainEventIOErrorPtr ioErrorEvent;
 
+            /* remoteRelayDomainEventIOError */
             ioErrorEvent = (virDomainEventIOErrorPtr)event;
             ((virConnectDomainEventIOErrorCallback)cb)(conn, dom,
                                                        ioErrorEvent->srcPath,
@@ -1743,6 +1753,7 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
         {
             virDomainEventIOErrorPtr ioErrorEvent;
 
+            /* remoteRelayDomainEventIOErrorReason */
             ioErrorEvent = (virDomainEventIOErrorPtr)event;
             ((virConnectDomainEventIOErrorReasonCallback)cb)(conn, dom,
                                                              ioErrorEvent->srcPath,
@@ -1925,6 +1936,7 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
         {
             virDomainEventDeviceRemovalFailedPtr deviceRemovalFailedEvent;
 
+            /* remoteRelayDomainEventDeviceRemovalFailed */
             deviceRemovalFailedEvent = (virDomainEventDeviceRemovalFailedPtr)event;
             ((virConnectDomainEventDeviceRemovalFailedCallback)cb)(conn, dom,
                                                                    deviceRemovalFailedEvent->devAlias,
@@ -2064,6 +2076,10 @@ virDomainEventStateRegister(virConnectPtr conn,
                             void *opaque,
                             virFreeCallback freecb)
 {
+    /* qemuConnectDomainEventRegister->virDomainEventStateRegister
+     * This is called at server side, conn is conn at servier side
+     * state is driver->domainEventState!!!
+     */
     int callbackID;
 
     if (virDomainEventsInitialize() < 0)
@@ -2112,6 +2128,9 @@ virDomainEventStateRegisterID(virConnectPtr conn,
 
     if (dom)
         virUUIDFormat(dom->uuid, uuidstr);
+    // if client passesd with dom, uuid is used as key
+    // that means, it only needs for event for this dom
+    // for domain event, key_filter is false, that means, domain uuid used as key if set
     return virObjectEventStateRegisterID(conn, state, dom ? uuidstr : NULL,
                                          NULL, NULL,
                                          virDomainEventClass, eventID,
@@ -2153,6 +2172,10 @@ virDomainEventStateRegisterClient(virConnectPtr conn,
                                   int *callbackID,
                                   bool remoteID)
 {
+    /* remoteConnectDomainEventRegister->virDomainEventStateRegisterClient
+     * This is called at client side, conn is connection at client side
+     * state is conn->privateData->eventState!!!
+     */
     char uuidstr[VIR_UUID_STRING_BUFLEN];
 
     if (virDomainEventsInitialize() < 0)

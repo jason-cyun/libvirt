@@ -1399,6 +1399,7 @@ virNetClientIOReadMessage(virNetClientPtr client)
 }
 
 
+// Client side IO input from server
 static ssize_t
 virNetClientIOHandleInput(virNetClientPtr client)
 {

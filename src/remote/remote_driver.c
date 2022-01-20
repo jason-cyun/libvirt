@@ -78,6 +78,7 @@ VIR_LOG_INIT("remote.remote_driver");
 static bool inside_daemon;
 
 struct private_data {
+    // each connection has its private data
     virMutex lock;
 
     virNetClientPtr client;
@@ -99,6 +100,7 @@ struct private_data {
     bool serverEventFilter;     /* Does server support modern event filtering */
     bool serverCloseCallback;   /* Does server support driver close callback */
 
+    // state data of this conection
     virObjectEventStatePtr eventState;
     virConnectCloseCallbackDataPtr closeCallback;
 };

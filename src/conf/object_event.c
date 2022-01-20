@@ -39,11 +39,21 @@
 
 VIR_LOG_INIT("conf.object_event");
 
+/*
+ * meta for each dynamically created cb if client call proper API
+ * callbackID: ID in the callback list
+ * eventID: event type
+ * conn: client connection
+ * key and key_filter for check matching, if matched, cb is called
+ * but only one is used, either key(which dom uuid), or key_filter which is a match function
+ */
+
 struct _virObjectEventCallback {
     int callbackID;
     virClassPtr klass;
     int eventID;
     virConnectPtr conn;
+    /* remoteID is optional, always set with -1 */
     int remoteID;
     bool key_filter;
     char *key;
@@ -75,7 +85,9 @@ struct _virObjectEventState {
     virObjectLockable parent;
     /* The list of domain event callbacks */
     virObjectEventCallbackListPtr callbacks;
-    /* The queue of object events */
+    /* The queue of object events get from server
+     * then dispatch these events to callbacks
+     */
     virObjectEventQueuePtr queue;
     /* Timer for flushing events queue */
     int timer;
@@ -206,7 +218,7 @@ virObjectEventCallbackListCount(virConnectPtr conn,
     for (i = 0; i < cbList->count; i++) {
         virObjectEventCallbackPtr cb = cbList->callbacks[i];
 
-        if (cb->filter)
+        if (cb->filter)// filter is set only for domain qemuMonitorEvent */
             continue;
         if (cb->klass == klass &&
             cb->eventID == eventID &&
@@ -414,9 +426,17 @@ virObjectEventCallbackListAddID(virConnectPtr conn,
     /* Check incoming */
     if (!cbList)
         return -1;
+    /* filter and filter_opaque are set only for domain qemuMonitorEvent !!
+     * for other event, it's always NULL
+     */
 
     /* If there is no additional filtering, then check if we already
-     * have this callback on our list.  */
+     * have this callback on our list.
+     * two calbacks equal must have same
+     * 1. connection
+     * 2. event type
+     * 3. filter key
+     * */
     if (!filter &&
         virObjectEventCallbackLookup(conn, cbList, key,
                                      klass, eventID, callback, legacy,
@@ -446,6 +466,7 @@ virObjectEventCallbackListAddID(virConnectPtr conn,
     cb->filter_opaque = filter_opaque;
     cb->legacy = legacy;
 
+    // add callback to the tail !!!
     if (VIR_APPEND_ELEMENT(cbList->callbacks, cbList->count, cb) < 0)
         goto cleanup;
 
@@ -454,6 +475,7 @@ virObjectEventCallbackListAddID(virConnectPtr conn,
     if (filter) {
         ret = 1;
     } else {
+        // check how many callbacks registers
         ret = virObjectEventCallbackListCount(conn, cbList, klass, eventID,
                                               key, serverFilter);
         if (serverFilter && remoteID < 0)
@@ -549,6 +571,10 @@ virObjectEventTimer(int timer ATTRIBUTE_UNUSED, void *opaque)
 {
     virObjectEventStatePtr state = opaque;
 
+    /* when event pusher(other threads) puts event in the event queue
+     * it starts a timer event with timeout 0, that means timer handler
+     * virObjectEventTimer called by next poll()
+     */
     virObjectEventStateFlush(state);
 }
 
@@ -699,11 +725,24 @@ virObjectEventStateDispatchCallbacks(virObjectEventStatePtr state,
     for (i = 0; i < cbCount; i++) {
         virObjectEventCallbackPtr cb = callbacks->callbacks[i];
 
+        // for each event, check each callback, if matched, callback is called
+        // matched means:
+        // 1. event type is same
+        // 2. if dom is given, dom->uuid is equal
+        // 3. remote id is same
         if (!virObjectEventDispatchMatchCallback(event, cb))
             continue;
 
         /* Drop the lock whle dispatching, for sake of re-entrancy */
         virObjectUnlock(state);
+        /* call event dispatch which is set when event is created
+         * event is created by virObjectEventNew() API
+         * with input parameter:
+         *
+         * Domain Event: virDomainEventDispatchDefaultFunc, eventID, dom's ID, dom's name, dom's uuid, dom's uuidstr
+         * Network Event: virNetworkEventDispatchDefaultFunc, eventID, 0, net->name, net->uuid, net->uuidstr
+         * NodeDevice Event: virNodeDeviceEventDispatchDefaultFunc, eventId, 0, dev->name, 0, dev->name
+         */
         event->dispatch(cb->conn, event, cb->cb, cb->opaque);
         virObjectLock(state);
     }
@@ -718,6 +757,7 @@ virObjectEventStateQueueDispatch(virObjectEventStatePtr state,
     size_t i;
 
     for (i = 0; i < queue->count; i++) {
+        /* for each event in the queue, dispatch it */
         virObjectEventStateDispatchCallbacks(state, queue->events[i],
                                              callbacks);
         virObjectUnref(queue->events[i]);
@@ -820,8 +860,13 @@ virObjectEventStateFlush(virObjectEventStatePtr state)
     state->queue->count = 0;
     state->queue->events = NULL;
     if (state->timer != -1)
+        /* as each time, we process all events
+         * hence we reset timer with never expire
+         * if later on other thread adds event, it resets timer with 0 again
+         */
         virEventUpdateTimeout(state->timer, -1);
 
+    /* dispatch all events now */
     virObjectEventStateQueueDispatch(state,
                                      &tempQueue,
                                      state->callbacks);
@@ -831,6 +876,7 @@ virObjectEventStateFlush(virObjectEventStatePtr state)
 
     /* If we purged all callbacks, we need to remove the timeout as
      * well like virObjectEventStateDeregisterID() would do. */
+    /* if no callbacks registered by client, remove timer event */
     virObjectEventStateCleanupTimer(state, true);
 
     state->isDispatching = false;
@@ -892,6 +938,10 @@ virObjectEventStateRegisterID(virConnectPtr conn,
 
     virObjectLock(state);
 
+    /* if there is no domain event timer, add one with never expire
+     * as dom event timer starts for the first time when client registers one event
+     * and remove for the last time when client register the last registered event
+     */
     if ((state->callbacks->count == 0) &&
         (state->timer == -1) &&
         (state->timer = virEventAddTimeout(-1,
@@ -907,6 +957,10 @@ virObjectEventStateRegisterID(virConnectPtr conn,
      * timer's opaque argument */
     virObjectRef(state);
 
+    /* ret indicates how many cb is registred
+     * NOTE: same event can be registered on different connections
+     *       same event can NOT be registered on same connection
+     */
     ret = virObjectEventCallbackListAddID(conn, state->callbacks,
                                           key, filter, filter_opaque,
                                           klass, eventID,

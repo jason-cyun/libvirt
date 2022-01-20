@@ -325,6 +325,7 @@ remoteRelayDomainEventLifecycle(virConnectPtr conn,
                                       (xdrproc_t)xdr_remote_domain_event_lifecycle_msg,
                                       &data);
     } else {
+        /* send lifecycle event to client */
         remote_domain_event_callback_lifecycle_msg msg = { callback->callbackID,
                                                            data };
 
@@ -1246,6 +1247,7 @@ remoteRelayDomainEventDeviceRemovalFailed(virConnectPtr conn,
     make_nonnull_domain(&data.dom, dom);
     data.callbackID = callback->callbackID;
 
+    /* send event to client side with data */
     remoteDispatchObjectEventSend(callback->client, remoteProgram,
                                   REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DEVICE_REMOVAL_FAILED,
                                   (xdrproc_t)xdr_remote_domain_event_callback_device_removal_failed_msg,
@@ -1343,6 +1345,53 @@ remoteRelayDomainEventBlockThreshold(virConnectPtr conn,
     return -1;
 }
 
+
+/* all supports events, these events can be registered by client at server
+ * side, when such event happens, server sends event with data to client
+ * each event has an ID defined at libvirt-domain.h
+ * here defines its callbacks for each type of event
+ */
+
+ // typedef enum {
+ //     VIR_DOMAIN_EVENT_ID_LIFECYCLE = 0,       /* virConnectDomainEventCallback */
+ //     VIR_DOMAIN_EVENT_ID_REBOOT = 1,          /* virConnectDomainEventGenericCallback */
+ //     VIR_DOMAIN_EVENT_ID_RTC_CHANGE = 2,      /* virConnectDomainEventRTCChangeCallback */
+ //     VIR_DOMAIN_EVENT_ID_WATCHDOG = 3,        /* virConnectDomainEventWatchdogCallback */
+ //     VIR_DOMAIN_EVENT_ID_IO_ERROR = 4,        /* virConnectDomainEventIOErrorCallback */
+ //     VIR_DOMAIN_EVENT_ID_GRAPHICS = 5,        /* virConnectDomainEventGraphicsCallback */
+ //     VIR_DOMAIN_EVENT_ID_IO_ERROR_REASON = 6, /* virConnectDomainEventIOErrorReasonCallback */
+ //     VIR_DOMAIN_EVENT_ID_CONTROL_ERROR = 7,   /* virConnectDomainEventGenericCallback */
+ //     VIR_DOMAIN_EVENT_ID_BLOCK_JOB = 8,       /* virConnectDomainEventBlockJobCallback */
+ //     VIR_DOMAIN_EVENT_ID_DISK_CHANGE = 9,     /* virConnectDomainEventDiskChangeCallback */
+ //     VIR_DOMAIN_EVENT_ID_TRAY_CHANGE = 10,    /* virConnectDomainEventTrayChangeCallback */
+ //     VIR_DOMAIN_EVENT_ID_PMWAKEUP = 11,       /* virConnectDomainEventPMWakeupCallback */
+ //     VIR_DOMAIN_EVENT_ID_PMSUSPEND = 12,      /* virConnectDomainEventPMSuspendCallback */
+ //     VIR_DOMAIN_EVENT_ID_BALLOON_CHANGE = 13, /* virConnectDomainEventBalloonChangeCallback */
+ //     VIR_DOMAIN_EVENT_ID_PMSUSPEND_DISK = 14, /* virConnectDomainEventPMSuspendDiskCallback */
+ //     VIR_DOMAIN_EVENT_ID_DEVICE_REMOVED = 15, /* virConnectDomainEventDeviceRemovedCallback */
+ //     VIR_DOMAIN_EVENT_ID_BLOCK_JOB_2 = 16,    /* virConnectDomainEventBlockJobCallback */
+ //     VIR_DOMAIN_EVENT_ID_TUNABLE = 17,        /* virConnectDomainEventTunableCallback */
+ //     VIR_DOMAIN_EVENT_ID_AGENT_LIFECYCLE = 18,/* virConnectDomainEventAgentLifecycleCallback */
+ //     VIR_DOMAIN_EVENT_ID_DEVICE_ADDED = 19,   /* virConnectDomainEventDeviceAddedCallback */
+ //     VIR_DOMAIN_EVENT_ID_MIGRATION_ITERATION = 20, /* virConnectDomainEventMigrationIterationCallback */
+ //     VIR_DOMAIN_EVENT_ID_JOB_COMPLETED = 21,  /* virConnectDomainEventJobCompletedCallback */
+ //     VIR_DOMAIN_EVENT_ID_DEVICE_REMOVAL_FAILED = 22, /* virConnectDomainEventDeviceRemovalFailedCallback */
+ //     VIR_DOMAIN_EVENT_ID_METADATA_CHANGE = 23, /* virConnectDomainEventMetadataChangeCallback */
+ //     VIR_DOMAIN_EVENT_ID_BLOCK_THRESHOLD = 24, /* virConnectDomainEventBlockThresholdCallback */
+ //
+ // # ifdef VIR_ENUM_SENTINELS
+ //     VIR_DOMAIN_EVENT_ID_LAST
+ //     /*
+ //      * NB: this enum value will increase over time as new events are
+ //      * added to the libvirt API. It reflects the last event ID supported
+ //      * by this version of the libvirt API.
+ //      */
+ // # endif
+ // } virDomainEventID;
+
+// NOTE: this is callback for each event, not callback registred by client for an event
+// that callback is dynamically created, can be remove when client deregister
+//
 
 static virConnectDomainEventGenericCallback domainEventCallbacks[] = {
     VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainEventLifecycle),
@@ -4064,6 +4113,10 @@ remoteDispatchObjectEventSend(virNetServerClientPtr client,
     if (!(msg = virNetMessageNew(false)))
         goto cleanup;
 
+    /* build rpc message sent to client, payload is event details
+     * proc indicates the event type!!
+     * VIR_NET_MESSAGE is like a RPC reply but without RPC Call!!!
+     * */
     msg->header.prog = virNetServerProgramGetID(program);
     msg->header.vers = virNetServerProgramGetVersion(program);
     msg->header.proc = procnr;

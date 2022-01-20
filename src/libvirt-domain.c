@@ -9184,6 +9184,9 @@ virConnectDomainEventRegisterAny(virConnectPtr conn,
                                  void *opaque,
                                  virFreeCallback freecb)
 {
+    /* register event of given  domain on connection
+     * As when poll on client side as well
+     */
     VIR_DOMAIN_DEBUG(dom, "conn=%p, eventID=%d, cb=%p, opaque=%p, freecb=%p",
                      conn, eventID, cb, opaque, freecb);
 

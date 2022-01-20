@@ -12221,6 +12221,8 @@ qemuConnectDomainEventRegisterAny(virConnectPtr conn,
     if (virConnectDomainEventRegisterAnyEnsureACL(conn) < 0)
         goto cleanup;
 
+    // For qemu driver, all dynamic cbs are stored at driver->domainEventState
+    // callback here is event callback which is fixed function for each type
     if (virDomainEventStateRegisterID(conn,
                                       driver->domainEventState,
                                       dom, eventID,
