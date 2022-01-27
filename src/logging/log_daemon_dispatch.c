@@ -52,6 +52,10 @@ virLogManagerProtocolDispatchDomainOpenLogFile(virNetServerPtr server ATTRIBUTE_
     ino_t inode;
     bool trunc = args->flags & VIR_LOG_MANAGER_PROTOCOL_DOMAIN_OPEN_LOG_FILE_TRUNCATE;
 
+    // fd is pipe write side
+    // for each domain log, three fds are used temporary
+    // two for pipe, one for file itself, but pipe write side is closed at me when sent it to libvirtd
+    // at last: two fds are used for each dom!!!
     if ((fd = virLogHandlerDomainOpenLogFile(virLogDaemonGetHandler(logDaemon),
                                              args->driver,
                                              (unsigned char *)args->dom.uuid,
@@ -64,12 +68,15 @@ virLogManagerProtocolDispatchDomainOpenLogFile(virNetServerPtr server ATTRIBUTE_
     ret->pos.inode = inode;
     ret->pos.offset = offset;
 
+    // add fd to rpc reply and send fd to libvirtd by sendmsg()
     if (virNetMessageAddFD(msg, fd) < 0)
         goto cleanup;
 
     rv = 1; /* '1' tells caller we added some FDs */
 
  cleanup:
+    // we send dup(fd) to libvirtd, close fd to decrease file descriptor count
+    // so here close it
     VIR_FORCE_CLOSE(fd);
     if (rv < 0)
         virNetMessageSaveError(rerr);

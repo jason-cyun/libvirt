@@ -474,6 +474,9 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
     /* As the monitor mutex was unlocked in qemuMonitorJSONIOProcess()
      * while dealing with qemu event, mon->msg could be changed which
      * means the above 'msg' may be invalid, thus we use 'mon->msg' here */
+
+    /* MonitorIO data can be QMP reply
+     */
     if (mon->msg && mon->msg->finished)
         virCondBroadcast(&mon->notify);
     // leader process after got reply(return/error from monitor fd)

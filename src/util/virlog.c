@@ -315,7 +315,10 @@ virLogReset(void)
         return -1;
 
     virLogLock();
+    // reset filters inherited from parent
     virLogResetFilters();
+    // reset logout inherited from parent as libvirtd may set this
+    // qemue process forked by libvirtd reset it to avoid writing log to libvirtd.log!!!
     virLogResetOutputs();
     virLogDefaultPriority = VIR_LOG_DEFAULT;
     virLogUnlock();
@@ -653,6 +656,14 @@ virLogVMessage(virLogSourcePtr source,
      * Push the message to the outputs defined, if none exist then
      * use stderr.
      */
+
+    // if set logout at libvirtd.conf virLogNbOutputs is not zero
+    // each output has: struct _virLogOutput {
+    // data=fd
+    // priority = VIR_LOG_DEBUG,
+    // dest = VIR_LOG_TO_FILE,
+    // name = /var/log/libvirt/libvirtd.log
+    // }
     for (i = 0; i < virLogNbOutputs; i++) {
         if (priority >= virLogOutputs[i]->priority) {
             if (virLogOutputs[i]->logInitMessage) {
@@ -700,6 +711,7 @@ virLogVMessage(virLogSourcePtr source,
             VIR_FREE(initmsg);
             logInitMessageStderr = false;
         }
+        // if this runs in qemu-process, as STDERR_FILENO is set with /var/log/libvirt/qemu/$domain.log
         virLogOutputToFd(source, priority,
                          filename, linenr, funcname,
                          timestamp, metadata, filterflags,

@@ -1380,7 +1380,9 @@ virNetServerClientDispatchWrite(virNetServerClientPtr client)
             size_t i;
 
             for (i = client->tx->donefds; i < client->tx->nfds; i++) {
+                // msg sent to client has fds that needs sending
                 int rv;
+                // send fd to client
                 if ((rv = virNetSocketSendFD(client->sock, client->tx->fds[i])) < 0) {
                     client->wantClose = true;
                     return;

@@ -217,9 +217,10 @@ qemuMonitorJSONIOProcessLine(qemuMonitorPtr mon,
     } else if (virJSONValueObjectHasKey(obj, "event") == 1) {
         PROBE(QEMU_MONITOR_RECV_EVENT,
               "mon=%p event=%s", mon, line);
-        // event returned on monitor fd without we sending any qmp
+        // event returned on monitor fd without we sending any qmp or send async command like shutdown
         // it's report by qemu process on monitor fd on some change
         // like serial change, eof etc
+        // process async event from qemu-process
         ret = qemuMonitorJSONIOProcessEvent(mon, obj);
     } else if (virJSONValueObjectHasKey(obj, "error") == 1 ||
                virJSONValueObjectHasKey(obj, "return") == 1) {

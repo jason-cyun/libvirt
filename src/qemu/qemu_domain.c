@@ -7538,6 +7538,7 @@ qemuDomainLogContextPtr qemuDomainLogContextNew(virQEMUDriverPtr driver,
     ctxt->writefd = -1;
     ctxt->readfd = -1;
 
+    // log path for qemu process /var/log/libvirt/qemu/$domain.log
     if (virAsprintf(&ctxt->path, "%s/%s.log", cfg->logDir, vm->def->name) < 0)
         goto error;
 
@@ -7546,6 +7547,8 @@ qemuDomainLogContextPtr qemuDomainLogContextNew(virQEMUDriverPtr driver,
         if (!ctxt->manager)
             goto error;
 
+        // get fd of qemu process log opened by virtlogd, pass back here with rpc reply
+        // inode of log file and it's pos returned as well
         ctxt->writefd = virLogManagerDomainOpenLogFile(ctxt->manager,
                                                        "qemu",
                                                        vm->def->uuid,
@@ -7557,6 +7560,7 @@ qemuDomainLogContextPtr qemuDomainLogContextNew(virQEMUDriverPtr driver,
         if (ctxt->writefd < 0)
             goto error;
     } else {
+        // open log file used by qemu process by libvirtd
         if ((ctxt->writefd = open(ctxt->path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)) < 0) {
             virReportSystemError(errno, _("failed to create logfile %s"),
                                  ctxt->path);
@@ -7613,6 +7617,7 @@ qemuDomainLogContextPtr qemuDomainLogContextNew(virQEMUDriverPtr driver,
 int qemuDomainLogContextWrite(qemuDomainLogContextPtr ctxt,
                               const char *fmt, ...)
 {
+    // write to qemu log located at /var/log/libvirt/qemu/$domain.log
     va_list argptr;
     char *message = NULL;
     int ret = -1;
@@ -7703,6 +7708,8 @@ qemuDomainLogAppendMessage(virQEMUDriverPtr driver,
                            const char *fmt,
                            ...)
 {
+    // This is called by libvirtd rarely
+    // Only in shutdown, parnic, migrate
     virQEMUDriverConfigPtr cfg = virQEMUDriverGetConfig(driver);
     virLogManagerPtr manager = NULL;
     va_list ap;
@@ -7722,7 +7729,9 @@ qemuDomainLogAppendMessage(virQEMUDriverPtr driver,
     if (virAsprintf(&path, "%s/%s.log", cfg->logDir, vm->def->name) < 0)
         goto cleanup;
 
-    if (cfg->stdioLogD) {
+    if (cfg->stdioLogD) { // default value
+        // send qemu log to virtlogd who writes log to qemu log file
+        // call rpc for sending to virtlogd!!!
         if (!(manager = virLogManagerNew(virQEMUDriverIsPrivileged(driver))))
             goto cleanup;
 
@@ -7745,6 +7754,7 @@ qemuDomainLogAppendMessage(virQEMUDriverPtr driver,
  cleanup:
     va_end(ap);
     VIR_FREE(message);
+    // close fd after each write, not open for ever
     VIR_FORCE_CLOSE(writefd);
     virLogManagerFree(manager);
     virObjectUnref(cfg);

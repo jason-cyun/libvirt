@@ -57,6 +57,7 @@
 
 #define VIR_FROM_THIS VIR_FROM_QEMU
 
+// declared a variable virLogSelf named 'qemu.qemu_conf'
 VIR_LOG_INIT("qemu.qemu_conf");
 
 /* These are only defaults, they can be changed now in qemu.conf and
@@ -155,6 +156,7 @@ virQEMUDriverConfigPtr virQEMUDriverConfigNew(bool privileged)
     cfg->cgroupControllers = -1; /* -1 == auto-detect */
 
     if (privileged) {
+        // qemu driver config logDir default: var/log/libvirt/qemu/
         if (virAsprintf(&cfg->logDir,
                         "%s/log/libvirt/qemu", LOCALSTATEDIR) < 0)
             goto error;
@@ -333,6 +335,7 @@ virQEMUDriverConfigPtr virQEMUDriverConfigNew(bool privileged)
         VIR_STRDUP(cfg->prHelperName, QEMU_PR_HELPER) < 0)
         goto error;
 
+    // default value for qemu setting
     cfg->clearEmulatorCapabilities = true;
 
     cfg->securityDefaultConfined = true;
@@ -521,9 +524,11 @@ int virQEMUDriverConfigLoadFile(virQEMUDriverConfigPtr cfg,
         return 0;
     }
 
+    // load qemu setting from /etc/libvirt/qemu.conf
     if (!(conf = virConfReadFile(filename, 0)))
         goto cleanup;
 
+    // update cfg->xxx based on value set in conf
     if ((rv = virConfGetValueString(conf, "default_tls_x509_cert_dir", &cfg->defaultTLSx509certdir)) < 0)
         goto cleanup;
     cfg->checkdefaultTLSx509certdir = (rv == 1);

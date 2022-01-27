@@ -478,6 +478,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
         goto error;
     }
 
+    // if reply with fds, encode fds
     if (msg->nfds &&
         virNetMessageEncodeNumFDs(msg) < 0) {
         xdr_free(dispatcher->ret_filter, ret);

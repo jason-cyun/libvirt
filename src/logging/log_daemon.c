@@ -929,6 +929,8 @@ virLogDaemonUsage(const char *argv0, bool privileged)
     }
 }
 
+// log daemon virtlogd, provides rpc for other part to call
+// to send log message to me, then I writes to file
 int main(int argc, char **argv) {
     virNetServerPtr logSrv = NULL;
     virNetServerPtr adminSrv = NULL;

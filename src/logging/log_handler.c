@@ -146,6 +146,8 @@ virLogHandlerDomainLogFileEvent(int watch,
     ssize_t len;
 
     virObjectLock(handler);
+    // handler stores all domain files opened
+    // each file is identifed with key watch from handler list
     logfile = virLogHandlerGetLogFileFromWatch(handler, watch);
     if (!logfile || logfile->pipefd != fd) {
         virEventRemoveHandle(watch);
@@ -154,6 +156,7 @@ virLogHandlerDomainLogFileEvent(int watch,
     }
 
  reread:
+    // fd is pipe read side
     len = read(fd, buf, sizeof(buf));
     if (len < 0) {
         if (errno == EINTR)
@@ -164,6 +167,7 @@ virLogHandlerDomainLogFileEvent(int watch,
         goto error;
     }
 
+    // write log message received to file
     if (virRotatingFileWriterAppend(logfile->file, buf, len) != len)
         goto error;
 
@@ -375,6 +379,7 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
     handler->inhibitor(true, handler->opaque);
 
     for (i = 0; i < handler->nfiles; i++) {
+        // log file can be opened only once!!!
         if (STREQ(virRotatingFileWriterGetPath(handler->files[i]->file),
                   path)) {
             virReportSystemError(EBUSY,
@@ -384,6 +389,9 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
         }
     }
 
+    // a pipe with two fds
+    // pipefd[0] for reading
+    // pipefd[1] for writting
     if (pipe(pipefd) < 0) {
         virReportSystemError(errno, "%s",
                              _("Cannot open fifo pipe"));
@@ -392,6 +400,11 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
     if (VIR_ALLOC(file) < 0)
         goto error;
 
+    /* for each $domain file located at /var/log/libvirt/qemu
+     * we created a file struct with pipefd[0] for reading
+     * send pipefd[1] to libvirtd
+     * file also has dom uuid and other meta data
+     */
     file->watch = -1;
     file->pipefd = pipefd[0];
     pipefd[0] = -1;
@@ -400,6 +413,7 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
         VIR_STRDUP(file->domname, domname) < 0)
         goto error;
 
+    // open domain log file and save meta in virLogHandlerLogFilePtr
     if ((file->file = virRotatingFileWriterNew(path,
                                                handler->max_size,
                                                handler->max_backups,
@@ -410,6 +424,7 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
     if (VIR_APPEND_ELEMENT_COPY(handler->files, handler->nfiles, file) < 0)
         goto error;
 
+    // read log sent by pipe from read side with handler virLogHandlerDomainLogFileEvent
     if ((file->watch = virEventAddHandle(file->pipefd,
                                          VIR_EVENT_HANDLE_READABLE,
                                          virLogHandlerDomainLogFileEvent,
@@ -423,6 +438,7 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
     *offset = virRotatingFileWriterGetOffset(file->file);
 
     virObjectUnlock(handler);
+    // return pipe write side
     return pipefd[1];
 
  error:

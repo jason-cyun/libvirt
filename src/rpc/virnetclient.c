@@ -1333,6 +1333,7 @@ virNetClientIOWriteMessage(virNetClientPtr client,
                 return 0;
             thecall->msg->donefds++;
         }
+        // clear payload will close sent fd and free buffer
         virNetMessageClearPayload(thecall->msg);
         if (thecall->expectReply)
             thecall->mode = VIR_NET_CLIENT_MODE_WAIT_RX;
@@ -1448,6 +1449,9 @@ virNetClientIOHandleInput(virNetClientPtr client)
 
                     for (i = client->msg.donefds; i < client->msg.nfds; i++) {
                         int rv;
+                        // receive sent by server, save the received fd at client->msg.fds[i]
+                        // client->msg.fds[i] is the value returned by kernel with recvmsg
+                        // NOTE: received fd number may be different with sent fd number
                         if ((rv = virNetSocketRecvFD(client->sock, &(client->msg.fds[i]))) < 0)
                             return -1;
                         if (rv == 0) /* Blocking */

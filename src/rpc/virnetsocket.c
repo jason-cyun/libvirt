@@ -2018,6 +2018,11 @@ int virNetSocketSendFD(virNetSocketPtr sock, int fd)
     virObjectLock(sock);
     PROBE(RPC_SOCKET_SEND_FD,
           "sock=%p fd=%d", sock, fd);
+    // send fd to client with sendmsg() which has more control
+    // fd can be sent only at same machine, as new file descriptor
+    // is created at dst process which should find the file from kernel
+    // so it must be done on a Unix domain socket (AF_UNIX or AF_LOCAL)!!!
+    // sock->fd is AF_UNIX or AF_LOCAL!!!
     if (sendfd(sock->fd, fd) < 0) {
         if (errno == EAGAIN)
             ret = 0;

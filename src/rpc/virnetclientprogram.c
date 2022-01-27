@@ -372,6 +372,13 @@ int virNetClientProgramCall(virNetClientProgramPtr prog,
             for (i = 0; i < *ninfds; i++)
                 (*infds)[i] = -1;
             for (i = 0; i < *ninfds; i++) {
+                // The dup() system call allocates a new file descriptor that refers
+                // to the same open file description as the descriptor oldfd (dup(oldfd))
+                // as msg->fds[i] are fd returned by virtlogd?
+                // here we dup() it to create a file struct in kernel with new fd
+                // the returned fd selected is lowest-numbered file descriptor that was unused in the calling process
+                //
+                // virNetMessageFree will close fds[i], that's why we need to duplicate it!!!
                 if (((*infds)[i] = dup(msg->fds[i])) < 0) {
                     virReportSystemError(errno,
                                          _("Cannot duplicate FD %d"),

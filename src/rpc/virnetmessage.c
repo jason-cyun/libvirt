@@ -54,6 +54,7 @@ virNetMessageClearPayload(virNetMessagePtr msg)
 {
     size_t i;
 
+    // close sent fds!!!
     for (i = 0; i < msg->nfds; i++)
         VIR_FORCE_CLOSE(msg->fds[i]);
 
@@ -583,6 +584,7 @@ int virNetMessageAddFD(virNetMessagePtr msg,
 {
     int newfd = -1;
 
+    // dup() a newfd
     if ((newfd = dup(fd)) < 0) {
         virReportSystemError(errno,
                              _("Unable to duplicate FD %d"),
@@ -596,6 +598,10 @@ int virNetMessageAddFD(virNetMessagePtr msg,
                              newfd);
         goto error;
     }
+    // when newfd is sen to libvirtd(should say transfter to another process)
+    // it's closed at me, the reply type: VIR_NET_REPLY_WITH_FDS
+    // when server send the newfd to libvirtd
+    // virtlogd closes it!!!
     if (VIR_APPEND_ELEMENT(msg->fds, msg->nfds, newfd) < 0)
         goto error;
     return 0;

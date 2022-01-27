@@ -896,6 +896,7 @@ int virConfGetValueString(virConfPtr conf,
     VIR_DEBUG("Get value string %p %d",
               cval, cval ? cval->type : VIR_CONF_NONE);
 
+    // if not set, return 0
     if (!cval)
         return 0;
 

@@ -2835,6 +2835,7 @@ struct qemuProcessHookData {
     virQEMUDriverConfigPtr cfg;
 };
 
+// This runs in child process(qemu-process) of libvirtd
 static int qemuProcessHook(void *data)
 {
     struct qemuProcessHookData *h = data;
@@ -2853,6 +2854,8 @@ static int qemuProcessHook(void *data)
     /* Some later calls want pid present */
     h->vm->pid = getpid();
 
+    // NOTE: in qemu process, STDOUT and STDERR are set with /var/log/libvirt/qemu/$domain.log
+    // when fork qemu process
     VIR_DEBUG("Obtaining domain lock");
     /*
      * Since we're going to leak the returned FD to QEMU,
@@ -6166,9 +6169,14 @@ qemuProcessLaunch(virConnectPtr conn,
         goto cleanup;
 
     VIR_DEBUG("Creating domain log file");
+    // logCtxt holds how to write log, write to file direclty by libvirt or send to virtlogd
+    // writefd is fd of local file or unix fd for sending to virtlogd
     if (!(logCtxt = qemuDomainLogContextNew(driver, vm,
                                             QEMU_DOMAIN_LOG_CONTEXT_MODE_START)))
         goto cleanup;
+    // log file(fd) of qemu process
+    // this fd can be opened by libvirtd directly
+    // OR opened by virtlogd, then passed back to libvirtd by rpc reply
     logfile = qemuDomainLogContextGetWriteFD(logCtxt);
 
     if (qemuProcessGenID(vm, flags) < 0)
@@ -6218,6 +6226,7 @@ qemuProcessLaunch(virConnectPtr conn,
     if (qemuProcessSetupRawIO(driver, vm, cmd) < 0)
         goto cleanup;
 
+    // preExeHook runs in forked child process before exec()
     virCommandSetPreExecHook(cmd, qemuProcessHook, &hookData);
     virCommandSetMaxProcesses(cmd, cfg->maxProcesses);
     virCommandSetMaxFiles(cmd, cfg->maxFiles);
@@ -6229,8 +6238,11 @@ qemuProcessLaunch(virConnectPtr conn,
                                          vm->def, cmd) < 0)
         goto cleanup;
 
+    // set stderr and stdout of forked process(qemu-process)
+    // to /var/log/libvirt/qemu/$domain.log!!!
     virCommandSetOutputFD(cmd, &logfile);
     virCommandSetErrorFD(cmd, &logfile);
+    //NO STDIN for start!
     virCommandNonblockingFDs(cmd);
     virCommandSetPidFile(cmd, priv->pidfile);
     virCommandDaemonize(cmd);
@@ -6238,6 +6250,7 @@ qemuProcessLaunch(virConnectPtr conn,
 
     if (qemuSecurityPreFork(driver->securityManager) < 0)
         goto cleanup;
+    // this will fork a process to run qemu-kvm
     rv = virCommandRun(cmd, NULL);
     qemuSecurityPostFork(driver->securityManager);
 

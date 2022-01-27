@@ -356,6 +356,8 @@ virFork(void)
         /* Make sure any hook logging is sent to stderr, since child
          * process may close the logfile FDs */
         logprio = virLogGetDefaultPriority();
+        // as you can see, in child process, virtLog is reset
+        // that means no output and filter is set!!!
         virLogReset();
         virLogSetDefaultPriority(logprio);
 
@@ -549,6 +551,7 @@ virExec(virCommandPtr cmd)
 
             childout = pipeout[1];
         } else {
+            // chidout uses outfdptr set in command(which is log file fd of this vm)
             childout = *cmd->outfdptr;
         }
     } else {
@@ -576,6 +579,7 @@ virExec(virCommandPtr cmd)
 
             childerr = pipeerr[1];
         } else {
+            // chidout uses outfdptr set in command(which is log file fd of this vm)
             childerr = *cmd->errfdptr;
         }
     } else {
@@ -612,6 +616,8 @@ virExec(virCommandPtr cmd)
     }
 
     /* child */
+    // From now on, Log printed will be stdout and stderr of qemu-process
+    // write to /var/log/libvirt/qemu/$domain.log!!!
 
     if (cmd->mask)
         umask(cmd->mask);
@@ -639,11 +645,13 @@ virExec(virCommandPtr cmd)
                              "%s", _("failed to setup stdin file handle"));
         goto fork_error;
     }
+    // redirect STDOUT to childerr which is fd of opened log file /var/log/libvirt/qemu/$domain.log
     if (childout > 0 && prepareStdFd(childout, STDOUT_FILENO) < 0) {
         virReportSystemError(errno,
                              "%s", _("failed to setup stdout file handle"));
         goto fork_error;
     }
+    // redirect STDERR to childerr which is fd of opened log file /var/log/libvirt/qemu/$domain.log
     if (childerr > 0 && prepareStdFd(childerr, STDERR_FILENO) < 0) {
         virReportSystemError(errno,
                              "%s", _("failed to setup stderr file handle"));
@@ -677,6 +685,7 @@ virExec(virCommandPtr cmd)
             goto fork_error;
         }
 
+        // fork again for daemon
         pid = fork();
         if (pid < 0) {
             virReportSystemError(errno,
@@ -779,6 +788,7 @@ virExec(virCommandPtr cmd)
     /* Close logging again to ensure no FDs leak to child */
     virLogReset();
 
+    // run qemu-kvm command in forked child, exec!!!
     if (cmd->env)
         execve(binary, cmd->args, cmd->env);
     else
