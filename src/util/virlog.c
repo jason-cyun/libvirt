@@ -664,7 +664,6 @@ virLogVMessage(virLogSourcePtr source,
     // dest = VIR_LOG_TO_FILE,
     // name = /var/log/libvirt/libvirtd.log
     // }
-    //
     // all outputs defined by user
     for (i = 0; i < virLogNbOutputs; i++) {
         if (priority >= virLogOutputs[i]->priority) {
