@@ -612,6 +612,7 @@ virExec(virCommandPtr cmd)
         VIR_FREE(groups);
         VIR_FREE(binarystr);
 
+        // parent returns to run next code!!!
         return 0;
     }
 
@@ -701,6 +702,7 @@ virExec(virCommandPtr cmd)
                                          cmd->pidfile, pid);
                 goto fork_error;
             }
+            // parent exit, so the first child exits
             _exit(EXIT_SUCCESS);
         }
     }
@@ -730,6 +732,7 @@ virExec(virCommandPtr cmd)
         virProcessSetMaxCoreSize(0, cmd->maxCore) < 0)
         goto fork_error;
 
+    // run in forked process, log is writted to virtlog with pipe!!!
     if (cmd->hook) {
         VIR_DEBUG("Run hook %p %p", cmd->hook, cmd->opaque);
         ret = cmd->hook(cmd->opaque);
@@ -789,6 +792,7 @@ virExec(virCommandPtr cmd)
     virLogReset();
 
     // run qemu-kvm command in forked child, exec!!!
+    // as qemu-kvm runs as a daemon, the exec() never return!!!
     if (cmd->env)
         execve(binary, cmd->args, cmd->env);
     else
@@ -2316,6 +2320,7 @@ virCommandRun(virCommandPtr cmd, int *exitstatus)
     }
 
     cmd->flags |= VIR_EXEC_RUN_SYNC;
+    // fork process, child never return, parent continues below
     if (virCommandRunAsync(cmd, NULL) < 0) {
         cmd->has_error = -1;
         return -1;
@@ -2485,6 +2490,7 @@ virCommandRunAsync(virCommandPtr cmd, pid_t *pid)
 
     VIR_DEBUG("About to run %s", str ? str : cmd->args[0]);
     ret = virExec(cmd);
+    // below runs in parent, as forked child runs with exec which never returns!!!
     VIR_DEBUG("Command result %d, with PID %d",
               ret, (int)cmd->pid);
 

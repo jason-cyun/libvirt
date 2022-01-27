@@ -305,6 +305,7 @@ virLogManagerDomainAppendMessage(virLogManagerPtr mgr,
     args.message = (char *)message;
     args.flags = flags;
 
+    // dom uuid as the key to find the file at virtlogd for this domain
     if (virNetClientProgramCall(mgr->program,
                                 mgr->client,
                                 mgr->serial++,

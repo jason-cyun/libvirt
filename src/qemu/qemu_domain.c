@@ -7731,7 +7731,7 @@ qemuDomainLogAppendMessage(virQEMUDriverPtr driver,
 
     if (cfg->stdioLogD) { // default value
         // send qemu log to virtlogd who writes log to qemu log file
-        // call rpc for sending to virtlogd!!!
+        // call rpc for sending to virtlogd, this is only for shutdown, panic, migrate message
         if (!(manager = virLogManagerNew(virQEMUDriverIsPrivileged(driver))))
             goto cleanup;
 

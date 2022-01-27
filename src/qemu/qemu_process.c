@@ -6206,8 +6206,10 @@ qemuProcessLaunch(virConnectPtr conn,
                              VIR_HOOK_SUBOP_BEGIN) < 0)
         goto cleanup;
 
+    // write log message to virtlogd
     qemuLogOperation(vm, "starting up", cmd, logCtxt);
 
+    // write log message to virtlog for qemuDomainObjCheckTaint
     qemuDomainObjCheckTaint(driver, vm, logCtxt);
 
     qemuDomainLogContextMarkPosition(logCtxt);
