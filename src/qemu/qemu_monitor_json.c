@@ -229,6 +229,7 @@ qemuMonitorJSONIOProcessLine(qemuMonitorPtr mon,
               "mon=%p reply=%s", mon, line);
         if (msg) {
             // got reply for this command, set it finished
+            // get all reply from qemu process
             msg->rxObject = obj;
             msg->finished = 1;
             obj = NULL;
@@ -256,6 +257,7 @@ int qemuMonitorJSONIOProcess(qemuMonitorPtr mon,
     /*VIR_DEBUG("Data %d bytes [%s]", len, data);*/
 
     while (used < len) {
+        // process only when LINE ending is found
         char *nl = strstr(data + used, LINE_ENDING);
 
         if (nl) {

@@ -451,6 +451,7 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
     PROBE_QUIET(QEMU_MONITOR_IO_PROCESS, "mon=%p buf=%s len=%zu",
                 mon, mon->buffer, mon->bufferOffset);
 
+    // if mon->buffer is part of data, len(used) is 0!!!
     len = qemuMonitorJSONIOProcess(mon,
                                    mon->buffer, mon->bufferOffset,
                                    msg);
@@ -461,9 +462,11 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
         mon->waitGreeting = false;
 
     if (len < mon->bufferOffset) {
+        // len is already used, move buffer offset
         memmove(mon->buffer, mon->buffer + len, mon->bufferOffset - len);
         mon->bufferOffset -= len;
     } else {
+        // all buffer is used, reset buffer!!!
         VIR_FREE(mon->buffer);
         mon->bufferOffset = mon->bufferLength = 0;
     }
@@ -709,6 +712,8 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
             /* call read() to read data from monitor
              * read all data or got EOF
              */
+            // due to buffer size, os, IORead may only get part of response
+            // as it STREAM socket!!!
             int got = qemuMonitorIORead(mon);
             events &= ~VIR_EVENT_HANDLE_READABLE;
             if (got < 0) {
