@@ -10145,6 +10145,7 @@ qemuBuildCommandLine(virQEMUDriverPtr driver,
               driver, def, priv->monConfig, priv->monJSON,
               qemuCaps, migrateURI, snapshot, vmop);
 
+    // valid setting of vm before build command line args
     if (qemuBuildCommandLineValidate(driver, def) < 0)
         goto error;
 
@@ -10156,6 +10157,22 @@ qemuBuildCommandLine(virQEMUDriverPtr driver,
         (def->virtType == VIR_DOMAIN_VIRT_QEMU))
         virQEMUCapsClear(qemuCaps, QEMU_CAPS_DRIVE_BOOT);
 
+    // emulator is binary with path
+    //
+    // cmd->args stores all args, mostly each one takes two args: key and its value!!!
+    //
+    // args[0]: "/usr/libexec/qemu-kvm"
+    //
+    // args[1]: -name
+    // args[2]: guest=centos,debug-threads=on
+    //
+    // args[3]: -S
+    //
+    // args[4]: -object
+    // args[5]: secret,id=masterKey0,format=raw,file=/var/lib/libvirt/qemu/domain-2-centos/master-key.aes
+    // args[6]: -machine
+    // args[7]: pc-i440fx-rhel7.6.0,accel=kvm,usb=off,dump-guest-core=off
+    //
     cmd = virCommandNew(def->emulator);
 
     virCommandAddEnvPassCommon(cmd);

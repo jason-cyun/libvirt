@@ -2428,6 +2428,7 @@ struct _virDomainDef {
     virDomainPerfDef perf;
 
     virDomainOSDef os;
+    // qemy binary with full path "/usr/libexec/qemu-kvm"
     char *emulator;
     /* Most {caps_,hyperv_,kvm_,}feature options utilize a virTristateSwitch
      * to handle support. A few assign specific data values to the option.

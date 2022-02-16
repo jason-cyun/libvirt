@@ -11283,6 +11283,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
             goto error;
         }
     } else {
+        // if generate mac by if user not sets
         virDomainNetGenerateMAC(xmlopt, &def->mac);
         def->mac_generated = true;
     }

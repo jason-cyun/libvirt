@@ -6186,6 +6186,8 @@ qemuProcessLaunch(virConnectPtr conn,
         goto cleanup;
 
     VIR_DEBUG("Building emulator command line");
+    // build all command line args supported by qemu-kvm
+    // -name, -S, -machine, -cpu, -bios, -m, -smp, -object, -smbios, -device, -mon, -chardev, -netdev, -serial
     if (!(cmd = qemuBuildCommandLine(driver,
                                      qemuDomainLogContextGetManager(logCtxt),
                                      driver->securityManager,
