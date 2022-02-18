@@ -236,6 +236,13 @@ virObjectNew(virClassPtr klass)
 {
     virObjectPtr obj = NULL;
 
+    // create virObject with its class(which holds it class, size of the object)
+    // as you can see virObject is the first filed of specific object
+    // klass->objectSize = sizeof(specific object)
+    //
+    // obj should be specific object!!
+    // why klass->objectSize - sizeof(virObject)?
+    // because we added sizeof(virObject) in VIR_ALLOC_VAR again!!!
     if (VIR_ALLOC_VAR(obj,
                       char,
                       klass->objectSize - sizeof(virObject)) < 0)

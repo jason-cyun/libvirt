@@ -42,6 +42,12 @@ typedef void (*virObjectDisposeCallback)(void *obj);
 /* Most code should not play with the contents of this struct; however,
  * the struct itself is public so that it can be embedded as the first
  * field of a subclassed object.  */
+
+/* that means each object stores a _virObject which is actually a specific
+ * class but _virObject has the first field of it, the specific class
+ * info store at virClassPtr, based on that, we can convert it _virObject
+ * to specific class when needs
+ */
 struct _virObject {
     /* Ensure correct alignment of this and all subclasses, even on
      * platforms where 'long long' or function pointers have stricter

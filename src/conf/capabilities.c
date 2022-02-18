@@ -1620,6 +1620,7 @@ virCapabilitiesInitCaches(virCapsPtr caps)
      * lose information. */
     const int cache_min_level = 3;
 
+    /* set host resctrl info */
     if (virCapabilitiesInitResctrl(caps) < 0)
         return -1;
 

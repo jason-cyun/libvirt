@@ -837,6 +837,7 @@ qemuStateInitialize(bool privileged,
     if (!qemu_driver->qemuCapsCache)
         goto error;
 
+    /* set cap and xmlopt(xml callbacks) when initialize a driver */
     if ((qemu_driver->caps = virQEMUDriverCreateCapabilities(qemu_driver)) == NULL)
         goto error;
 
@@ -7383,6 +7384,7 @@ qemuDomainDefineXMLFlags(virConnectPtr conn,
                          const char *xml,
                          unsigned int flags)
 {
+    /* QemuDriver instance shared by all Qemu Connections */
     virQEMUDriverPtr driver = conn->privateData;
     virDomainDefPtr def = NULL;
     virDomainDefPtr oldDef = NULL;
@@ -7401,9 +7403,13 @@ qemuDomainDefineXMLFlags(virConnectPtr conn,
 
     cfg = virQEMUDriverGetConfig(driver);
 
+    // get driver caps
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto cleanup;
 
+    // create domain def from xml after parsed xml
+    // check xml cap based on host and qemu driver caps
+    // call xlmopt callback when opt is valid and set in domain def
     if (!(def = virDomainDefParseString(xml, caps, driver->xmlopt,
                                         NULL, parse_flags)))
         goto cleanup;
@@ -7470,6 +7476,9 @@ qemuDomainDefineXMLFlags(virConnectPtr conn,
 static virDomainPtr
 qemuDomainDefineXML(virConnectPtr conn, const char *xml)
 {
+    /* Create a domain from XML
+     * but no qemu-process starts now, needs another api
+     */
     return qemuDomainDefineXMLFlags(conn, xml, 0);
 }
 
@@ -8529,7 +8538,10 @@ qemuDomainAttachDeviceLiveAndConfig(virDomainObjPtr vm,
     }
 
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-        /* Make a copy for updated domain. */
+        /* Make a copy for updated domain, as C does not support deep copy
+         * so here we build xml string from domain def, then create a new domain def
+         * from the generated xml!!!
+         */
         vmdef = virDomainObjCopyPersistentDef(vm, caps, driver->xmlopt);
         if (!vmdef)
             goto cleanup;
@@ -8565,8 +8577,10 @@ qemuDomainAttachDeviceLiveAndConfig(virDomainObjPtr vm,
 
     /* Finally, if no error until here, we can save config. */
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
+        /* save whole xml to file */
         ret = virDomainSaveConfig(cfg->configDir, driver->caps, vmdef);
         if (!ret) {
+            /* reset domaion object to the new def, free old one */
             virDomainObjAssignDef(vm, vmdef, false, NULL);
             vmdef = NULL;
         }

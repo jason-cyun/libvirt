@@ -108,6 +108,7 @@ struct _virQEMUDriverConfig {
     /* These two directories are ones QEMU processes use (so must match
      * the QEMU user/group */
     char *libDir;
+    // cache dir like caps cache: /var/cache/libvirt/qemu/capabilities/
     char *cacheDir;
     char *saveDir;
     char *snapshotDir;
@@ -223,6 +224,7 @@ struct _virQEMUDriver {
 
     /* Require lock to get reference on 'config',
      * then lockless thereafter */
+    /* config for this driver from conf file or default value */
     virQEMUDriverConfigPtr config;
 
     /* Immutable pointer, self-locking APIs */
@@ -250,15 +252,18 @@ struct _virQEMUDriver {
     /* Immutable pointer, lockless APIs. Pointless abstraction */
     ebtablesContext *ebtables;
 
+    /* so caps and xlmopt is assigned when driver is initialized */
     /* Require lock to get a reference on the object,
      * lockless access thereafter
      */
     virCapsPtr caps;
 
     /* Immutable pointer, Immutable object */
+    // here are callbacks when paring xml options
     virDomainXMLOptionPtr xmlopt;
 
     /* Immutable pointer, self-locking APIs */
+    /* Qemu caps cache */
     virFileCachePtr qemuCapsCache;
 
     /* Immutable pointer, self-locking APIs */

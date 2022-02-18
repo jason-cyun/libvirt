@@ -19088,6 +19088,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         VIR_FREE(schema);
     }
 
+    /* create a new domain def */
     if (!(def = virDomainDefNew()))
         return NULL;
 
@@ -20974,6 +20975,7 @@ virDomainDefParse(const char *xmlStr,
     int keepBlanksDefault = xmlKeepBlanksDefault(0);
 
     if ((xml = virXMLParse(filename, xmlStr, _("(domain_definition)")))) {
+        // create xml doc(tree), then call callback based on node
         def = virDomainDefParseNode(xml, xmlDocGetRootElement(xml), caps,
                                     xmlopt, parseOpaque, flags);
         xmlFreeDoc(xml);
@@ -20990,6 +20992,7 @@ virDomainDefParseString(const char *xmlStr,
                         void *parseOpaque,
                         unsigned int flags)
 {
+    // create a new domain def from xml
     return virDomainDefParse(xmlStr, NULL, caps, xmlopt, parseOpaque, flags);
 }
 
@@ -21032,6 +21035,7 @@ virDomainDefParseNode(xmlDocPtr xml,
 
     ctxt->node = root;
 
+    // check each xml node at different level, parse and set with default
     if (!(def = virDomainDefParseXML(xml, root, ctxt, caps, xmlopt, flags)))
         goto cleanup;
 
@@ -28096,6 +28100,7 @@ unsigned int virDomainDefFormatConvertXMLFlags(unsigned int flags)
 }
 
 
+/* Build xml string from domain def */
 char *
 virDomainDefFormat(virDomainDefPtr def, virCapsPtr caps, unsigned int flags)
 {
@@ -28304,9 +28309,11 @@ virDomainSaveConfig(const char *configDir,
     int ret = -1;
     char *xml;
 
+    /* generate xml from domain def */
     if (!(xml = virDomainDefFormat(def, caps, VIR_DOMAIN_DEF_FORMAT_SECURE)))
         goto cleanup;
 
+    /* write to disk */
     if (virDomainSaveXML(configDir, def, xml))
         goto cleanup;
 
@@ -28700,6 +28707,7 @@ virDomainDefCopy(virDomainDefPtr src,
     if (!(xml = virDomainDefFormat(src, caps, format_flags)))
         return NULL;
 
+    /* create a new domain def from xml string */
     ret = virDomainDefParseString(xml, caps, xmlopt, parseOpaque, parse_flags);
 
     VIR_FREE(xml);

@@ -37,6 +37,13 @@
 typedef struct _virCapsGuestFeature virCapsGuestFeature;
 typedef virCapsGuestFeature *virCapsGuestFeaturePtr;
 struct _virCapsGuestFeature {
+    /*
+     * $45 = {
+     *   name = 0x7fd2500069a0 "acpi",
+     *   defaultOn = true,
+     *   toggle = true
+     * }
+    */
     char *name;
     bool defaultOn;
     bool toggle;
@@ -56,12 +63,44 @@ struct _virCapsGuestDomainInfo {
     char *emulator;
     char *loader;
     int nmachines;
+    /* machines means spefic machine type
+     * like: "pc-i440fx-rhel7.6.0", "pc-i440fx-rhel7.0.0" etc
+     *
+     * >>> p *driver->caps->guests[17]->arch->domains[1]->info->machines[1]
+     * $56 = {
+     *   name = 0x7fd2500063f0 "pc",
+     *   canonical = 0x7fd250006410 "pc-i440fx-rhel7.6.0",
+     *   maxCpus = 240
+     * }
+     * >>> p *driver->caps->guests[17]->arch->domains[1]->info->machines[2]
+     * $57 = {
+     *   name = 0x7fd250006450 "pc-i440fx-rhel7.0.0",
+     *   canonical = 0x0,
+     *   maxCpus = 240
+     * }
+     */
     virCapsGuestMachinePtr *machines;
 };
 
 typedef struct _virCapsGuestDomain virCapsGuestDomain;
 typedef virCapsGuestDomain *virCapsGuestDomainPtr;
 struct _virCapsGuestDomain {
+    /* domain type means hypervisor
+     * VIR_DOMAIN_VIRT_QEMU
+     * VIR_DOMAIN_VIRT_KVM
+     * VIR_DOMAIN_VIRT_XEN
+     * VIR_DOMAIN_VIRT_VMWARE
+     * etc
+     */
+    /*
+     * type = 3,
+     * info = {
+     *   emulator = 0x7fd250006380 "/usr/libexec/qemu-kvm",
+     *   loader = 0x0,
+     *   nmachines = 20,
+     *   machines = 0x7fd2500068f0
+     * }
+     */
     int type; /* virDomainVirtType */
     virCapsGuestDomainInfo info;
 };
@@ -72,6 +111,9 @@ struct _virCapsGuestArch {
     virArch id;
     unsigned int wordsize;
     virCapsGuestDomainInfo defaultInfo;
+    // For this arch what domain type we supports
+    // VIR_DOMAIN_VIRT_QEMU, VIR_DOMAIN_VIRT_KVM, VIR_DOMAIN_VIRT_VMWARE
+    // then under that domain type what specific machine we supports.
     size_t ndomains;
     size_t ndomains_max;
     virCapsGuestDomainPtr *domains;
@@ -80,6 +122,29 @@ struct _virCapsGuestArch {
 typedef struct _virCapsGuest virCapsGuest;
 typedef virCapsGuest *virCapsGuestPtr;
 struct _virCapsGuest {
+    // qemu supports caps of guest(x86,arm) and features supported for this guest
+    // Examples:
+    /*
+     * $41 = {
+     *   ostype = 0,
+     *   arch = {
+     *     id = VIR_ARCH_X86_64,
+     *     wordsize = 64,
+     *     defaultInfo = {
+     *       emulator = 0x7fd250005ac0 "/usr/bin/qemu-system-x86_64",
+     *       loader = 0x0,
+     *       nmachines = 23,
+     *       machines = 0x7fd250006160
+     *     },
+     *     ndomains = 2,
+     *     ndomains_max = 2,
+     *     domains = 0x7fd250006310
+     *   },
+     *   nfeatures = 5,
+     *   nfeatures_max = 6,
+     *   features = 0x7fd250005b60
+     * }
+     */
     int ostype;
     virCapsGuestArch arch;
     size_t nfeatures;
@@ -153,19 +218,25 @@ struct _virCapsHostCacheBank {
 
 typedef struct _virCapsHost virCapsHost;
 typedef virCapsHost *virCapsHostPtr;
+// Caps of host that runs libvirtds
 struct _virCapsHost {
     virArch arch;
     size_t nfeatures;
     size_t nfeatures_max;
     char **features;
+    /* host info */
     unsigned int powerMgmt;    /* Bitmask of the PM capabilities.
                                 * See enum virHostPMCapability.
                                 */
+    /* host migrate caps
+     * trans: tcp, rdma
+     */
     bool offlineMigrate;
     bool liveMigrate;
     size_t nmigrateTrans;
     size_t nmigrateTrans_max;
     char **migrateTrans;
+
     size_t nnumaCell;
     size_t nnumaCell_max;
     virCapsHostNUMACellPtr *numaCell;
@@ -206,7 +277,9 @@ typedef virCaps *virCapsPtr;
 struct _virCaps {
     virObject parent;
 
+    // caps of current host that qemu runs
     virCapsHost host;
+    // ALL libvirtd supported guests(arm, x86 and its features)
     size_t nguests;
     size_t nguests_max;
     virCapsGuestPtr *guests;

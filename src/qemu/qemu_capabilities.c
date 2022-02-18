@@ -933,8 +933,10 @@ virQEMUCapsInit(virFileCachePtr cache)
 {
     virCapsPtr caps;
     size_t i;
+    /* get host arch */
     virArch hostarch = virArchFromHost();
 
+    /* create cap with host info */
     if ((caps = virCapabilitiesNew(hostarch,
                                    true, true)) == NULL)
         goto error;
@@ -943,11 +945,13 @@ virQEMUCapsInit(virFileCachePtr cache)
      * unexpected failures. We don't want to break the QEMU
      * driver in this scenario, so log errors & carry on
      */
+    /* set host numa info */
     if (virCapabilitiesInitNUMA(caps) < 0) {
         virCapabilitiesFreeNUMAInfo(caps);
         VIR_WARN("Failed to query host NUMA topology, disabling NUMA capabilities");
     }
 
+    /* set host cache info */
     if (virCapabilitiesInitCaches(caps) < 0)
         VIR_WARN("Failed to get host CPU cache info");
 
@@ -4585,6 +4589,7 @@ virQEMUCapsCacheNew(const char *libDir,
     if (virAsprintf(&capsCacheDir, "%s/capabilities", cacheDir) < 0)
         goto error;
 
+    /* create qemu capabilities cache dir located at /var/cache/libvirt/qemu/capabilities */
     if (!(cache = virFileCacheNew(capsCacheDir, "xml", &qemuCapsCacheHandlers)))
         goto error;
 

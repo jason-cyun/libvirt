@@ -1042,6 +1042,10 @@ qemuDomainDiskPrivateOnceInit(void)
     return 0;
 }
 
+/* qemuDomainDiskPrivate is class name
+ * qemuDomainDiskPrivateOnceInit is called in VIR_ONCE_GLOBAL_INIT
+ * then qemuDomainDiskPrivateClass object is created by VIR_CLASS_NEW!!!
+ */
 VIR_ONCE_GLOBAL_INIT(qemuDomainDiskPrivate)
 
 static virObjectPtr
@@ -1152,6 +1156,7 @@ static void qemuDomainChrSourcePrivateDispose(void *obj);
 static int
 qemuDomainChrSourcePrivateOnceInit(void)
 {
+    // create qemuDomainChrSourcePrivateClass object with parent object: virObjectClass which is root
     if (!VIR_CLASS_NEW(qemuDomainChrSourcePrivate, virClassForObject()))
         return -1;
 
@@ -2959,6 +2964,7 @@ qemuDomainObjPrivateXMLGetParseOpaque(virDomainObjPtr vm)
 
 
 virDomainXMLPrivateDataCallbacks virQEMUDriverPrivateDataCallbacks = {
+    /* XML options callbacks */
     .alloc = qemuDomainObjPrivateAlloc,
     .free = qemuDomainObjPrivateFree,
     .diskNew = qemuDomainDiskPrivateNew,

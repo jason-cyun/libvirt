@@ -1106,6 +1106,7 @@ virCapsPtr virQEMUDriverCreateCapabilities(virQEMUDriverPtr driver)
     if (!(caps = virQEMUCapsInit(driver->qemuCapsCache)))
         goto error;
 
+    /* genereate host uuid */
     if (virGetHostUUID(caps->host.host_uuid)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s", _("cannot get the host uuid"));
