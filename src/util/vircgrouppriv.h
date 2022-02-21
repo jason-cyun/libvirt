@@ -45,6 +45,7 @@ struct virCgroupController {
 struct virCgroup {
     char *path;
 
+    // each subsystem is called controller
     struct virCgroupController controllers[VIR_CGROUP_CONTROLLER_LAST];
 };
 

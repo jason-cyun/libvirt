@@ -490,6 +490,8 @@ struct _virConnect {
     /* Private data pointer which can be used by domain driver as
      * it pleases.
      * NB: 'private' is a reserved word in C++.
+     *
+     * For client connection at server side, it's QemuDriver State: virQEMUDriverPtr
      */
     void *            privateData;
 

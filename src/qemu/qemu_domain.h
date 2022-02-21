@@ -271,6 +271,7 @@ struct _qemuDomainSecretInfo {
 typedef struct _qemuDomainObjPrivate qemuDomainObjPrivate;
 typedef qemuDomainObjPrivate *qemuDomainObjPrivatePtr;
 struct _qemuDomainObjPrivate {
+    // all state of this domaion object saved at virDomainObjPtr->privateData
     virQEMUDriverPtr driver;
 
     qemuDomainJobObj job;
@@ -313,6 +314,7 @@ struct _qemuDomainObjPrivate {
     size_t ncleanupCallbacks;
     size_t ncleanupCallbacks_max;
 
+    // cgroup subystem setting mountpoint
     virCgroupPtr cgroup;
 
     virPerfPtr perf;
@@ -332,6 +334,10 @@ struct _qemuDomainObjPrivate {
     bool signalStop; /* true if the domain condition should be signalled on
                         QMP STOP event */
     char *machineName;
+    // format: domain-$id-$name
+    // name max len: 20 characters
+    // /var/lib/libvirt/qemu/domain-3-centos/
+    // /var/lib/libvirt/qemu/channel/target/domain-3-centos/
     char *libDir;            /* base path for per-domain files */
     char *channelTargetDir;  /* base path for per-domain channel targets */
 
@@ -349,6 +355,11 @@ struct _qemuDomainObjPrivate {
 
     /* CPU def used to start the domain when it differs from the one actually
      * provided by QEMU. */
+
+    // this is set only when vm restores from snapshot
+    // in that case vm->def->cpu restores from snapshort saved before
+    // saved the orign here, but most of time vm->def->cpu and origCPU are same
+    // as we should not change cpu setting.
     virCPUDefPtr origCPU;
 
     /* If true virtlogd is used as stdio handler for character devices. */

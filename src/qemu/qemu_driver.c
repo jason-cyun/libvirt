@@ -4714,6 +4714,9 @@ processSerialChangedEvent(virQEMUDriverPtr driver,
 
     if (STREQ_NULLABLE(dev.data.chr->target.name, "org.qemu.guest_agent.0")) {
         if (newstate == VIR_DOMAIN_CHR_DEVICE_STATE_CONNECTED) {
+            // As if vm takes much time to start, when trigger starts
+            // agent monitor is not ready(not VIR_DOMAIN_CHR_DEVICE_STATE_CONNECTED) we defer to connect here
+            // when VIR_DOMAIN_CHR_DEVICE_STATE_CONNECTED happens, that means guest agent starts in guest!!!
             if (qemuConnectAgent(driver, vm) < 0)
                 goto endjob;
         } else {
@@ -7254,6 +7257,7 @@ qemuDomainObjStart(virConnectPtr conn,
     bool autodestroy = (flags & VIR_DOMAIN_START_AUTODESTROY) != 0;
     bool bypass_cache = (flags & VIR_DOMAIN_START_BYPASS_CACHE) != 0;
     bool force_boot = (flags & VIR_DOMAIN_START_FORCE_BOOT) != 0;
+    // convert domain flags to qemu flags!!!
     unsigned int start_flags = VIR_QEMU_PROCESS_START_COLD;
     qemuDomainObjPrivatePtr priv = vm->privateData;
 
@@ -7264,6 +7268,9 @@ qemuDomainObjStart(virConnectPtr conn,
      * If there is a managed saved state restore it instead of starting
      * from scratch. The old state is removed once the restoring succeeded.
      */
+
+    // get managed_save path of this vm /var/lib/libvirt/qemu/save/$domain.save
+    // TODO: save of what?
     managed_save = qemuDomainManagedSavePath(driver, vm);
 
     if (!managed_save)
@@ -7307,14 +7314,17 @@ qemuDomainObjStart(virConnectPtr conn,
     ret = qemuProcessStart(conn, driver, vm, NULL, asyncJob,
                            NULL, -1, NULL, NULL,
                            VIR_NETDEV_VPORT_PROFILE_OP_CREATE, start_flags);
+    // libvirtd goes next, forked child(process never as exec() runs with qemu-process)
     virDomainAuditStart(vm, "booted", ret >= 0);
     if (ret >= 0) {
+        // start event
         virObjectEventPtr event =
             virDomainEventLifecycleNewFromObj(vm,
                                      VIR_DOMAIN_EVENT_STARTED,
                                      VIR_DOMAIN_EVENT_STARTED_BOOTED);
         virObjectEventStateQueue(driver->domainEventState, event);
         if (start_paused) {
+            // start flags with PAUSE, VIR_DOMAIN_EVENT_SUSPENDED due to PAUSED flag
             event = virDomainEventLifecycleNewFromObj(vm,
                                              VIR_DOMAIN_EVENT_SUSPENDED,
                                              VIR_DOMAIN_EVENT_SUSPENDED_PAUSED);
@@ -7341,9 +7351,11 @@ qemuDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
 
     virNWFilterReadLockFilterUpdates();
 
+    // find domain object by uuid from qemu driver state
     if (!(vm = qemuDomObjFromDomain(dom)))
         goto cleanup;
 
+    // Access check for domain permission use default access manager which is global var
     if (virDomainCreateWithFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
@@ -7357,6 +7369,7 @@ qemuDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
         goto endjob;
     }
 
+    // start domain(start qemu-process)
     if (qemuDomainObjStart(dom->conn, driver, vm, flags,
                            QEMU_ASYNC_JOB_START) < 0)
         goto endjob;
@@ -7420,6 +7433,9 @@ qemuDomainDefineXMLFlags(virConnectPtr conn,
     if (virDomainDefineXMLFlagsEnsureACL(conn, def) < 0)
         goto cleanup;
 
+    // create domain with parsed def, linked them, domain object->def points to def
+    // oldDef saves the previous def for same domain object
+    // say: new def with uuid and name, but there is already domain object, reuse it in some case
     if (!(vm = virDomainObjListAdd(driver->domains, def,
                                    driver->xmlopt,
                                    0, &oldDef)))
@@ -7454,6 +7470,7 @@ qemuDomainDefineXMLFlags(virConnectPtr conn,
         goto cleanup;
     }
 
+    // generate event
     event = virDomainEventLifecycleNewFromObj(vm,
                                      VIR_DOMAIN_EVENT_DEFINED,
                                      !oldDef ?
@@ -7461,6 +7478,7 @@ qemuDomainDefineXMLFlags(virConnectPtr conn,
                                      VIR_DOMAIN_EVENT_DEFINED_UPDATED);
 
     VIR_INFO("Creating domain '%s'", vm->def->name);
+    // build domain args for return value
     dom = virGetDomain(conn, vm->def->name, vm->def->uuid, vm->def->id);
 
  cleanup:
@@ -15421,6 +15439,7 @@ qemuDomainSnapshotCreateXML(virDomainPtr domain,
     if (redefine)
         parse_flags |= VIR_DOMAIN_SNAPSHOT_PARSE_REDEFINE;
 
+    // find domain object by uuid
     if (!(vm = qemuDomObjFromDomain(domain)))
         goto cleanup;
 

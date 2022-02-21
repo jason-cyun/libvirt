@@ -703,6 +703,13 @@ qemuExtTPMPrepareHost(virQEMUDriverPtr driver,
     int ret = 0;
     char *shortName = NULL;
 
+    // Trusted Platform Module (TPM) is a component to provide several security functions, e.g. encryption, random number generation, measurement, etc
+    // Before 2.11, QEMU can only do TPM passthrough to access the TPM hardware on the host, and this limits the number of guests to access TPM.
+    // Besides, the developers are also limited by the hardware capabilities. It's impossible to develop the TPM 2.0 features with a TPM 1.2 chip.
+    // Fortunately, since 2.11, QEMU starts to support the TPM emulator. With TPM emulator, the guest can switch between TPM 1.2 and TPM 2.0 easily,
+    // and this makes the developer's life much easie
+    //
+    // NOTE: tpm emulator should be installed firstly on host to use by qemu
     switch (def->tpm->type) {
     case VIR_DOMAIN_TPM_TYPE_EMULATOR:
         shortName = virDomainDefGetShortName(def);

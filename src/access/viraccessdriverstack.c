@@ -93,6 +93,7 @@ virAccessDriverStackCheckDomain(virAccessManagerPtr manager,
     size_t i;
 
     for (i = 0; i < priv->managersLen; i++) {
+        // check all child access manager under access stack manager
         int rv;
         /* We do not short-circuit on first denial - always check all drivers */
         rv = virAccessManagerCheckDomain(priv->managers[i], driverName, domain, perm);
@@ -290,6 +291,7 @@ virAccessDriverStackCheckStorageVol(virAccessManagerPtr manager,
     return ret;
 }
 
+// one implementation of access driver
 virAccessDriver accessDriverStack = {
     .privateDataLen = sizeof(virAccessDriverStackPrivate),
     .name = "stack",

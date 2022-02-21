@@ -427,6 +427,8 @@ int virSystemdTerminateMachine(const char *name)
      */
 
     VIR_DEBUG("Attempting to terminate machine via systemd");
+    // call dbus to send message to systemd to terminate the machine
+    // NOTE:This does nothing at call, it's empty function
     if (virDBusCallMethod(conn,
                           NULL,
                           &error,

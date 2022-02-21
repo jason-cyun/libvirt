@@ -621,16 +621,20 @@ typedef enum {
 
 /* Stores the virtual disk configuration */
 struct _virDomainDiskDef {
+    // info of source
     virStorageSourcePtr src; /* non-NULL.  XXX Allow NULL for empty cdrom? */
 
+    // below are info of disk when attach to guest
     virObjectPtr privateData;
 
     int device; /* enum virDomainDiskDevice */
     int bus; /* enum virDomainDiskBus */
+    // vda, vdb etc
     char *dst;
     int tray_status; /* enum virDomainDiskTray */
     int removable; /* enum virTristateSwitch */
 
+    // TODO: mirror for what??
     virStorageSourcePtr mirror;
     int mirrorState; /* enum virDomainDiskMirrorState */
     int mirrorJob; /* virDomainBlockJobType */
@@ -647,8 +651,10 @@ struct _virDomainDiskDef {
         unsigned int physical_block_size;
     } blockio;
 
+    // io tune for this disk
     virDomainBlockIoTuneInfo blkdeviotune;
 
+    // qemu
     char *driverName;
 
     char *serial;
@@ -665,6 +671,7 @@ struct _virDomainDiskDef {
     int snapshot; /* virDomainSnapshotLocation, snapshot_conf.h */
     int startupPolicy; /* enum virDomainStartupPolicy */
     bool transient;
+    // info(parameters) used for attaching operation
     virDomainDeviceInfo info;
     int rawio; /* enum virTristateBool */
     int sgio; /* enum virDomainDeviceSGIO */
@@ -2216,8 +2223,10 @@ typedef virDomainCputune *virDomainCputunePtr;
 struct _virDomainCputune {
     unsigned long long shares;
     bool sharesSpecified;
+    // period for each vcpu
     unsigned long long period;
     long long quota;
+    // period for all vcpus
     unsigned long long global_period;
     long long global_quota;
     unsigned long long emulator_period;
@@ -2386,6 +2395,11 @@ struct _virDomainDef {
     int id;
     unsigned char uuid[VIR_UUID_BUFLEN];
 
+    /* Since 4.4.0 , the genid element can be used to add a Virtual Machine Generation ID which
+     * exposes a 128-bit, cryptographically random, integer value identifier,
+     * referred to as a Globally Unique Identifier (GUID) using the same format as the uuid.
+     * The value is used to help notify the guest operating system when the virtual machine is re-executing something that has already executed before
+     */
     unsigned char genid[VIR_UUID_BUFLEN];
     bool genidRequested;
     bool genidGenerated;
@@ -2803,6 +2817,7 @@ int virDomainDefValidate(virDomainDefPtr def,
 static inline bool
 virDomainObjIsActive(virDomainObjPtr dom)
 {
+    // when domain is active(runing, pause etc), id is not -1
     return dom->def->id != -1;
 }
 

@@ -1868,6 +1868,7 @@ qemuDomainSetPrivatePaths(virQEMUDriverPtr driver,
     if (!domname)
         goto cleanup;
 
+    // set domain libDir which is different for each domain
     if (!priv->libDir &&
         virAsprintf(&priv->libDir, "%s/domain-%s", cfg->libDir, domname) < 0)
         goto cleanup;
@@ -6929,6 +6930,8 @@ qemuDomainObjEnterMonitorInternal(virQEMUDriverPtr driver,
      */
     virObjectLock(priv->mon);
     virObjectRef(priv->mon);
+    // monStart indicates the timestamp of command runs
+    // so it's updated for each command!!!
     ignore_value(virTimeMillisNow(&priv->monStart));
     virObjectUnlock(obj);
 
@@ -8114,10 +8117,12 @@ qemuDomainSetFakeReboot(virQEMUDriverPtr driver,
     virQEMUDriverConfigPtr cfg = virQEMUDriverGetConfig(driver);
 
     if (priv->fakeReboot == value)
+        // no change, no need to write to disk
         goto cleanup;
 
     priv->fakeReboot = value;
 
+    // save whole xml to stateDir: /var/run/libvirt/qemu
     if (virDomainSaveStatus(driver->xmlopt, cfg->stateDir, vm, driver->caps) < 0)
         VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
@@ -9991,6 +9996,9 @@ qemuDomainRefreshVcpuInfo(virQEMUDriverPtr driver,
          * Just disable CPU pinning with TCG until someone wants
          * to try to do this hard work.
          */
+
+
+        // update vcpu based on QMP query-vcpu values
         if (vm->def->virtType != VIR_DOMAIN_VIRT_QEMU)
             vcpupriv->tid = info[i].tid;
 
@@ -10227,6 +10235,7 @@ qemuDomainPrepareChardevSourceTLS(virDomainChrSourceDefPtr source,
     if (source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
         if (source->data.tcp.haveTLS == VIR_TRISTATE_BOOL_ABSENT) {
             if (cfg->chardevTLS)
+                // qemu does not support chardev TLS
                 source->data.tcp.haveTLS = VIR_TRISTATE_BOOL_YES;
             else
                 source->data.tcp.haveTLS = VIR_TRISTATE_BOOL_NO;
@@ -10249,6 +10258,8 @@ qemuDomainPrepareChardevSource(virDomainDefPtr def,
 {
     size_t i;
 
+    // update source for char devices based on Qemu setting
+    // As for char device in guest, it's actually socket on host!!!
     for (i = 0; i < def->nserials; i++)
         qemuDomainPrepareChardevSourceTLS(def->serials[i]->source, cfg);
 
@@ -11657,7 +11668,9 @@ qemuDomainCreateNamespace(virQEMUDriverPtr driver,
     virQEMUDriverConfigPtr cfg = virQEMUDriverGetConfig(driver);
     int ret = -1;
 
+    // qemu support ns and vm sets it
     if (virBitmapIsBitSet(cfg->namespaces, QEMU_DOMAIN_NS_MOUNT) &&
+        // as you can see we only enable mount namespaces, hence vm only see it's own devices
         qemuDomainEnableNamespace(vm, QEMU_DOMAIN_NS_MOUNT) < 0)
         goto cleanup;
 
@@ -12749,6 +12762,7 @@ qemuDomainGetMachineName(virDomainObjPtr vm)
     char *ret = NULL;
 
     if (vm->pid > 0) {
+        // if process start, get its name with dbus system
         ret = virSystemdGetMachineNameByPID(vm->pid);
         if (!ret)
             virResetLastError();
@@ -12860,7 +12874,16 @@ qemuDomainPrepareStorageSourcePR(virStorageSourcePtr src,
     if (!src->pr)
         return 0;
 
+    // A persistent reservation manager is an instance of a subclass of the “pr-manager” QOM class.
     if (virStoragePRDefIsManaged(src->pr)) {
+        /*
+         * $ qemu-system-x86_64
+         *   -device virtio-scsi \
+         *   -object pr-manager-helper,id=helper0,path=/var/run/qemu-pr-helper.sock
+         *   -drive if=none,id=hd,driver=raw,file.filename=/dev/sdb,file.pr-manager=helper0
+         *   -device scsi-block,drive=hd
+         *   heper is scripts ran by qemu like network helper.
+        */
         if (!(src->pr->path = qemuDomainGetManagedPRSocketPath(priv)))
             return -1;
         if (VIR_STRDUP(src->pr->mgralias, qemuDomainGetManagedPRAlias()) < 0)
@@ -12887,9 +12910,11 @@ qemuDomainPrepareDiskSourceLegacy(virDomainDiskDefPtr disk,
                                   qemuDomainObjPrivatePtr priv,
                                   virQEMUDriverConfigPtr cfg)
 {
+    // valid disk source format we supports
     if (qemuDomainValidateStorageSource(disk->src, priv->qemuCaps) < 0)
         return -1;
 
+    // update source from disk setting
     if (qemuDomainPrepareDiskSourceData(disk, disk->src, cfg, priv->qemuCaps) < 0)
         return -1;
 
@@ -12898,9 +12923,21 @@ qemuDomainPrepareDiskSourceLegacy(virDomainDiskDefPtr disk,
                                              disk->info.alias) < 0)
         return -1;
 
+    // PR: persistent Reservations
+    /*
+     * SCSI persistent Reservations allow restricting access to block devices to specific initiators in a shared storage setup.
+     * When implementing clustering of virtual machines, it is a common requirement for virtual machines to send persistent reservation SCSI commands.
+     * However, the operating system restricts sending these commands to unprivileged programs because incorrect usage can disrupt regular operation of the storage fabric.
+
+     * For this reason, QEMU’s SCSI passthrough devices, scsi-block and scsi-generic (both are only available on Linux)
+     * can delegate implementation of persistent reservations to a separate object,
+     * the “persistent reservation manager”. Only PERSISTENT RESERVE OUT and PERSISTENT RESERVE IN commands are passed to the persistent reservation manager object;
+     * other commands are processed by QEMU as usual.
+     */
     if (qemuDomainPrepareStorageSourcePR(disk->src, priv, disk->info.alias) < 0)
         return -1;
 
+    // TLS only for network storage, HTTP, HTTPS, ISCSI, FTP etc
     if (qemuDomainPrepareStorageSourceTLS(disk->src, cfg, disk->info.alias,
                                           priv->qemuCaps) < 0)
         return -1;

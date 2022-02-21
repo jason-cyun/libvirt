@@ -239,14 +239,18 @@ typedef virStorageSource *virStorageSourcePtr;
  * appropriate code to the virStorageSourceCopy deep copy function */
 struct _virStorageSource {
     unsigned int id; /* backing chain identifier, 0 is unset */
+    // FILE, BLOCK, DIR, NETWORK, VOLUME
     int type; /* virStorageType */
+    // full path on the host
     char *path;
+    // NBD, ISCSI, FTP support several types of storage
     int protocol; /* virStorageNetProtocol */
     char *volume; /* volume name for remote storage */
     char *snapshot; /* for storage systems supporting internal snapshots */
     char *configFile; /* some storage systems use config file as part of
                          the source definition */
     size_t nhosts;
+    // when use NETWORK, ISCSI, nethost should be set
     virStorageNetHostDefPtr hosts;
     virStorageSourcePoolDefPtr srcpool;
     virStorageAuthDefPtr auth;

@@ -40,10 +40,13 @@ VIR_LOG_INIT("access.accessmanager");
     virReportErrorHelper(VIR_FROM_THIS, code, __FILE__, \
                          __FUNCTION__, __LINE__, __VA_ARGS__)
 
+// access checker for domain
 struct _virAccessManager {
     virObjectLockable parent;
 
+    // callbacks of access manager(can be different for different resource)
     virAccessDriverPtr drv;
+    // For stack access manager, privateData is child access managers: virAccessDriverStackPrivatePtr
     void *privateData;
 };
 
@@ -93,6 +96,7 @@ static virAccessManagerPtr virAccessManagerNewDriver(virAccessDriverPtr drv)
         return NULL;
     }
 
+    // create access manager with access driver, run its setup()
     mgr->drv = drv;
     mgr->privateData = privateData;
 
@@ -147,6 +151,7 @@ virAccessManagerPtr virAccessManagerNew(const char *name)
 
 virAccessManagerPtr virAccessManagerNewStack(const char **names)
 {
+    // create access manager with access stack driver
     virAccessManagerPtr manager = virAccessManagerNewDriver(&accessDriverStack);
     size_t i;
 
@@ -154,6 +159,8 @@ virAccessManagerPtr virAccessManagerNewStack(const char **names)
         return NULL;
 
     for (i = 0; names[i] != NULL; i++) {
+        // under access stack manager, create child access manager located at manager->privateData
+        // child access manager(with predefine driver) points by names[i] under stack manager
         virAccessManagerPtr child = virAccessManagerNew(names[i]);
 
         if (!child)

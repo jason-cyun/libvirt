@@ -169,6 +169,12 @@ virHookInitialize(void)
 
     virHooksFound = 0;
     for (i = 0; i < VIR_HOOK_DRIVER_LAST; i++) {
+        // check hooks(scripts like bash, python) for each type, daemon, qemu, lxc
+        // /etc/libvirt/hooks/daemon/
+        // /etc/libvirt/hooks/qemu/
+        // /etc/libvirt/hooks/lxc/
+        // /etc/libvirt/hooks/network/
+        // check if any script present for that type
         res = virHookCheck(i, virHookDriverTypeToString(i));
         if (res < 0)
             return -1;
@@ -290,6 +296,14 @@ virHookCall(int driver,
     if (extra == NULL)
         extra = "-";
 
+    // only support one script for each type named(qemu script file): /etc/libvirt/hooks/qemu
+    // hooks/qemu is not dir, but a regular file
+    // called with this format:
+    //  /etc/libvirt/hooks/qemu guest_name prepare begin
+    //  /etc/libvirt/hooks/qemu guest_name start begin
+    //  /etc/libvirt/hooks/qemu guest_name release begin
+    //  /etc/libvirt/hooks/qemu guest_name migrate begin
+    //  ...
     if (virBuildPath(&path, LIBVIRT_HOOK_DIR, drvstr) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Failed to build path for %s hook"),

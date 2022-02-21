@@ -2778,6 +2778,10 @@ virCgroupGetMemSwapUsage(virCgroupPtr group, unsigned long long *kb)
 int
 virCgroupSetCpusetMems(virCgroupPtr group, const char *mems)
 {
+    // Specifies the memory nodes(numa node, as each numa node has its memory) to which a cgroup has access.
+    // For example, the setting 0-2,4 allows access to memory nodes 0, 1, 2, and 4.
+    // The default setting includes all available memory nodes.
+    // The parameter has a value of 0 on systems that do not have a NUMA architecture
     return virCgroupSetValueStr(group,
                                 VIR_CGROUP_CONTROLLER_CPUSET,
                                 "cpuset.mems",

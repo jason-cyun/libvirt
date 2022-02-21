@@ -191,6 +191,8 @@ qemuAgentOpenUnix(const char *monitor)
         return -1;
     }
 
+    // non block, connect return immediately if server is not ready.
+    // no timeout in kernel for connect(), no block
     if (virSetNonBlock(monfd) < 0) {
         virReportSystemError(errno, "%s",
                              _("Unable to put monitor "
@@ -696,11 +698,14 @@ qemuAgentOpen(virDomainObjPtr vm,
         virObjectUnref(mon);
         return NULL;
     }
+    // bind vm with agent monitor and set its callback
     mon->vm = vm;
     mon->cb = cb;
 
     switch (config->type) {
     case VIR_DOMAIN_CHR_TYPE_UNIX:
+        // connect with agent, no retry as server is ready
+        // if server is not ready, as above mentioned, we defer to connect
         mon->fd = qemuAgentOpenUnix(config->data.nix.path);
         break;
 
@@ -719,6 +724,7 @@ qemuAgentOpen(virDomainObjPtr vm,
         goto cleanup;
 
     virObjectRef(mon);
+    // add agent fd to event loop thread
     if ((mon->watch = virEventAddHandle(mon->fd,
                                         VIR_EVENT_HANDLE_HANGUP |
                                         VIR_EVENT_HANDLE_ERROR |
@@ -732,6 +738,7 @@ qemuAgentOpen(virDomainObjPtr vm,
         goto cleanup;
     }
 
+    // set its state with running
     mon->running = true;
     VIR_DEBUG("New mon %p fd =%d watch=%d", mon, mon->fd, mon->watch);
 

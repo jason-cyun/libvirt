@@ -240,6 +240,9 @@ struct _virQEMUDriver {
     bool privileged;
 
     /* Immutable pointers. Caller must provide locking */
+    // daemon callback
+    // inhibitCallback: daemonInhibitCallback
+    // inhibitOpaque: virNetDaemonPtr
     virStateInhibitCallback inhibitCallback;
     void *inhibitOpaque;
 

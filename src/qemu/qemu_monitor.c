@@ -80,6 +80,7 @@ struct _qemuMonitor {
      * = 0: not registered
      * < 0: an error occurred during the registration of @fd */
     int watch;
+    // flag indicates if monitor fd supports sending fds in QMP command
     int hasSendFD;
 
     virDomainObjPtr vm;
@@ -360,9 +361,11 @@ qemuMonitorOpenUnix(const char *monitor,
     }
 
     if (retry) {
+        // retry and timeout always work together
         if (virTimeBackOffStart(&timebackoff, 1, timeout * 1000) < 0)
             goto error;
         while (virTimeBackOffWait(&timebackoff)) {
+            // monfd  with block mode
             ret = connect(monfd, (struct sockaddr *)&addr, sizeof(addr));
 
             if (ret == 0)
@@ -386,6 +389,7 @@ qemuMonitorOpenUnix(const char *monitor,
             goto error;
         }
     } else {
+        // no, retry and timeout, server should be ready, otherwise, failed
         ret = connect(monfd, (struct sockaddr *) &addr, sizeof(addr));
         if (ret < 0) {
             virReportSystemError(errno, "%s",
@@ -459,6 +463,7 @@ qemuMonitorIOProcess(qemuMonitorPtr mon)
         return -1;
 
     if (len && mon->waitGreeting)
+        // only set once for the first recv from monitor socket
         mon->waitGreeting = false;
 
     if (len < mon->bufferOffset) {
@@ -857,10 +862,13 @@ qemuMonitorOpenInternal(virDomainObjPtr vm,
                        _("cannot initialize monitor condition"));
         goto cleanup;
     }
+    // only unix monitor type supports sending fds to qemu by in QMP command!!!
     mon->fd = fd;
     mon->hasSendFD = hasSendFD;
     mon->vm = virObjectRef(vm);
     mon->json = json;
+    // for json type, when connect with monitor fd
+    // qemu-process should send greeting message to me
     if (json)
         mon->waitGreeting = true;
     mon->cb = cb;
@@ -879,6 +887,9 @@ qemuMonitorOpenInternal(virDomainObjPtr vm,
 
 
     virObjectLock(mon);
+    // register monitor fd to event loop
+    // after register, we should get greeting message immediately!!!
+    // monitor io handler will runs in event thread to processs it
     if (!qemuMonitorRegister(mon)) {
         virObjectUnlock(mon);
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -941,9 +952,11 @@ qemuMonitorOpen(virDomainObjPtr vm,
 
     timeout += QEMU_DEFAULT_MONITOR_WAIT;
 
+    // this type is set by libvirt itself at code(qemuProcessPrepareMonitorChr), user no choice
     switch (config->type) {
     case VIR_DOMAIN_CHR_TYPE_UNIX:
         hasSendFD = true;
+        // connect unix socket with monitor: retry and timeout
         if ((fd = qemuMonitorOpenUnix(config->data.nix.path,
                                       vm->pid, retry, timeout)) < 0)
             return NULL;
@@ -961,6 +974,9 @@ qemuMonitorOpen(virDomainObjPtr vm,
         return NULL;
     }
 
+    // set monitor info like
+    // monitor fd, callback, register fd with event framework
+    // link monitor with vm
     ret = qemuMonitorOpenInternal(vm, fd, hasSendFD, json, cb, opaque);
     if (!ret)
         VIR_FORCE_CLOSE(fd);

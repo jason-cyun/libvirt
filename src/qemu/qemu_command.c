@@ -10145,7 +10145,7 @@ qemuBuildCommandLine(virQEMUDriverPtr driver,
               driver, def, priv->monConfig, priv->monJSON,
               qemuCaps, migrateURI, snapshot, vmop);
 
-    // valid setting of vm before build command line args
+    // valid part setting of vm before build command line args
     if (qemuBuildCommandLineValidate(driver, def) < 0)
         goto error;
 
@@ -10159,7 +10159,7 @@ qemuBuildCommandLine(virQEMUDriverPtr driver,
 
     // emulator is binary with path
     //
-    // cmd->args stores all args, mostly each one takes two args: key and its value!!!
+    // cmd->args stores all args, mostly each one takes two args: key and its value!!! or one arg only
     //
     // args[0]: "/usr/libexec/qemu-kvm"
     //
@@ -10175,6 +10175,7 @@ qemuBuildCommandLine(virQEMUDriverPtr driver,
     //
     cmd = virCommandNew(def->emulator);
 
+    // build env like PATH, LD_LIBRARY_PATH, HOME etc
     virCommandAddEnvPassCommon(cmd);
 
     if (qemuBuildNameCommandLine(cmd, cfg, def, qemuCaps) < 0)

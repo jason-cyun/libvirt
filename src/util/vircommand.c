@@ -434,6 +434,7 @@ virCommandHandshakeChild(virCommandPtr cmd)
 
     VIR_DEBUG("Notifying parent for handshake start on %d",
               cmd->handshakeWait[1]);
+    // notifiy parent to run prepare
     if (safewrite(cmd->handshakeWait[1], &c, sizeof(c)) != sizeof(c)) {
         virReportSystemError(errno, "%s",
                              _("Unable to notify parent process"));
@@ -442,6 +443,7 @@ virCommandHandshakeChild(virCommandPtr cmd)
 
     VIR_DEBUG("Waiting on parent for handshake complete on %d",
               cmd->handshakeNotify[0]);
+    // after parent runs prepare, continue to run after get notify from parent
     if ((rv = saferead(cmd->handshakeNotify[0], &c,
                        sizeof(c))) != sizeof(c)) {
         if (rv < 0)
@@ -621,6 +623,7 @@ virExec(virCommandPtr cmd)
     // write to /var/log/libvirt/qemu/$domain.log!!!
 
     if (cmd->mask)
+        //sets the calling process's file mode creation mask(umask) to mask
         umask(cmd->mask);
     ret = EXIT_CANCELED;
     openmax = sysconf(_SC_OPEN_MAX);
@@ -695,6 +698,7 @@ virExec(virCommandPtr cmd)
         }
 
         if (pid > 0) {
+            // first child writes pid to pidfile
             if (cmd->pidfile && (virPidFileWritePath(cmd->pidfile, pid) < 0)) {
                 if (virProcessKillPainfully(pid, true) >= 0)
                     virReportSystemError(errno,
@@ -702,16 +706,22 @@ virExec(virCommandPtr cmd)
                                          cmd->pidfile, pid);
                 goto fork_error;
             }
-            // parent exit, so the first child exits
+            // first child exit
             _exit(EXIT_SUCCESS);
         }
     }
+
+
+    /* second child run below */
 
     /* virFork reset all signal handlers to the defaults.
      * This is good for the child process, but our hook
      * risks running something that generates SIGPIPE,
      * so we need to temporarily block that again
      */
+
+
+    /* below run in child */
     memset(&waxoff, 0, sizeof(waxoff));
     waxoff.sa_handler = SIG_IGN;
     sigemptyset(&waxoff.sa_mask);
@@ -2674,6 +2684,7 @@ void virCommandRequireHandshake(virCommandPtr cmd)
         return;
     }
 
+    // pip for handshake, child notify parent in forked process befor run exec()
     if (pipe2(cmd->handshakeWait, O_CLOEXEC) < 0) {
         cmd->has_error = errno;
         return;

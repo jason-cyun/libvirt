@@ -134,6 +134,7 @@ struct _virDomainDeviceDimmAddress {
 typedef struct _virDomainDeviceInfo virDomainDeviceInfo;
 typedef virDomainDeviceInfo *virDomainDeviceInfoPtr;
 struct _virDomainDeviceInfo {
+    // parameters used for attach-disk QMP command
     char *alias;
     int type; /* virDomainDeviceAddressType */
     union {

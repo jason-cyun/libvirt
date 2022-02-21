@@ -44,6 +44,7 @@ static void virDomainObjListDispose(void *obj);
 struct _virDomainObjList {
     virObjectRWLockable parent;
 
+    // two maps with different keys but values are same(domain object)
     /* uuid string -> virDomainObj  mapping
      * for O(1), lockless lookup-by-uuid */
     virHashTable *objs;
@@ -284,10 +285,12 @@ virDomainObjListAddLocked(virDomainObjListPtr doms,
     if (oldDef)
         *oldDef = NULL;
 
+    // UUID is the unique key for domain object
     /* See if a VM with matching UUID already exists */
     if ((vm = virDomainObjListFindByUUIDLocked(doms, def->uuid))) {
         /* UUID matches, but if names don't match, refuse it */
         if (STRNEQ(vm->def->name, def->name)) {
+            // name is different, error
             virUUIDFormat(vm->def->uuid, uuidstr);
             virReportError(VIR_ERR_OPERATION_FAILED,
                            _("domain '%s' is already defined with uuid %s"),
@@ -296,7 +299,7 @@ virDomainObjListAddLocked(virDomainObjListPtr doms,
         }
 
         if (flags & VIR_DOMAIN_OBJ_LIST_ADD_CHECK_LIVE) {
-            /* UUID & name match, but if VM is already active, refuse it */
+            /* UUID and name match, but if VM is already active, refuse it */
             if (virDomainObjIsActive(vm)) {
                 virReportError(VIR_ERR_OPERATION_INVALID,
                                _("domain '%s' is already active"),
@@ -311,6 +314,7 @@ virDomainObjListAddLocked(virDomainObjListPtr doms,
             }
         }
 
+        // reset vm with new def, save previous def to oldDef
         virDomainObjAssignDef(vm,
                               def,
                               !!(flags & VIR_DOMAIN_OBJ_LIST_ADD_LIVE),
@@ -318,6 +322,7 @@ virDomainObjListAddLocked(virDomainObjListPtr doms,
     } else {
         /* UUID does not match, but if a name matches, refuse it */
         if ((vm = virDomainObjListFindByNameLocked(doms, def->name))) {
+            // name must be unique as well.
             virUUIDFormat(vm->def->uuid, uuidstr);
             virReportError(VIR_ERR_OPERATION_FAILED,
                            _("domain '%s' already exists with uuid %s"),
@@ -325,6 +330,8 @@ virDomainObjListAddLocked(virDomainObjListPtr doms,
             goto error;
         }
 
+        // no uuid and name found in driver->domains
+        // create a new domain object with def, oldDef is NULL in this case
         if (!(vm = virDomainObjNew(xmlopt)))
             goto cleanup;
         vm->def = def;

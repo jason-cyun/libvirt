@@ -322,7 +322,8 @@ qemuMonitorJSONCommandWithFd(qemuMonitorPtr mon,
 
     VIR_DEBUG("Send command '%s' for write with FD %d", cmdstr, scm_fd);
 
-    // block until get reply
+    // block until get reply from monitor fds
+    // reply is handled in event thread, then wake up me
     ret = qemuMonitorSend(mon, &msg);
 
     VIR_DEBUG("Receive command reply ret=%d rxObject=%p",

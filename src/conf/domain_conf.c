@@ -3368,6 +3368,8 @@ virDomainObjSetDefTransient(virCapsPtr caps,
     if (domain->newDef)
         return 0;
 
+    // make a copy of vim setting, later on we update domain->def
+    // if error happens, restore domain->def from domain->newDef
     if (!(domain->newDef = virDomainDefCopy(domain->def, caps, xmlopt, NULL, false)))
         goto out;
 
@@ -3388,7 +3390,9 @@ virDomainObjRemoveTransientDef(virDomainObjPtr domain)
     if (!domain->newDef)
         return;
 
+    // free every set in domain->def
     virDomainDefFree(domain->def);
+    // restore xml setting
     domain->def = domain->newDef;
     domain->def->id = -1;
     domain->newDef = NULL;
@@ -30046,6 +30050,11 @@ virDomainDiskTranslateSourcePool(virDomainDiskDefPtr def)
     if (!(conn = virGetConnectStorage()))
         return -1;
 
+    // find storage pool, storage drivers can has several storage pool.
+    // virStorageDriver: storage driver operation
+    // virStoragePoolPtr, virStoragePoolDefPtr, virStoragePoolObjPtr, virStorageBackend
+    // storage pool is a generic object provided to user
+    // virStorageBackend is the real storage, like dir, fs, netfs, scsi, disk, iscsi backend, rbd etc
     if (!(pool = virStoragePoolLookupByName(conn, def->src->srcpool->pool)))
         goto cleanup;
 
@@ -30069,6 +30078,7 @@ virDomainDiskTranslateSourcePool(virDomainDiskDefPtr def)
     if (!(pooldef = virStoragePoolDefParseString(poolxml)))
         goto cleanup;
 
+    // update src pool type and vol type by find pool and volume with name
     def->src->srcpool->pooltype = pooldef->type;
     def->src->srcpool->voltype = info.type;
 

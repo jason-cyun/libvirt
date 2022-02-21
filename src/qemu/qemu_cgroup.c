@@ -1088,6 +1088,9 @@ qemuSetupCgroup(virDomainObjPtr vm,
         return -1;
     }
 
+    // create systemd cgroup by using dbus, then dbus talks with systemd to create it
+    // /sys/fs/cgroup/systemd/machine.slice/machine-qemu\x2d8\x2dcentos.scope
+    // TODO: this cgroups used for what?
     if (qemuInitCgroup(vm, nnicindexes, nicindexes) < 0)
         return -1;
 
