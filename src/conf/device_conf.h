@@ -137,6 +137,7 @@ typedef virDomainDeviceInfo *virDomainDeviceInfoPtr;
 struct _virDomainDeviceInfo {
     // generic part of different devices like disk/char/fs/console/usb etc
     // mostly for device address
+    // parameters used for attach-disk QMP command
     char *alias;
     int type; /* virDomainDeviceAddressType, address type as we have union address here*/
     union {

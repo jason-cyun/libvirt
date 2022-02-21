@@ -221,6 +221,7 @@ qemuAgentOpenUnix(const char *monitor)
 
     // non block, connect return immediately if server is not ready.
     // server is created by qemu process not guest agent who runs inside VM
+    // no timeout in kernel for connect(), no block
     if (virSetNonBlock(monfd) < 0) {
         virReportSystemError(errno, "%s",
                              _("Unable to put monitor "
