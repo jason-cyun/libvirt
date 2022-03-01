@@ -12581,6 +12581,9 @@ qemuDomainSaveCookieNew(virDomainObjPtr vm ATTRIBUTE_UNUSED)
     if (!(cookie = virObjectNew(qemuDomainSaveCookieClass)))
         goto error;
 
+    // save cpu definition only when priv->origCPU is not NULL
+    // when orginCPU is not null that means vm restores from snapshot
+    // otherwise domain xml already has the vcpu definition!!!
     if (priv->origCPU && !(cookie->cpu = virCPUDefCopy(vm->def->cpu)))
         goto error;
 
@@ -12623,6 +12626,7 @@ static int
 qemuDomainSaveCookieFormat(virBufferPtr buf,
                            virObjectPtr obj)
 {
+    // cookie has vcpu definition
     qemuDomainSaveCookiePtr cookie = (qemuDomainSaveCookiePtr) obj;
 
     if (cookie->cpu &&

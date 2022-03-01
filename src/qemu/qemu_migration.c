@@ -5205,6 +5205,7 @@ qemuMigrationSrcToFile(virQEMUDriverPtr driver, virDomainObjPtr vm,
                        const char *compressor,
                        qemuDomainAsyncJob asyncJob)
 {
+    // NOTE: when dump memory to file, vm is active but vcpu in Paused state!!!
     qemuDomainObjPrivatePtr priv = vm->privateData;
     int rc;
     int ret = -1;
@@ -5217,6 +5218,7 @@ qemuMigrationSrcToFile(virQEMUDriverPtr driver, virDomainObjPtr vm,
     /* Increase migration bandwidth to unlimited since target is a file.
      * Failure to change migration speed is not fatal. */
     if (qemuDomainObjEnterMonitorAsync(driver, vm, asyncJob) == 0) {
+        // QMP "migrate_set_speed" to set migrate speed
         qemuMonitorSetMigrationSpeed(priv->mon,
                                      QEMU_DOMAIN_MIG_BANDWIDTH_MAX);
         priv->migMaxBandwidth = QEMU_DOMAIN_MIG_BANDWIDTH_MAX;
@@ -5232,6 +5234,7 @@ qemuMigrationSrcToFile(virQEMUDriverPtr driver, virDomainObjPtr vm,
     }
 
     if (compressor && pipe(pipeFD) < 0) {
+        // pipd is needed only compression is enabled
         virReportSystemError(errno, "%s",
                              _("Failed to create pipe for migration"));
         return -1;

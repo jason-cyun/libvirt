@@ -2661,9 +2661,11 @@ qemuMonitorMigrateToFd(qemuMonitorPtr mon,
 
     QEMU_CHECK_MONITOR(mon);
 
+    // send fd to qemu
     if (qemuMonitorSendFileHandle(mon, "migrate", fd) < 0)
         return -1;
 
+    // send QMP 'migrate' for migration, block until it finishes.
     ret = qemuMonitorJSONMigrate(mon, flags, "fd:migrate");
 
     if (ret < 0) {

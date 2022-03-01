@@ -2847,6 +2847,7 @@ virQEMUSaveDataNew(char *domXML,
     if (VIR_ALLOC(data) < 0)
         return NULL;
 
+    // xml of domain
     VIR_STEAL_PTR(data->xml, domXML);
 
     if (cookieObj &&
@@ -2854,6 +2855,7 @@ virQEMUSaveDataNew(char *domXML,
                                              virDomainXMLOptionGetSaveCookie(xmlopt))))
         goto error;
 
+    // header of data, magic, compresss, save_version etc
     header = &data->header;
     memcpy(header->magic, QEMU_SAVE_PARTIAL, sizeof(header->magic));
     header->version = QEMU_SAVE_VERSION;
@@ -3232,6 +3234,7 @@ qemuDomainSaveMemory(virQEMUDriverPtr driver,
             goto cleanup;
         }
     }
+    // if bypass cache(file system cache), write data directly to disk!!!
     fd = qemuOpenFile(driver, vm, path,
                       O_WRONLY | O_TRUNC | O_CREAT | directFlag,
                       &needUnlink, &bypassSecurityDriver);
@@ -3244,6 +3247,7 @@ qemuDomainSaveMemory(virQEMUDriverPtr driver,
     if (!(wrapperFd = virFileWrapperFdNew(&fd, path, wrapperFlags)))
         goto cleanup;
 
+    // save cpu data to file(header, xml, padding to file)
     if (virQEMUSaveDataWrite(data, fd, path) < 0)
         goto cleanup;
 
@@ -3266,6 +3270,7 @@ qemuDomainSaveMemory(virQEMUDriverPtr driver,
         goto cleanup;
 
     if ((fd = qemuOpenFile(driver, vm, path, O_WRONLY, NULL, NULL)) < 0 ||
+        // save header at last with magic end
         virQEMUSaveDataFinish(data, &fd, path) < 0)
         goto cleanup;
 
@@ -3321,7 +3326,9 @@ qemuDomainSaveInternal(virQEMUDriverPtr driver,
 
     /* Pause */
     if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_RUNNING) {
+        // if current vm is runing, the saved state is running
         was_running = true;
+        // stop vcpu if it's running by sending QMP command
         if (qemuProcessStopCPUs(driver, vm, VIR_DOMAIN_PAUSED_SAVE,
                                 QEMU_ASYNC_JOB_SAVE) < 0)
             goto endjob;
@@ -3334,6 +3341,11 @@ qemuDomainSaveInternal(virQEMUDriverPtr driver,
     }
 
    /* libvirt-domain.c already guaranteed these two flags are exclusive.  */
+    // if later restoreed vm state depends on the flags.
+    // 1. restored vm is running if save_running flag it set by user
+    // 2. restored vm is paused if save_paused flag it set by user
+    // 3. if not user set, restored vm is running if current vm is running
+    // NOTE: managed save must run on running vm!!!
     if (flags & VIR_DOMAIN_SAVE_RUNNING)
         was_running = true;
     else if (flags & VIR_DOMAIN_SAVE_PAUSED)
@@ -3346,6 +3358,7 @@ qemuDomainSaveInternal(virQEMUDriverPtr driver,
     if (xmlin) {
         virDomainDefPtr def = NULL;
 
+        // generate xml from user
         if (!(def = virDomainDefParseString(xmlin, caps, driver->xmlopt, NULL,
                                             VIR_DOMAIN_DEF_PARSE_INACTIVE |
                                             VIR_DOMAIN_DEF_PARSE_SKIP_VALIDATE))) {
@@ -3357,6 +3370,7 @@ qemuDomainSaveInternal(virQEMUDriverPtr driver,
         }
         xml = qemuDomainDefFormatLive(driver, def, NULL, true, true);
     } else {
+        // generated xml from current vm
         xml = qemuDomainDefFormatLive(driver, vm->def, priv->origCPU, true, true);
     }
     if (!xml) {
@@ -3365,19 +3379,30 @@ qemuDomainSaveInternal(virQEMUDriverPtr driver,
         goto endjob;
     }
 
+    // save cpu def to cookie->cpu only when orgCPU is set
+    // otherwise cookie->cpu is NULL
     if (!(cookie = qemuDomainSaveCookieNew(vm)))
         goto endjob;
 
+    // data has
+    // header of data(version, magic, compress flags)
+    // domain xml(or cookie if orgCPU is not NULL
+    // )
+    //
+    // NOTE: NO CPU registers saved by virQEMUSaveDataNew as for vcpu
+    // all registers value are saved at memory!!!
     if (!(data = virQEMUSaveDataNew(xml, cookie, was_running, compressed,
                                     driver->xmlopt)))
         goto endjob;
     xml = NULL;
 
+    // save memory is a large work if memory is huge!!!
     ret = qemuDomainSaveMemory(driver, vm, path, data, compressedpath,
                                flags, QEMU_ASYNC_JOB_SAVE);
     if (ret < 0)
         goto endjob;
 
+    // before save, paused vm, after saved, shut it down !!!
     /* Shut it down */
     qemuProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_SAVED,
                     QEMU_ASYNC_JOB_SAVE, 0);
@@ -3444,6 +3469,9 @@ qemuGetCompressionProgram(const char *imageFormat,
 
     *compresspath = NULL;
 
+    // image foramt support "lzop", "gzip", "bzip2", or "xz"
+    // if no one is set, default is RAW
+    // with compress, it can save disk space while take much cpu to do the compress.
     if (!imageFormat)
         return QEMU_SAVE_FORMAT_RAW;
 
@@ -3453,6 +3481,7 @@ qemuGetCompressionProgram(const char *imageFormat,
     if (ret == QEMU_SAVE_FORMAT_RAW)
         return QEMU_SAVE_FORMAT_RAW;
 
+    // find compress binary based on compress format type
     if (!(*compresspath = virFindFileInPath(imageFormat)))
         goto error;
 
@@ -3554,6 +3583,7 @@ qemuDomainManagedSavePath(virQEMUDriverPtr driver, virDomainObjPtr vm)
 static int
 qemuDomainManagedSave(virDomainPtr dom, unsigned int flags)
 {
+    // create a managed state
     virQEMUDriverPtr driver = dom->conn->privateData;
     virQEMUDriverConfigPtr cfg = NULL;
     int compressed;
@@ -3572,6 +3602,7 @@ qemuDomainManagedSave(virDomainPtr dom, unsigned int flags)
     if (virDomainManagedSaveEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
+    // dom must be runing for managed save
     if (virDomainObjCheckActive(vm) < 0)
         goto cleanup;
 
@@ -3587,6 +3618,7 @@ qemuDomainManagedSave(virDomainPtr dom, unsigned int flags)
                                                 "save", false)) < 0)
         goto cleanup;
 
+    // the unique file with full path
     if (!(name = qemuDomainManagedSavePath(driver, vm)))
         goto cleanup;
 
@@ -3595,6 +3627,7 @@ qemuDomainManagedSave(virDomainPtr dom, unsigned int flags)
     ret = qemuDomainSaveInternal(driver, vm, name, compressed,
                                  compressedpath, NULL, flags);
     if (ret == 0)
+        // if managed state generated, mark it with true
         vm->hasManagedSave = true;
 
  cleanup:
