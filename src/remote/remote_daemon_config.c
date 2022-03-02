@@ -87,6 +87,7 @@ daemonConfigFilePath(bool privileged, char **configfile)
         if (!(configdir = virGetUserConfigDirectory()))
             goto error;
 
+        // daemon config, only load once!!!
         if (virAsprintf(configfile, "%s/libvirtd.conf", configdir) < 0) {
             VIR_FREE(configdir);
             goto error;

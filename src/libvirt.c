@@ -883,7 +883,7 @@ virConnectOpenInternal(const char *name,
     if (ret == NULL)
         return NULL;
 
-    // for each connection, we load config!!! why not load once???
+    // for each connection,load client conf, it's not libvirtd.conf!!!
     if (virConfLoadConfig(&conf, "libvirt.conf") < 0)
         goto failed;
 

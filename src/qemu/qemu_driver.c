@@ -245,6 +245,8 @@ qemuAutostartDomain(virDomainObjPtr vm,
     virObjectLock(vm);
     virObjectRef(vm);
     virResetLastError();
+    // start vm only when autostart is set and dom is inactive!!!
+    // same behavior like we call qemuDomainCreateWithFlags()
     if (vm->autostart &&
         !virDomainObjIsActive(vm)) {
         if (qemuProcessBeginJob(driver, vm,
@@ -886,8 +888,12 @@ qemuStateInitialize(bool privileged,
         goto error;
 
     /* Get all the running persistent or transient configs first */
+    // here we only load active vm, but does not conect with it like monitor fd, agent fd etc
+    // connect with domain as below qemuProcessReconnectAll()
+    // NOTE: if system reboot, /var/run/libvirt is gone!!! as it's in memory!!!
+    // so only has inactive domain, but if only libvirt restarts, active domain should be there
     if (virDomainObjListLoadAllConfigs(qemu_driver->domains,
-                                       cfg->stateDir,
+                                       cfg->stateDir, // load vm from /var/run/libvirt/qemu
                                        NULL, true,
                                        qemu_driver->caps,
                                        qemu_driver->xmlopt,
@@ -906,6 +912,11 @@ qemuStateInitialize(bool privileged,
                             NULL);
 
     /* Then inactive persistent configs */
+    // local inactive domain, these xml have no status info!!!
+    // as in this case, if vm is running, vm should have two defs
+    //
+    // vm->def is active xml from /var/run/libvirt/qemu/centos.xml
+    // vm->newdef is inactive xml from /etc/libvirt/qemu/centos.xml
     if (virDomainObjListLoadAllConfigs(qemu_driver->domains,
                                        cfg->configDir,
                                        cfg->autostartDir, false,
@@ -931,6 +942,8 @@ qemuStateInitialize(bool privileged,
     if (!qemu_driver->workerPool)
         goto error;
 
+    // reonnect vm like cgroups, monitor, agent, refresh vm by triggering QMP
+    // no mather vm has autostart set or not, reconnect if pid is found in /var/run/libvirt/qemu/centos.xml!!!
     qemuProcessReconnectAll(qemu_driver);
 
     return 0;
@@ -21966,7 +21979,9 @@ static virConnectDriver qemuConnectDriver = {
 
 static virStateDriver qemuStateDriver = {
     .name = QEMU_DRIVER_NAME,
+    // qemuStateInitialize will create qemue state driver and load inactive domain, and reconnected with active domain
     .stateInitialize = qemuStateInitialize,
+    // autostart domain who has autostart set
     .stateAutoStart = qemuStateAutoStart,
     .stateCleanup = qemuStateCleanup,
     .stateReload = qemuStateReload,

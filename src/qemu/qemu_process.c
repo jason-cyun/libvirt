@@ -7671,6 +7671,7 @@ struct qemuProcessReconnectData {
 static void
 qemuProcessReconnect(void *opaque)
 {
+    // driver and vm that I will use when connect
     struct qemuProcessReconnectData *data = opaque;
     virQEMUDriverPtr driver = data->driver;
     virDomainObjPtr obj = data->obj;
@@ -7725,6 +7726,7 @@ qemuProcessReconnect(void *opaque)
     if (qemuConnectMonitor(driver, obj, QEMU_ASYNC_JOB_NONE, retry, NULL) < 0)
         goto error;
 
+    // after connected with monitor, refersh vm info!!!
     if (qemuHostdevUpdateActiveDomainDevices(driver, obj->def) < 0)
         goto error;
 
@@ -7770,6 +7772,8 @@ qemuProcessReconnect(void *opaque)
             goto error;
     }
 
+    // update state by QMP command, the previous state from file which may be true
+    // if qemu-process state changes befor loading xml from /var/run
     if (qemuProcessUpdateState(driver, obj) < 0)
         goto error;
 
@@ -7857,6 +7861,7 @@ qemuProcessReconnect(void *opaque)
 
     qemuProcessReconnectCheckMemAliasOrderMismatch(obj);
 
+    // connect with agent
     if (qemuConnectAgent(driver, obj) < 0)
         goto error;
 
@@ -7932,6 +7937,9 @@ qemuProcessReconnectHelper(virDomainObjPtr obj,
     struct qemuProcessReconnectData *data;
 
     /* If the VM was inactive, we don't need to reconnect */
+    // no connect with VM if it's inactive, pid parsed form /var/run/libvirt/qemu/centos.xml!!!
+    //
+    // what about if system reboot, as in that case /var/run/libvirt is gone
     if (!obj->pid)
         return 0;
 
@@ -7948,6 +7956,8 @@ qemuProcessReconnectHelper(virDomainObjPtr obj,
     virObjectLock(obj);
     virObjectRef(obj);
 
+    // for each vm, create a temporary thread to connect with it!!!
+    // if many vm, at a time, there will be many thread created and destroyed after connected or error
     if (virThreadCreate(&thread, false, qemuProcessReconnect, data) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Could not create thread. QEMU initialization "

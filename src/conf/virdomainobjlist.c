@@ -513,6 +513,7 @@ virDomainObjListLoadConfig(virDomainObjListPtr doms,
     if (!(dom = virDomainObjListAddLocked(doms, def, xmlopt, 0, &oldDef)))
         goto error;
 
+    // set autostart flags of this vm
     dom->autostart = autostart;
 
     if (notify)
@@ -547,6 +548,7 @@ virDomainObjListLoadStatus(virDomainObjListPtr doms,
     if ((statusFile = virDomainConfigFile(statusDir, name)) == NULL)
         goto error;
 
+    // create domain from xml file which has status in xml like: pid, status etc
     if (!(obj = virDomainObjParseFile(statusFile, caps, xmlopt,
                                       VIR_DOMAIN_DEF_PARSE_STATUS |
                                       VIR_DOMAIN_DEF_PARSE_ACTUAL_NET |
@@ -565,6 +567,7 @@ virDomainObjListLoadStatus(virDomainObjListPtr doms,
         goto error;
     }
 
+    // add obj in qemu state driver
     if (virDomainObjListAddObjLocked(doms, obj) < 0)
         goto error;
 
@@ -608,11 +611,14 @@ virDomainObjListLoadAllConfigs(virDomainObjListPtr doms,
 
         if (!virFileStripSuffix(entry->d_name, ".xml"))
             continue;
+        // for files who have .xml as suffix, read it
 
         /* NB: ignoring errors, so one malformed config doesn't
            kill the whole process */
         VIR_INFO("Loading config file '%s.xml'", entry->d_name);
         if (liveStatus)
+            // liveStatus is set for configDir: /var/run/libvirt/qemu
+            // not set for configDir /etc/libvirt/qemu
             dom = virDomainObjListLoadStatus(doms,
                                              configDir,
                                              entry->d_name,
