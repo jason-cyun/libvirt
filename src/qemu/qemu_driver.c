@@ -246,6 +246,7 @@ qemuAutostartDomain(virDomainObjPtr vm,
     virObjectRef(vm);
     virResetLastError();
     // start vm only when autostart is set and dom is inactive!!!
+    // autostart for inactive, for active dom we already connect them!!!
     // same behavior like we call qemuDomainCreateWithFlags()
     if (vm->autostart &&
         !virDomainObjIsActive(vm)) {
@@ -7290,6 +7291,7 @@ static int qemuConnectNumOfDefinedDomains(virConnectPtr conn)
 }
 
 
+// conn is null for autostart, trigger by libvirtd itself
 static int
 qemuDomainObjStart(virConnectPtr conn,
                    virQEMUDriverPtr driver,

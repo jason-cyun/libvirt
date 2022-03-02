@@ -216,9 +216,12 @@ virFileCacheNewData(virFileCachePtr cache,
         return NULL;
 
     if (rv == 0) {
+        // get data: qemuCaps by start /usr/bin/qemu-system-x86_64, then send many QMP commands!!!
+        // save the data to disk file /var/cache/libvirt/qemu/capabilities/$id.xml and in hash with key '/usr/bin/qemu-system-x86_64'
         if (!(data = cache->handlers.newData(name, cache->priv)))
             return NULL;
 
+        // save to disk file
         if (virFileCacheSave(cache, name, data) < 0) {
             virObjectUnref(data);
             data = NULL;
@@ -290,6 +293,7 @@ virFileCacheValidate(virFileCachePtr cache,
         *data = virFileCacheNewData(cache, name);
         if (*data) {
             VIR_DEBUG("Caching data '%p' for '%s'", *data, name);
+            // save qemuCaps and name('/usr/bin/qemu-system-x86_64') to hash table
             if (virHashAddEntry(cache->table, name, *data) < 0) {
                 virObjectUnref(*data);
                 *data = NULL;

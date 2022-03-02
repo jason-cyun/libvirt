@@ -3942,6 +3942,7 @@ virQEMUCapsInitQMPMonitor(virQEMUCapsPtr qemuCaps,
 
     /* @mon is supposed to be locked by callee */
 
+    // send QMP: qmpcapabilities which is needed for monitor sock
     if (qemuMonitorSetCapabilities(mon) < 0) {
         VIR_DEBUG("Failed to set monitor capabilities %s",
                   virGetLastErrorMessage());
@@ -3949,6 +3950,7 @@ virQEMUCapsInitQMPMonitor(virQEMUCapsPtr qemuCaps,
         goto cleanup;
     }
 
+    // query version with QMP command: query-version
     if (qemuMonitorGetVersion(mon,
                               &major, &minor, &micro,
                               &package) < 0) {
@@ -3974,6 +3976,7 @@ virQEMUCapsInitQMPMonitor(virQEMUCapsPtr qemuCaps,
     qemuCaps->package = package;
     qemuCaps->usedQMP = true;
 
+    // arch info by QMP:query-target
     if (virQEMUCapsInitQMPArch(qemuCaps, mon) < 0)
         goto cleanup;
 
@@ -4044,13 +4047,16 @@ virQEMUCapsInitQMPMonitor(virQEMUCapsPtr qemuCaps,
         goto cleanup;
 
     /* Some capabilities may differ depending on KVM state */
+    // QMP: query-kvm
     if (virQEMUCapsProbeQMPKVMState(qemuCaps, mon) < 0)
         goto cleanup;
 
     if (virQEMUCapsProbeQMPEvents(qemuCaps, mon) < 0)
         goto cleanup;
+    // QMP: qom-list-types
     if (virQEMUCapsProbeQMPDevices(qemuCaps, mon) < 0)
         goto cleanup;
+    // QMP:"query-machines"
     if (virQEMUCapsProbeQMPMachineTypes(qemuCaps, mon) < 0)
         goto cleanup;
     if (virQEMUCapsProbeQMPCPUDefinitions(qemuCaps, mon, false) < 0)
@@ -4361,6 +4367,7 @@ virQEMUCapsInitQMP(virQEMUCapsPtr qemuCaps,
                                              runUid, runGid, qmperr)))
         goto cleanup;
 
+    // run /usr/bin/qemu-system-x86_64 with parameter in daemon mode and connect its monitor sock!!!
     if ((rc = virQEMUCapsInitQMPCommandRun(cmd, false)) != 0) {
         if (rc == 1)
             ret = 0;
@@ -4385,6 +4392,7 @@ virQEMUCapsInitQMP(virQEMUCapsPtr qemuCaps,
     ret = 0;
 
  cleanup:
+    // here kill process started used for qmp caps!!!
     virQEMUCapsInitQMPCommandFree(cmd);
     return ret;
 }
@@ -4423,6 +4431,7 @@ virQEMUCapsNewForBinaryInternal(virArch hostArch,
     struct stat sb;
     char *qmperr = NULL;
 
+    // for each arch, create qemuCaps saved in hash table with key {'/usr/bin/qemu-system-x86_64': qemuCaps}
     if (!(qemuCaps = virQEMUCapsNew()))
         goto error;
 
@@ -4461,6 +4470,7 @@ virQEMUCapsNewForBinaryInternal(virArch hostArch,
         goto error;
     }
 
+    // update extra info of qemucap needed for this arch
     qemuCaps->libvirtCtime = virGetSelfLastChanged();
     qemuCaps->libvirtVersion = LIBVIR_VERSION_NUMBER;
 
@@ -4488,6 +4498,16 @@ static void *
 virQEMUCapsNewData(const char *binary,
                    void *privData)
 {
+    //  binary: /usr/bin/qemu-system-x86_64, /usr/bin/qemu-system-arm etc
+    //
+    // get caps for this arch(qemu provides binary for different arch
+    // the steps of get capabilities:
+    // 1. run binary with cap monitor socket in daemon mode
+    // 2. connect with this monitor socket
+    // 3. send QMP command to get caps!
+    //
+    // $ /usr/bin/qemu-system-x86_64 -S -no-user-config -nodefaults -nographic -machine none,accel=tcg -qmp unix:/var/lib/libvirt/qemu/capabilities.monitor.sock,server,nowait -pidfile /var/lib/libvirt/qemu/capabilities.pidfile -daemonize
+    // connect with monitor socket and send QMP commands to get caps.
     virQEMUCapsCachePrivPtr priv = privData;
 
     return virQEMUCapsNewForBinaryInternal(priv->hostArch,
