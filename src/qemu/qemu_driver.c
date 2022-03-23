@@ -945,6 +945,7 @@ qemuStateInitialize(bool privileged,
 
     // reonnect vm like cgroups, monitor, agent, refresh vm by triggering QMP
     // no mather vm has autostart set or not, reconnect if pid is found in /var/run/libvirt/qemu/centos.xml!!!
+
     qemuProcessReconnectAll(qemu_driver);
 
     return 0;
@@ -1152,6 +1153,13 @@ static virDrvOpenStatus qemuConnectOpen(virConnectPtr conn,
     virDrvOpenStatus ret = VIR_DRV_OPEN_ERROR;
     virCheckFlags(VIR_CONNECT_RO, VIR_DRV_OPEN_ERROR);
 
+    // as qemu_driver allocation runs in separate thread when daemon starts
+    // so if daemon starts and rpc call triggered by user, qemu_driver may not allocated
+    // so open failed.
+    //
+    // if qemu_driver is allocated, during initialization, open can get qemu_driver
+    // but later on when do operation on qemu_driver, it will first get the lock of driver
+    // in that case, rpc will blocks, until qemu driver finishes it's initialization
     if (qemu_driver == NULL) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("qemu state driver is not active"));
@@ -1600,6 +1608,7 @@ static virDomainPtr qemuDomainLookupByName(virConnectPtr conn,
     if (virDomainLookupByNameEnsureACL(conn, vm->def) < 0)
         goto cleanup;
 
+    sleep(1000);
     dom = virGetDomain(conn, vm->def->name, vm->def->uuid, vm->def->id);
 
  cleanup:
@@ -21982,11 +21991,18 @@ static virConnectDriver qemuConnectDriver = {
 static virStateDriver qemuStateDriver = {
     .name = QEMU_DRIVER_NAME,
     // qemuStateInitialize will create qemue state driver and load inactive domain, and reconnected with active domain
+    // run in separate thread, before .stateInitialize finish, client can't setup tcp connection!!!
     .stateInitialize = qemuStateInitialize,
     // autostart domain who has autostart set
     .stateAutoStart = qemuStateAutoStart,
     .stateCleanup = qemuStateCleanup,
+    // load all vm from /etc/libvirt not /var/run/libvirt/qemu
+    // so that can cal modify xml in disk, send reload signal to libvirtd to make it effect
+    // it runs in signal handler!!!
     .stateReload = qemuStateReload,
+    // this is called only for dbus by libvirtd disconnected with dbus
+    // runs in separate thread, by create managed state to active vm
+    // notify libvirtd to quit
     .stateStop = qemuStateStop,
 };
 

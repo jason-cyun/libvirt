@@ -699,6 +699,9 @@ static void daemonReloadHandler(virNetDaemonPtr dmn ATTRIBUTE_UNUSED,
         return;
     }
 
+    // reload run in separate thread, it calls rpc to libvirtd
+    // manage save to each active vm, then notify libvirtd to quit!!!
+    // later on libvirtd restarts with new conf and vm with managed save state!!!
     if (virThreadCreate(&thr, false, daemonReloadHandlerThread, NULL) < 0) {
         /*
          * Not much we can do on error here except log it.
@@ -709,12 +712,15 @@ static void daemonReloadHandler(virNetDaemonPtr dmn ATTRIBUTE_UNUSED,
 
 static int daemonSetupSignals(virNetDaemonPtr dmn)
 {
+    // setup signal handler for daemon
+    // the first three, just set daemon->quit flag, so when poll() timeouts, daemon will quits.
     if (virNetDaemonAddSignalHandler(dmn, SIGINT, daemonShutdownHandler, NULL) < 0)
         return -1;
     if (virNetDaemonAddSignalHandler(dmn, SIGQUIT, daemonShutdownHandler, NULL) < 0)
         return -1;
     if (virNetDaemonAddSignalHandler(dmn, SIGTERM, daemonShutdownHandler, NULL) < 0)
         return -1;
+    // reload handler
     if (virNetDaemonAddSignalHandler(dmn, SIGHUP, daemonReloadHandler, NULL) < 0)
         return -1;
     return 0;
@@ -818,6 +824,8 @@ static void daemonRunStateInit(void *opaque)
                            dmn) < 0) {
         VIR_ERROR(_("Driver state initialization failed"));
         /* Ensure the main event loop quits */
+        // even it runs in separate thread, getpid() returns process id, also main thread id
+        // pid_t tid = syscall(SYS_gettid) to get thread id on linux
         kill(getpid(), SIGTERM);
         goto cleanup;
     }

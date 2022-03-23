@@ -1726,6 +1726,7 @@ qemuConnectMonitor(virQEMUDriverPtr driver, virDomainObjPtr vm, int asyncJob,
     ignore_value(virTimeMillisNow(&priv->monStart));
     monConfig = priv->monConfig;
     virObjectRef(monConfig);
+    // unlock vm as vm is clocked when entry in this thread
     virObjectUnlock(vm);
 
     // sent monitor cb(ops) for event like
@@ -1746,6 +1747,7 @@ qemuConnectMonitor(virQEMUDriverPtr driver, virDomainObjPtr vm, int asyncJob,
                                 qemuProcessMonitorLogFree);
     }
 
+    // lock agaiin as we need to update priv later on
     virObjectLock(vm);
     virObjectUnref(monConfig);
     virObjectUnref(vm);
@@ -7953,6 +7955,7 @@ qemuProcessReconnectHelper(virDomainObjPtr obj,
 
     /* this lock and reference will be eventually transferred to the thread
      * that handles the reconnect */
+    /* qemuProcessReconnect runs with vm locked */
     virObjectLock(obj);
     virObjectRef(obj);
 

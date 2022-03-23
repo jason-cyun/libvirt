@@ -680,6 +680,7 @@ int virEventPollRunOnce(void)
     if (ret < 0) {
         EVENT_DEBUG("Poll got error event %d", errno);
         if (errno == EINTR || errno == EAGAIN)
+            // signal happens
             goto retry;
         virReportSystemError(errno, "%s",
                              _("Unable to poll on file handles"));

@@ -427,15 +427,18 @@ virTimeBackOffWait(virTimeBackOffVar *var)
 {
     unsigned long long t, next;
 
+    // get current time
     ignore_value(virTimeMillisNowRaw(&t));
 
     VIR_DEBUG("t=%llu, limit=%llu", t, var->limit_t);
 
+    // if current now is larger than limit, end the loop
     if (t > var->limit_t)
         return 0;               /* ends the while loop */
 
     /* Compute next wait time. Cap at VIR_TIME_BACKOFF_CAP
      * to avoid long useless sleeps. */
+    // usleep for a while, each time we increase the sleep time larger
     next = var->next;
     if (var->next < VIR_TIME_BACKOFF_CAP)
         var->next *= 2;
@@ -446,6 +449,7 @@ virTimeBackOffWait(virTimeBackOffVar *var)
      * sleep.  This is so we always run the body just before the final
      * timeout.
      */
+
     if (t + next > var->limit_t)
         next = var->limit_t - t;
 

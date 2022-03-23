@@ -19059,6 +19059,7 @@ virDomainCachetuneDefParse(virDomainDefPtr def,
 }
 
 
+// validate during parse and after parse, validate as well, two validate phases
 static virDomainDefPtr
 virDomainDefParseXML(xmlDocPtr xml,
                      xmlNodePtr root,
@@ -20942,6 +20943,7 @@ virDomainObjParseXML(xmlDocPtr xml,
     }
     VIR_FREE(nodes);
 
+    // this this needed to parse monitor path
     if (xmlopt->privateData.parse &&
         xmlopt->privateData.parse(ctxt, obj, &xmlopt->config) < 0)
         goto error;

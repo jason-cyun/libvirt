@@ -373,6 +373,9 @@ qemuMonitorOpenUnix(const char *monitor,
 
             if ((errno == ENOENT || errno == ECONNREFUSED) &&
                 (!cpid || virProcessKill(cpid, 0) == 0)) {
+                // as signal is 0, here only check if process exists or not, == 0 exists
+                // if exist, retry again.
+                // the loop
                 /* ENOENT       : Socket may not have shown up yet
                  * ECONNREFUSED : Leftover socket hasn't been removed yet */
                 continue;
