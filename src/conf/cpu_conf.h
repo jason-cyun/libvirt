@@ -98,6 +98,7 @@ VIR_ENUM_DECL(virCPUFeaturePolicy)
 typedef struct _virCPUFeatureDef virCPUFeatureDef;
 typedef virCPUFeatureDef *virCPUFeatureDefPtr;
 struct _virCPUFeatureDef {
+     // <feature policy='disable' name='lahf_lm'/>
     char *name;
     int policy;         /* enum virCPUFeaturePolicy */
 };
@@ -116,6 +117,7 @@ VIR_ENUM_DECL(virCPUCacheMode);
 typedef struct _virCPUCacheDef virCPUCacheDef;
 typedef virCPUCacheDef *virCPUCacheDefPtr;
 struct _virCPUCacheDef {
+     // <cache level='3' mode='emulate'/>
     int level;          /* -1 for unspecified */
     virCPUCacheMode mode;
 };
@@ -124,23 +126,46 @@ struct _virCPUCacheDef {
 typedef struct _virCPUDef virCPUDef;
 typedef virCPUDef *virCPUDefPtr;
 struct _virCPUDef {
-    int type;           /* enum virCPUType */
-    int mode;           /* enum virCPUMode */
+    /*
+     * <domain>
+     *  <cpu match='exact' mode='custom' check='none'>
+     *   <model fallback='allow' vendor_id="xxx">core2duo</model>
+     *   <vendor>Intel</vendor>
+     *   <topology sockets='1' cores='2' threads='1'/>
+     *   <cache level='3' mode='emulate'/>
+     *   <feature policy='disable' name='lahf_lm'/>
+     *   <feature policy='require' name='pcid'/>
+     *   <numa>
+     *     <cell id='0' cpus='0-3' memory='512000' unit='KiB' discard='yes'/>
+     *     <cell id='1' cpus='4-7' memory='512000' unit='KiB' memAccess='shared'/>
+     *   </numa>
+     *  </cpu>
+     * </domain>
+     */
+    int type;           /* enum virCPUType */ // For cpu in xml, type is VIR_CPU_TYPE_GUEST
+    int mode;           /* enum virCPUMode */ // if not mode, default is VIR_CPU_MODE_CUSTOM for GUEST type
     int match;          /* enum virCPUMatch */
     virCPUCheck check;
-    virArch arch;
+    virArch arch;      // arch element(not attr) only available for HOST type
+
+    // CUSTOM mode
+    // below these four only valid if mode is not host-passthrough
     char *model;
     char *vendor_id;    /* vendor id returned by CPUID in the guest */
     int fallback;       /* enum virCPUFallback */
     char *vendor;
-    unsigned int microcodeVersion;
+
+    // topology
+    unsigned int microcodeVersion; // host CPU info,get from /proc/cpuinfo, not from xml
     unsigned int sockets;
     unsigned int cores;
     unsigned int threads;
+
+    // features and cache for guest cpu
     size_t nfeatures;
     size_t nfeatures_max;
     virCPUFeatureDefPtr features;
-    virCPUCacheDefPtr cache;
+    virCPUCacheDefPtr cache; // how to build guest cpu cache, simulate, passthrough?? at most one
 };
 
 

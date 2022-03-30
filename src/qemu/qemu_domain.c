@@ -3020,6 +3020,7 @@ qemuDomainDefNamespaceParse(xmlDocPtr xml ATTRIBUTE_UNUSED,
         goto error;
 
     for (i = 0; i < n; i++) {
+        // args for qemu
         cmd->args[cmd->num_args] = virXMLPropString(nodes[i], "value");
         if (cmd->args[cmd->num_args] == NULL) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
@@ -3068,6 +3069,7 @@ qemuDomainDefNamespaceParse(xmlDocPtr xml ATTRIBUTE_UNUSED,
             goto error;
         }
 
+        // env for qemu
         cmd->env_name[cmd->num_env] = tmp;
 
         cmd->env_value[cmd->num_env] = virXMLPropString(nodes[i], "value");
@@ -6928,6 +6930,9 @@ qemuDomainObjEnterMonitorInternal(virQEMUDriverPtr driver,
     /* get monitor lock, hence there is only one job for QMP
      * other QMP async job blocks here
      */
+
+    // if we entered into monitor, that means we get the lock of it
+    // later on processing will only touch monitor, so we unlock vmObj!!!
     virObjectLock(priv->mon);
     virObjectRef(priv->mon);
     // monStart indicates the timestamp of command runs
@@ -6951,6 +6956,8 @@ qemuDomainObjExitMonitorInternal(virQEMUDriverPtr driver,
         /* release monitor lock */
         virObjectUnlock(priv->mon);
 
+    // vm is like a big lock, while monitor is small lock
+    // so if we get vm lock, it's safe to update monitor as well.
     virObjectLock(obj);
     VIR_DEBUG("Exited monitor (mon=%p vm=%p name=%s)",
               priv->mon, obj, obj->def->name);

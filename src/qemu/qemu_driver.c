@@ -1608,7 +1608,6 @@ static virDomainPtr qemuDomainLookupByName(virConnectPtr conn,
     if (virDomainLookupByNameEnsureACL(conn, vm->def) < 0)
         goto cleanup;
 
-    sleep(1000);
     dom = virGetDomain(conn, vm->def->name, vm->def->uuid, vm->def->id);
 
  cleanup:
@@ -11202,9 +11201,11 @@ qemuDomainBlocksStatsGather(virQEMUDriverPtr driver,
             goto cleanup;
     }
 
+    // get monitor lock and unlock vm
     qemuDomainObjEnterMonitor(driver, vm);
     /* call QMP function defined at qemu- */
     nstats = qemuMonitorGetAllBlockStatsInfo(priv->mon, &blockstats, false);
+    // unlock monitor and relock vm
     if (qemuDomainObjExitMonitor(driver, vm) < 0 || nstats < 0)
         goto cleanup;
 
@@ -11249,6 +11250,8 @@ qemuDomainBlockStats(virDomainPtr dom,
     int ret = -1;
     virDomainObjPtr vm;
 
+    // for each API, we firs get the vm lock, it's mutex, other api will block
+    // if we operates on vm fiedls.
     if (!(vm = qemuDomObjFromDomain(dom)))
         goto cleanup;
 
@@ -11261,6 +11264,9 @@ qemuDomainBlockStats(virDomainPtr dom,
     if (virDomainObjCheckActive(vm) < 0)
         goto endjob;
 
+    // we we goes into monitor, after goes into monitor we unlock vm
+    // other thread can update vm except monitor part, when quit monitor
+    // relock vm.
     if (qemuDomainBlocksStatsGather(driver, vm, path, &blockstats) < 0)
         goto endjob;
 
@@ -11281,6 +11287,7 @@ qemuDomainBlockStats(virDomainPtr dom,
     qemuDomainObjEndJob(driver, vm);
 
  cleanup:
+    // unlock vm
     virDomainObjEndAPI(&vm);
     VIR_FREE(blockstats);
     return ret;

@@ -68,6 +68,12 @@ struct _virSysinfoMemoryDef {
 typedef struct _virSysinfoBIOSDef virSysinfoBIOSDef;
 typedef virSysinfoBIOSDef *virSysinfoBIOSDefPtr;
 struct _virSysinfoBIOSDef {
+    /*
+     * <sysinfo type='smbios'>
+     *   <bios>
+     *     <entry name='vendor'>LENOVO</entry>
+     *   </bios>
+     */
     char *vendor;
     char *version;
     char *date;
@@ -77,6 +83,14 @@ struct _virSysinfoBIOSDef {
 typedef struct _virSysinfoSystemDef virSysinfoSystemDef;
 typedef virSysinfoSystemDef *virSysinfoSystemDefPtr;
 struct _virSysinfoSystemDef {
+    /*
+     * <sysinfo type='smbios'>
+     *   <system>
+     *     <entry name='manufacturer'>Fedora</entry>
+     *     <entry name='product'>Virt-Manager</entry>
+     *     <entry name='version'>0.9.4</entry>
+     *   </system>
+     */
     char *manufacturer;
     char *product;
     char *version;
@@ -89,6 +103,16 @@ struct _virSysinfoSystemDef {
 typedef struct _virSysinfoBaseBoardDef virSysinfoBaseBoardDef;
 typedef virSysinfoBaseBoardDef *virSysinfoBaseBoardDefPtr;
 struct _virSysinfoBaseBoardDef {
+    /*
+     * <sysinfo type="smbios">
+     *   <baseBoard>
+     *     <entry name='manufacturer'>LENOVO</entry>
+     *     <entry name='product'>20BE0061MC</entry>
+     *     <entry name='version'>0B98401 Pro</entry>
+     *     <entry name='serial'>W1KS427111E</entry>
+     *   </baseBoard>
+     */
+
     char *manufacturer;
     char *product;
     char *version;
@@ -101,6 +125,16 @@ struct _virSysinfoBaseBoardDef {
 typedef struct _virSysinfoChassisDef virSysinfoChassisDef;
 typedef virSysinfoChassisDef *virSysinfoChassisDefPtr;
 struct _virSysinfoChassisDef {
+    /*
+     * <sysinfo type='smbios'>
+     *   <chassis>
+     *     <entry name='manufacturer'>Dell Inc.</entry>
+     *     <entry name='version'>2.12</entry>
+     *     <entry name='serial'>65X0XF2</entry>
+     *     <entry name='asset'>40000101</entry>
+     *     <entry name='sku'>Type3Sku1</entry>
+     *   </chassis>
+     */
     char *manufacturer;
     char *version;
     char *serial;
@@ -111,6 +145,13 @@ struct _virSysinfoChassisDef {
 typedef struct _virSysinfoOEMStringsDef virSysinfoOEMStringsDef;
 typedef virSysinfoOEMStringsDef *virSysinfoOEMStringsDefPtr;
 struct _virSysinfoOEMStringsDef {
+    /*
+     * <sysinfo type='smbios'>
+     *   <oemStrings>
+     *     <entry>myappname:some arbitrary data</entry>
+     *     <entry>otherappname:more arbitrary data</entry>
+     *   </oemStrings>
+     */
     size_t nvalues;
     char **values;
 };
@@ -118,6 +159,40 @@ struct _virSysinfoOEMStringsDef {
 typedef struct _virSysinfoDef virSysinfoDef;
 typedef virSysinfoDef *virSysinfoDefPtr;
 struct _virSysinfoDef {
+    /*
+     *
+     * <os>
+     *   <smbios mode='sysinfo'/>
+     *   ...
+     * </os>
+     * <sysinfo type='smbios'>
+     *   <bios>
+     *     <entry name='vendor'>LENOVO</entry>
+     *   </bios>
+     *   <system>
+     *     <entry name='manufacturer'>Fedora</entry>
+     *     <entry name='product'>Virt-Manager</entry>
+     *     <entry name='version'>0.9.4</entry>
+     *   </system>
+     *   <baseBoard>
+     *     <entry name='manufacturer'>LENOVO</entry>
+     *     <entry name='product'>20BE0061MC</entry>
+     *     <entry name='version'>0B98401 Pro</entry>
+     *     <entry name='serial'>W1KS427111E</entry>
+     *   </baseBoard>
+     *   <chassis>
+     *     <entry name='manufacturer'>Dell Inc.</entry>
+     *     <entry name='version'>2.12</entry>
+     *     <entry name='serial'>65X0XF2</entry>
+     *     <entry name='asset'>40000101</entry>
+     *     <entry name='sku'>Type3Sku1</entry>
+     *   </chassis>
+     *   <oemStrings>
+     *     <entry>myappname:some arbitrary data</entry>
+     *     <entry>otherappname:more arbitrary data</entry>
+     *   </oemStrings>
+     * </sysinfo>
+     */
     int type;
 
     virSysinfoBIOSDefPtr bios;

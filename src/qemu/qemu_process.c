@@ -2155,7 +2155,8 @@ qemuProcessWaitForMonitor(virQEMUDriverPtr driver,
  cleanup:
     virHashFree(info);
 
-    // if we can't connect with monitor, kill qemu process!!!
+    // if we can't connect with monitor, kill with signal 0 to check if process exists or not
+    // it' not kill process at all
     if (logCtxt && kill(vm->pid, 0) == -1 && errno == ESRCH) {
         qemuProcessReportLogError(logCtxt,
                                   _("process exited while connecting to monitor"));
@@ -6287,6 +6288,7 @@ qemuProcessLaunch(virConnectPtr conn,
     // OR opened by virtlogd, then passed back to libvirtd by rpc reply
     logfile = qemuDomainLogContextGetWriteFD(logCtxt);
 
+    // vmgenid https://github.com/qemu/qemu/blob/master/docs/specs/vmgenid.txt
     if (qemuProcessGenID(vm, flags) < 0)
         goto cleanup;
 
@@ -6456,6 +6458,19 @@ qemuProcessLaunch(virConnectPtr conn,
         goto cleanup;
 
     VIR_DEBUG("Setting up managed PR daemon");
+    /*
+     * pr runs as a daemon for storage
+     *
+     * pr: persistent reservation
+     *  <source dev='/dev/sda'>
+     *    <slices>
+     *      <slice type='storage' offset='12345' size='123'/>
+     *    </slices>
+     *    <reservations managed='no'>
+     *      <source type='unix' path='/path/to/qemu-pr-helper' mode='client'/>
+     *    </reservations>
+     *  </source>
+     */
     if (virDomainDefHasManagedPR(vm->def) &&
         qemuProcessStartManagedPRDaemon(vm) < 0)
         goto cleanup;
@@ -6551,7 +6566,7 @@ qemuProcessLaunch(virConnectPtr conn,
         goto cleanup;
 
     VIR_DEBUG("Setting global CPU cgroup (if required)");
-    // set cpu quota, period for all domain, but per vcpu
+    // set cpu quota, period for domain, not per vcpu
     if (qemuSetupGlobalCpuCgroup(vm) < 0)
         goto cleanup;
 

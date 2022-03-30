@@ -280,6 +280,23 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
 
     *cpu = NULL;
 
+    /*
+     * <domain>
+     *  <cpu match='exact'>
+     *   <model fallback='allow'>core2duo</model>
+     *   <vendor>Intel</vendor>
+     *   <topology sockets='1' cores='2' threads='1'/>
+     *   <cache level='3' mode='emulate'/>
+     *   <feature policy='disable' name='lahf_lm'/>
+     *   <numa>
+     *     <cell id='0' cpus='0-3' memory='512000' unit='KiB' discard='yes'/>
+     *     <cell id='1' cpus='4-7' memory='512000' unit='KiB' memAccess='shared'/>
+     *   </numa>
+     *  </cpu>
+     * </domain>
+     */
+
+    // set context node to cpu node
     if (xpath && !(ctxt->node = virXPathNode(xpath, ctxt))) {
         ret = 0;
         goto cleanup;
@@ -291,6 +308,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         goto cleanup;
     }
 
+    // virCPUDef
     if (VIR_ALLOC(def) < 0)
         goto cleanup;
 
@@ -317,6 +335,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
                            _("Attribute mode is only allowed for guest CPU"));
             goto cleanup;
         } else {
+            // validate mode if set
             def->mode = virCPUModeTypeFromString(cpuMode);
 
             if (def->mode < 0) {
@@ -332,6 +351,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         if (def->type == VIR_CPU_TYPE_HOST)
             def->mode = -1;
         else
+            // default fo guest cpu
             def->mode = VIR_CPU_MODE_CUSTOM;
     }
 
@@ -340,11 +360,13 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         char *check;
 
         if (!match) {
+            // if not set, default ones
             if (virXPathBoolean("boolean(./model)", ctxt))
                 def->match = VIR_CPU_MATCH_EXACT;
             else
                 def->match = -1;
         } else {
+            // validate match if set
             def->match = virCPUMatchTypeFromString(match);
             VIR_FREE(match);
 
@@ -357,6 +379,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         }
 
         if ((check = virXMLPropString(ctxt->node, "check"))) {
+            // validate if set
             int value = virCPUCheckTypeFromString(check);
             VIR_FREE(check);
 
@@ -377,6 +400,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
                            _("Missing CPU architecture"));
             goto cleanup;
         }
+        // check support arch
         if ((def->arch = virArchFromString(arch)) == VIR_ARCH_NONE) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("Unknown architecture %s"), arch);
@@ -396,6 +420,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
 
     if (!(def->model = virXPathString("string(./model[1])", ctxt)) &&
         def->type == VIR_CPU_TYPE_HOST) {
+        // model is a must for HOST type
         virReportError(VIR_ERR_XML_ERROR, "%s",
                         _("Missing CPU model name"));
         goto cleanup;
@@ -405,6 +430,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         def->mode != VIR_CPU_MODE_HOST_PASSTHROUGH) {
 
         if ((fallback = virXPathString("string(./model[1]/@fallback)", ctxt))) {
+            // validate fallback
             if ((def->fallback = virCPUFallbackTypeFromString(fallback)) < 0) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                                _("Invalid fallback attribute"));
@@ -435,12 +461,14 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
 
     def->vendor = virXPathString("string(./vendor[1])", ctxt);
     if (def->vendor && !def->model) {
+        //validate depends
         virReportError(VIR_ERR_XML_ERROR, "%s",
                        _("CPU vendor specified without CPU model"));
         goto cleanup;
     }
 
     if (virXPathNode("./topology[1]", ctxt)) {
+        // if has topology, which must have these attributes
         unsigned long ul;
 
         if (virXPathULong("string(./topology[1]/@sockets)", ctxt, &ul) < 0) {
@@ -465,16 +493,19 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         def->threads = (unsigned int) ul;
 
         if (!def->sockets || !def->cores || !def->threads) {
+            // must set these three with non zero value!!!
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("Invalid CPU topology"));
             goto cleanup;
         }
     }
 
+    // feature under cpu(guest cpu features)
     if ((n = virXPathNodeSet("./feature", ctxt, &nodes)) < 0)
         goto cleanup;
 
     if (n > 0) {
+        // must set cpu model, as it's required by guest cpu feature
         if (!def->model && def->mode == VIR_CPU_MODE_CUSTOM) {
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("Non-empty feature list specified without "
@@ -499,8 +530,10 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
 
             strpolicy = virXMLPropString(nodes[i], "policy");
             if (strpolicy == NULL)
+                // policy attr is optional
                 policy = VIR_CPU_FEATURE_REQUIRE;
             else
+                // validate plicy if set
                 policy = virCPUFeaturePolicyTypeFromString(strpolicy);
             VIR_FREE(strpolicy);
 
@@ -514,6 +547,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         }
 
         if (!(name = virXMLPropString(nodes[i], "name")) || *name == 0) {
+            // must set feature name
             VIR_FREE(name);
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("Invalid CPU feature name"));
@@ -521,6 +555,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         }
 
         for (j = 0; j < i; j++) {
+            // validate, each feature must set once!!!
             if (STREQ(name, def->features[j].name)) {
                 virReportError(VIR_ERR_XML_ERROR,
                                _("CPU feature '%s' specified more than once"),
@@ -530,6 +565,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
             }
         }
 
+        // add on cpu features
         def->features[i].name = name;
         def->features[i].policy = policy;
     }
@@ -537,6 +573,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
     if (virXPathInt("count(./cache)", ctxt, &n) < 0) {
         goto cleanup;
     } else if (n > 1) {
+        // validate at most one cpu cache
         virReportError(VIR_ERR_XML_ERROR, "%s",
                        _("at most one CPU cache element may be specified"));
         goto cleanup;
@@ -546,6 +583,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         int mode;
 
         if (virXPathBoolean("boolean(./cache[1]/@level)", ctxt) == 1 &&
+                // validate cache level
             (virXPathInt("string(./cache[1]/@level)", ctxt, &level) < 0 ||
              level < 1 || level > 3)) {
             virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -554,6 +592,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
         }
 
         if (!(strmode = virXPathString("string(./cache[1]/@mode)", ctxt)) ||
+                // validate cpu mode, must set
             (mode = virCPUCacheModeTypeFromString(strmode)) < 0) {
             VIR_FREE(strmode);
             virReportError(VIR_ERR_XML_ERROR, "%s",

@@ -1869,10 +1869,12 @@ VIR_ENUM_DECL(virDomainLockFailure)
 typedef struct _virDomainBIOSDef virDomainBIOSDef;
 typedef virDomainBIOSDef *virDomainBIOSDefPtr;
 struct _virDomainBIOSDef {
+    //  <os>
+    //    <bios useserial='yes' rebootTimeout='0'/>
     int useserial; /* enum virTristateBool */
     /* reboot-timeout parameters */
-    bool rt_set;
-    int rt_delay;
+    bool rt_set; // if rebootTimeout is set, it's true
+    int rt_delay; // attr: rebootTimeout
 };
 
 typedef enum {
@@ -1887,10 +1889,16 @@ VIR_ENUM_DECL(virDomainLoader)
 typedef struct _virDomainLoaderDef virDomainLoaderDef;
 typedef virDomainLoaderDef *virDomainLoaderDefPtr;
 struct _virDomainLoaderDef {
+    // <domain>
+    //   <os>
+    //     <loader readonly='yes' secure='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
+    //     <nvram template='/usr/share/OVMF/OVMF_VARS.fd'>/var/lib/libvirt/nvram/guest_VARS.fd</nvram>
     char *path;
     int readonly;   /* enum virTristateBool */
     virDomainLoader type;
     int secure;     /* enum virTristateBool */
+
+    //
     char *nvram;    /* path to non-volatile RAM */
     char *templt;   /* user override of path to master nvram */
 };
@@ -1929,31 +1937,59 @@ struct _virDomainOSEnv {
 typedef struct _virDomainOSDef virDomainOSDef;
 typedef virDomainOSDef *virDomainOSDefPtr;
 struct _virDomainOSDef {
-    int type;
-    virArch arch;
-    char *machine;
+    // NOTE: as os has different type like hvm, xen, exe
+    // so only part of fields are set for specific os type
+    //
+    int type; // <os><type>hvm</type></os>
+    virArch arch; // <os><type arch='x86_64'>hvm</type></os>
+    char *machine; // <os><type machine='pc-i440fx-rhel7.4.0'>hvm</type></os>
+
+    // boot device
+    // <os>
+    //  <boot dev='hd'/>
+    //  <boot dev='cdrom'/>
+    //  <bootmenu enable='yes' timeout='3000'/>
     size_t nBootDevs;
     int bootDevs[VIR_DOMAIN_BOOT_LAST];
-    int bootmenu; /* enum virTristateBool */
-    unsigned int bm_timeout;
+
+    int bootmenu; /* enum virTristateBool */ // enable boot menu or not
+    unsigned int bm_timeout; // timeout for boot emnu
     bool bm_timeout_set;
+
     char *init;
     char **initargv;
     virDomainOSEnvPtr *initenv;
     char *initdir;
     char *inituser;
     char *initgroup;
+    /* if boots from disk, most of theses are not set.
+     * <domain>
+     *  <os>
+     *    <type>hvm</type>
+     *    <loader>/usr/lib/xen/boot/hvmloader</loader>
+     *    <kernel>/root/f8-i386-vmlinuz</kernel>
+     *    <initrd>/root/f8-i386-initrd</initrd>
+     *    <cmdline>console=ttyS0 ks=http://example.com/f8-i386/os/</cmdline>
+     *    <dtb>/root/ppc.dtb</dtb>
+     *    <acpi>
+     *      <table type='slic'>/path/to/slic.dat</table>
+     *    </acpi>
+     *  </os>
+     */
     char *kernel;
     char *initrd;
     char *cmdline;
     char *dtb;
     char *root;
-    char *slic_table;
+    char *slic_table; // ./os/acpi/table
     virDomainLoaderDefPtr loader;
-    char *bootloader;
-    char *bootloaderArgs;
-    int smbios_mode;
 
+    char *bootloader; // <domain> <bootloader>/usr/bin/pygrub</bootloader>
+    char *bootloaderArgs; // <domain> <bootloader_args>--append single</bootloader_args>
+    int smbios_mode; //<domain><os><smbios mode="sysinfo">
+
+    // <os>
+    //   <bios useserial='yes' rebootTimeout='0'/>
     virDomainBIOSDef bios;
 };
 
@@ -2021,16 +2057,24 @@ struct _virDomainTimerCatchupDef {
 typedef struct _virDomainTimerDef virDomainTimerDef;
 typedef virDomainTimerDef *virDomainTimerDefPtr;
 struct _virDomainTimerDef {
+    /*
+     *     <timer name='rtc' tickpolicy='catchup' track='guest'>
+     *       <catchup threshold='123' slew='120' limit='10000'/>
+     *     </timer>
+     *
+     *     NOTE:some attribute only valid for particular timer!!!
+     */
     int name;
     int present;    /* unspecified = -1, no = 0, yes = 1 */
     int tickpolicy; /* none|catchup|merge|discard */
 
-    virDomainTimerCatchupDef catchup;
+    virDomainTimerCatchupDef catchup; // catchup dettails when policy is 'catchup'
 
     /* track is only valid for name='platform|rtc' */
     int track;  /* host|guest */
 
     /* frequency & mode are only valid for name='tsc' */
+    // <timer name='tsc' tickpolicy='catchup' frequency=10000, mode='auto'>
     unsigned long frequency; /* in Hz, unspecified = 0 */
     int mode;       /* auto|native|emulate|paravirt */
 };
@@ -2054,7 +2098,16 @@ typedef enum {
 typedef struct _virDomainClockDef virDomainClockDef;
 typedef virDomainClockDef *virDomainClockDefPtr;
 struct _virDomainClockDef {
-    int offset;
+    /* <domain>
+     *   <clock offset='localtime'>
+     *     <timer name='rtc' tickpolicy='catchup' track='guest'>
+     *       <catchup threshold='123' slew='120' limit='10000'/>
+     *     </timer>
+     *     <timer name='pit' tickpolicy='delay'/>
+     *   </clock>
+     *
+     */
+    int offset; //sync with host or utc+X, timezone to syncup
 
     union {
         /* Bug-compatibility-mode for Xen utc|localtime */
@@ -2086,7 +2139,28 @@ struct _virDomainClockDef {
 typedef struct _virBlkioDevice virBlkioDevice;
 typedef virBlkioDevice *virBlkioDevicePtr;
 struct _virBlkioDevice {
-    char *path;
+    /*
+     * <domain>
+     *   ...
+     *   <blkiotune>
+     *     <device>
+     *       <path>/dev/sda</path>
+     *       <weight>1000</weight>
+     *     </device>
+     *     <device>
+     *       <path>/dev/sdb</path>
+     *       <weight>500</weight>
+     *       <read_bytes_sec>10000</read_bytes_sec>
+     *       <write_bytes_sec>10000</write_bytes_sec>
+     *       <read_iops_sec>20000</read_iops_sec>
+     *       <write_iops_sec>20000</write_iops_sec>
+     *     </device>
+     *   </blkiotune>
+     *   ...
+     * </domain>
+     */
+
+    char *path; // must be set
     unsigned int weight;
     unsigned int riops;
     unsigned int wiops;
@@ -2159,6 +2233,14 @@ struct _virDomainIdMapEntry {
 };
 
 struct _virDomainIdMapDef {
+    /*
+     * <idmap>
+     *  <uid start='0' target='1000' count='10'/>
+     *  <gid start='0' target='1000' count='10'/>
+     * </idmap>
+     */
+    // maping guest user and group to host(target)
+    // count: how many users can be mapped to target.
     size_t nuidmap;
     virDomainIdMapEntryPtr uidmap;
 
@@ -2189,13 +2271,19 @@ void virBlkioDeviceArrayClear(virBlkioDevicePtr deviceWeights,
 typedef struct _virDomainResourceDef virDomainResourceDef;
 typedef virDomainResourceDef *virDomainResourceDefPtr;
 struct _virDomainResourceDef {
-    char *partition;
+   /*
+    * <domain>
+    *   <resource>
+    *     <partition>/virtualmachines/production</partition>
+    */
+    char *partition; // content of partition element
 };
 
 typedef struct _virDomainHugePage virDomainHugePage;
 typedef virDomainHugePage *virDomainHugePagePtr;
 
 struct _virDomainHugePage {
+    // convert from <page></page> under hugepages
     virBitmapPtr nodemask;      /* guest's NUMA node mask */
     unsigned long long size;    /* hugepage size in KiB */
 };
@@ -2205,13 +2293,34 @@ struct _virDomainHugePage {
 typedef struct _virDomainIOThreadIDDef virDomainIOThreadIDDef;
 typedef virDomainIOThreadIDDef *virDomainIOThreadIDDefPtr;
 
+/* <domain>
+ *   <iothreads>2</iothreads>
+ *     <iothreadids>
+ *       <iothread id='1'/>
+ *       <iothread id='3'/>
+ *     </iothreadids>
+ * </domain>
+ */
 struct _virDomainIOThreadIDDef {
+    // each iothread
     bool autofill;
-    unsigned int iothread_id;
-    int thread_id;
-    virBitmapPtr cpumask;
+    unsigned int iothread_id; // id attr set by user
+    int thread_id; // thread id get from qemu when add one io thread
+    /*
+     *
+     * <domain>
+     *   <cputune>
+     *     <iothreadpin iothread="1" cpuset="5,6"/>
+     *   </cputune>
+     * </domain>
+    */
+    virBitmapPtr cpumask; // cpuset attr in iothread pin
 
-    virDomainThreadSchedParam sched;
+    /* <domain>
+     *   <cputune>
+     *    <iothreadsched iothreads='2' scheduler='batch'/>
+     */
+    virDomainThreadSchedParam sched; // sched applies to these threads.
 };
 
 void virDomainIOThreadIDDefFree(virDomainIOThreadIDDefPtr def);
@@ -2221,8 +2330,22 @@ typedef struct _virDomainCputune virDomainCputune;
 typedef virDomainCputune *virDomainCputunePtr;
 
 struct _virDomainCputune {
+    /*
+     * <domain>
+     *   <cputune>
+     *     <shares>2048</shares>
+     *     <period>1000000</period>
+     *     <quota>-1</quota>
+     *     <global_period>1000000</global_period>
+     *     <global_quota>-1</global_quota>
+     *     <emulator_period>1000000</emulator_period>
+     *     <emulator_quota>-1</emulator_quota>
+     *     <iothread_period>1000000</iothread_period>
+     *     <iothread_quota>-1</iothread_quota>
+     *     <emulatorpin cpuset="1-3"/>
+     */
     unsigned long long shares;
-    bool sharesSpecified;
+    bool sharesSpecified; // if shares is not set, true
     // period for each vcpu
     unsigned long long period;
     long long quota;
@@ -2241,8 +2364,8 @@ typedef struct _virDomainCachetuneDef virDomainCachetuneDef;
 typedef virDomainCachetuneDef *virDomainCachetuneDefPtr;
 
 struct _virDomainCachetuneDef {
-    virBitmapPtr vcpus;
-    virResctrlAllocPtr alloc;
+    virBitmapPtr vcpus; //  <cachetune vcpus='0-3'>
+    virResctrlAllocPtr alloc; // restrict cache
 };
 
 
@@ -2250,13 +2373,33 @@ typedef struct _virDomainVcpuDef virDomainVcpuDef;
 typedef virDomainVcpuDef *virDomainVcpuDefPtr;
 
 struct _virDomainVcpuDef {
-    bool online;
+    /*
+     * <domain>
+     *   <vcpu placement='static' cpuset="1-4,^3,6" current="1">2</vcpu> // global setting, each vcpu has has it own setting in <cputune>
+     *     <vcpus>
+     *       <vcpu id='0' enabled='yes' hotpluggable='no' order='1'/>
+     *       <vcpu id='1' enabled='no' hotpluggable='yes'/>
+     *     </vcpus>
+     * </domain>
+     */
+    bool online; // enabled: yes means online
     virTristateBool hotpluggable;
     unsigned int order;
 
-    virBitmapPtr cpumask;
+    /*
+     * <domain>
+     *   <cputune>
+     *     <vcpupin vcpu="0" cpuset="1-4,^2"/>
+     *   </cputune>
+     * <domain>
+     */
+    virBitmapPtr cpumask; // cpuset attr of vcpupin, which host cpu to run vcpu per-vcpu setting
 
-    virDomainThreadSchedParam sched;
+    /* <domain>
+     *   <cputune>
+     *    <vcpusched vcpus='0-4,^3' scheduler='fifo' priority='1'/>
+     */
+    virDomainThreadSchedParam sched; //vcpusched under cputune, vcpus means sched applies these vcpus
 
     virObjectPtr privateData;
 };
@@ -2265,6 +2408,16 @@ typedef struct _virDomainBlkiotune virDomainBlkiotune;
 typedef virDomainBlkiotune *virDomainBlkiotunePtr;
 
 struct _virDomainBlkiotune {
+    /*
+     * <domain>
+     *   ...
+     *   <blkiotune>
+     *     <weight>800</weight>
+     *   </blkiotune>
+     *   ...
+     * </domain>
+     *
+     */
     unsigned int weight;
 
     size_t ndevices;
@@ -2277,29 +2430,59 @@ typedef virDomainMemtune *virDomainMemtunePtr;
 struct _virDomainMemtune {
     /* total memory size including memory modules in kibibytes, this field
      * should be accessed only via accessors */
-    unsigned long long total_memory;
+    unsigned long long total_memory; //<domain><memory unit='KiB'>524288</memory></domain>
+    //<domain> <currentMemory unit='KiB'>524288</currentMemory> </domain>
     unsigned long long cur_balloon; /* in kibibytes, capped at ulong thanks
                                        to virDomainGetInfo */
-
+    // hugepages
+    /*
+     * <domain>
+     *   <memoryBacking>
+     *     <hugepages>
+     *       <page size="1" unit="G" nodeset="0-3,5"/>
+     *       <page size="2" unit="M" nodeset="4"/>
+     *     </hugepages>
+     *   <memoryBacking>
+     * <domain>
+     */
     virDomainHugePagePtr hugepages;
     size_t nhugepages;
 
     /* maximum supported memory for a guest, for hotplugging */
-    unsigned long long max_memory; /* in kibibytes */
-    unsigned int memory_slots; /* maximum count of RAM memory slots */
+    unsigned long long max_memory; /* in kibibytes */ // <domain><maxMemory slots='16' unit='KiB'>1524288</maxMemory></domain>
+    unsigned int memory_slots; /* maximum count of RAM memory slots */  // <domain><maxMemory slots='16' unit='KiB'>1524288</maxMemory></domain>
 
+    //<domain><memoryBacking><nosharepages/></<memoryBacking></domain>
     bool nosharepages;
+    // xml element without value, autoclose tag.
+    //<domain><memoryBacking><locked/></<memoryBacking></domain>
     bool locked;
-    int dump_core; /* enum virTristateSwitch */
+    int dump_core; /* enum virTristateSwitch */ //<domain><memory unit='KiB' dumpCore="on">524288</memory></domain>
+
+    /*
+     * <domain>
+     * ...
+     *   <memtune>
+     *     <hard_limit unit='G'>1</hard_limit>
+     *     <soft_limit unit='M'>128</soft_limit>
+     *     <swap_hard_limit unit='G'>2</swap_hard_limit>
+     *     <min_guarantee unit='bytes'>67108864</min_guarantee>
+     *   </memtune>
+     * </domain>
+     */
     unsigned long long hard_limit; /* in kibibytes, limit at off_t bytes */
     unsigned long long soft_limit; /* in kibibytes, limit at off_t bytes */
     unsigned long long min_guarantee; /* in kibibytes, limit at off_t bytes */
     unsigned long long swap_hard_limit; /* in kibibytes, limit at off_t bytes */
 
-    int source; /* enum virDomainMemorySource */
-    int access; /* enum virDomainMemoryAccess */
-    int allocation; /* enum virDomainMemoryAllocation */
+    // <domain><memoryBacking><source type="file|anonymous|memfd"/></memoryBacking></domain>
+    int source; /* enum virDomainMemorySource */ // attribute type
+    // <domain><memoryBacking><access mode="shared|private"/></memoryBacking></domain>
+    int access; /* enum virDomainMemoryAccess */ // attribute mode
+    // <domain><memoryBacking><allocation mode="immediate|ondemand" threads='8'/></memoryBacking></domain>
+    int allocation; /* enum virDomainMemoryAllocation */ //attribute mode
 
+    //<domain><memoryBacking><discard/></<memoryBacking></domain>
     virTristateBool discard;
 };
 
@@ -2308,8 +2491,8 @@ typedef virDomainPowerManagement *virDomainPowerManagementPtr;
 
 struct _virDomainPowerManagement {
     /* These options are of type enum virTristateBool */
-    int s3;
-    int s4;
+    int s3; // xpath: domain/pm/suspend-to-mem/@enabled
+    int s4; // xpath: domain/pm/suspend-to-disk/@enabled
 };
 
 typedef struct _virDomainPerfDef virDomainPerfDef;
@@ -2391,78 +2574,187 @@ struct _virDomainVirtioOptions {
 typedef struct _virDomainDef virDomainDef;
 typedef virDomainDef *virDomainDefPtr;
 struct _virDomainDef {
-    virDomainVirtType virtType;
-    int id;
-    unsigned char uuid[VIR_UUID_BUFLEN];
+    virDomainVirtType virtType; // xml: <domain type='kvm'>
+    int id; // xml: <domain id=2>
+    unsigned char uuid[VIR_UUID_BUFLEN]; //<domain><uuid>e833878d-073d-4226-8ea9-932ead8362ce</uuid></domain>
 
     /* Since 4.4.0 , the genid element can be used to add a Virtual Machine Generation ID which
      * exposes a 128-bit, cryptographically random, integer value identifier,
      * referred to as a Globally Unique Identifier (GUID) using the same format as the uuid.
      * The value is used to help notify the guest operating system when the virtual machine is re-executing something that has already executed before
      */
-    unsigned char genid[VIR_UUID_BUFLEN];
+    unsigned char genid[VIR_UUID_BUFLEN]; //<domain><genid>43dc0cf8-809b-4adb-9bea-a9abb5f3d90e</genid></domain>
     bool genidRequested;
     bool genidGenerated;
 
-    char *name;
-    char *title;
-    char *description;
+    char *name; // <domain><name>centos</name></domain>
+    char *title; //<domain><title>desp</title></domain>
+    char *description; //<domain><description>Some</description></domain>
 
     virDomainBlkiotune blkio;
     virDomainMemtune mem;
-
-    virDomainVcpuDefPtr *vcpus;
-    size_t maxvcpus;
+    // <domain>
+    //   <vcpu placement='static' cpuset="1-4,^3,6" current="1">2</vcpu>
+    //    <vcpus>
+    //      <vcpu id='0' enabled='yes' hotpluggable='no' order='1'/>
+    //      <vcpu id='1' enabled='no' hotpluggable='yes'/>
+    //    </vcpus>
+    // </domain>
+    virDomainVcpuDefPtr *vcpus; // for each vcpu create such instance
+    size_t maxvcpus; // content of vcpu
     /* set if the vcpu definition was specified individually */
-    bool individualvcpus;
-    int placement_mode;
-    virBitmapPtr cpumask;
+    bool individualvcpus; // if vcpus is set, it's true
 
+    int placement_mode; // placement of vcpu under domain
+    virBitmapPtr cpumask; // cpuset of vcpu under domain
+
+    /*
+     * <domain>
+     *   <iothreads>1</iothreads>
+     *   <iothreadids>
+     *      <iothread id="2"/>
+         </iothreadids>
+     * </domain>
+     */
     size_t niothreadids;
     virDomainIOThreadIDDefPtr *iothreadids;
 
-    virDomainCputune cputune;
+    virDomainCputune cputune; // <domain><cputune></cputune></domain>
 
+
+    /*
+     * <domain>
+     *   <cputune>
+     *     <cachetune vcpus='0-3'>
+     */
     virDomainCachetuneDefPtr *cachetunes;
     size_t ncachetunes;
 
-    virDomainNumaPtr numa;
-    virDomainResourceDefPtr resource;
+    /* <domain>
+     *   <cpu match="exact" mode="host-passthrough">
+     *      <topology sockets="1" cores="6" threads="2"/>
+     *      <numa>
+     *        <cell id="0" cpus="0-11" memory="50331648" unit="KiB" memAccess="shared"/>
+     */
+    virDomainNumaPtr numa; // numa for guest cpu, it's cpu topology for guest!!!
+
+    /*
+     * <domain>
+     *   <resource>
+     *     <partition>/virtualmachines/production</partition>
+     *   </resource>
+     * </domain>
+     */
+    virDomainResourceDefPtr resource; // only one resource supported
+
     virDomainIdMapDef idmap;
 
     /* These 3 are based on virDomainLifeCycleAction enum flags */
+    // all are optional
+    /* <domain>
+    *   <on_poweroff>destroy</on_poweroff>
+    *   <on_reboot>restart</on_reboot>
+    *   <on_crash>restart</on_crash>
+    *   <on_lockfailure>poweroff</on_lockfailure>
+    */
     int onReboot;
     int onPoweroff;
     int onCrash;
 
     int onLockFailure; /* enum virDomainLockFailureAction */
 
+    /*
+     * <pm>
+     *  <suspend-to-disk enabled='no'/>
+     *  <suspend-to-mem enabled='yes'/>
+     *  </pm>
+     */
     virDomainPowerManagement pm;
 
+    // perf setting for performance
+    /*
+     * <perf>
+     *   <event name='cmt' enabled='yes'/>
+     *   <event name='mbmt' enabled='no'/>
+     **
+     */
     virDomainPerfDef perf;
 
+    // <os>
     virDomainOSDef os;
     // qemy binary with full path "/usr/libexec/qemu-kvm"
     char *emulator;
+    /*
+     * <devices>
+     *   <emulator>/usr/lib/xen/bin/qemu-dm</emulator>
+     * </devices>
+    */
+
     /* Most {caps_,hyperv_,kvm_,}feature options utilize a virTristateSwitch
      * to handle support. A few assign specific data values to the option.
      * See virDomainDefFeaturesCheckABIStability() for details. */
-    int features[VIR_DOMAIN_FEATURE_LAST];
+    int features[VIR_DOMAIN_FEATURE_LAST]; // guest features switch/on off. this is used by qemu
+    // <domain><features><acpi/>
+    //
+    /*
+     * <domain>
+     *   <features>
+     *     <capabilities>
+     *     <chown state='on'/>
+     *     <mknod />
+     *     </capabilities>
+     */
+    // caps of domains// NOTE: this is NOT used by qemu at all, other hv uses it
     int caps_features[VIR_DOMAIN_CAPS_FEATURE_LAST];
-    int hyperv_features[VIR_DOMAIN_HYPERV_LAST];
-    int kvm_features[VIR_DOMAIN_KVM_LAST];
-    unsigned int hyperv_spinlocks;
-    virGICVersion gic_version;
-    virDomainHPTResizing hpt_resizing;
-    unsigned long long hpt_maxpagesize; /* Stored in KiB */
-    char *hyperv_vendor_id;
-    int apic_eoi;
 
+    // hypvisor specific
+    int kvm_features[VIR_DOMAIN_KVM_LAST]; // this is used by qemu
+    int hyperv_features[VIR_DOMAIN_HYPERV_LAST];
+    unsigned int hyperv_spinlocks;
+    char *hyperv_vendor_id;
+
+    virGICVersion gic_version; // <domain><features><gic version='2'/>
+    /*
+     * <domain>
+     *   <features>
+     *     <hpt resizing='required'>
+     *       <maxpagesize unit='MiB'>16</maxpagesize>
+     */
+    virDomainHPTResizing hpt_resizing; //
+    unsigned long long hpt_maxpagesize; /* Stored in KiB */
+
+    int apic_eoi; // <domain><features><apic eoi='on'/>
+
+    /*
+     * <domain>
+     *   <features>
+     *    <smm state='on'>
+     *     <tseg unit='MiB'>48</tseg>
+     */
     bool tseg_specified;
     unsigned long long tseg_size;
 
+    // guest clock
     virDomainClockDef clock;
 
+
+///////////////////////////////////////////////////////////////////////////////
+    // ALL belows nxx are embeded in <devices>
+    /*
+     * <domain>
+     *   <devices>
+     *     <emulator>/usr/bin/qemu-kvm</emulator>
+     *     <disk type='file' device='disk'>
+     *       <source file='/var/lib/libvirt/images/demo2.img'/>
+     *       <target dev='hda'/>
+     *     </disk>
+     *     <interface type='network'>
+     *       <source network='default'/>
+     *       <mac address='24:42:53:21:52:45'/>
+     *     </interface>
+     *     <graphics type='vnc' port='-1' keymap='de'/>
+     *   </devices>
+     */
     size_t ngraphics;
     virDomainGraphicsDefPtr *graphics;
 
@@ -2514,7 +2806,7 @@ struct _virDomainDef {
     size_t nhubs;
     virDomainHubDefPtr *hubs;
 
-    size_t nseclabels;
+    size_t nseclabels; // <domain> <seclabel type='dynamic' model='selinux'><baselabel>system_u:system_r:my_svirt_t:s0</baselabel></seclabel> </domain>
     virSecurityLabelDefPtr *seclabels;
 
     size_t nrngs;
@@ -2534,14 +2826,44 @@ struct _virDomainDef {
     virDomainMemballoonDefPtr memballoon;
     virDomainNVRAMDefPtr nvram;
     virDomainTPMDefPtr tpm;
-    virCPUDefPtr cpu;
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+    /* <domain>
+     *   <cpu match="exact" mode="host-passthrough">
+     *      <topology sockets="1" cores="6" threads="2"/>
+     *      <numa>
+     *        <cell id="0" cpus="0-11" memory="50331648" unit="KiB" memAccess="shared"/>
+     */
+    virCPUDefPtr cpu; // guest cpu mode and topology
+
+    /*
+     * <sysinfo type='smbios'>
+     *   <bios>
+     *     <entry name='vendor'>LENOVO</entry>
+     *   </bios>
+     *   <system>
+     *     <entry name='manufacturer'>Fedora</entry>
+     *     <entry name='product'>Virt-Manager</entry>
+     *     <entry name='version'>0.9.4</entry>
+     *   </system>
+     */
     virSysinfoDefPtr sysinfo;
     virDomainRedirFilterDefPtr redirfilter;
     virDomainIOMMUDefPtr iommu;
     virDomainVsockDefPtr vsock;
 
+    // for qemu it's qemuDomainCmdlineDef
+    // qemu args and env that will be passed to qemu-kvm
+
+    /* <domain>
+     * <qemu:commandline>
+     *   <qemu:arg value='-newarg'/>
+     *   <qemu:env name='QEMU_ENV' value='VAL'/>
+     *  </qemu:commandline>
+     */
     void *namespaceData;
-    virDomainXMLNamespace ns;
+    virDomainXMLNamespace ns; // ns handler called from xlmopt: virQEMUDriverDomainXMLNamespace
 
     virDomainKeyWrapDefPtr keywrap;
 

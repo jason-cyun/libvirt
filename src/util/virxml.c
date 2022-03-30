@@ -182,6 +182,7 @@ virXPathLongBase(const char *xpath,
     relnode = ctxt->node;
     obj = xmlXPathEval(BAD_CAST xpath, ctxt);
     ctxt->node = relnode;
+    // as virXPathLongBase needs long value, if xml set with string, convert it if possible.
     if ((obj != NULL) && (obj->type == XPATH_STRING) &&
         (obj->stringval != NULL) && (obj->stringval[0] != 0)) {
         if (virStrToLong_l((char *) obj->stringval, NULL, base, value) < 0)

@@ -188,7 +188,7 @@ struct _virResctrlAllocPerType {
      * in virResctrlAlloc (and most of libvirt) goes with pointer arrays we would
      * have to have one more level of allocation anyway, so this stays faithful to
      * the concept */
-    unsigned long long **sizes;
+    unsigned long long **sizes; //  cache size for all vcpus set for this domain.
     size_t nsizes;
 
     /* Mask for each cache */
@@ -205,11 +205,11 @@ struct _virResctrlAllocPerLevel {
 struct _virResctrlAlloc {
     virObject parent;
 
-    virResctrlAllocPerLevelPtr *levels;
+    virResctrlAllocPerLevelPtr *levels; // different level, 1, 2, 3
     size_t nlevels;
 
     /* The identifier (any unique string for now) */
-    char *id;
+    char *id; // can be set by user, or auto generated  <cachetune vcpus='0-3' id = 'xxx'>
     /* libvirt-generated path in /sys/fs/resctrl for this particular
      * allocation */
     char *path;
@@ -264,6 +264,7 @@ virResctrlOnceInit(void)
     if (!VIR_CLASS_NEW(virResctrlInfo, virClassForObject()))
         return -1;
 
+    // allocate resctrl level and types
     if (!VIR_CLASS_NEW(virResctrlAlloc, virClassForObject()))
         return -1;
 

@@ -1252,6 +1252,7 @@ virDomainBlkioDeviceParseXML(xmlNodePtr root,
                 dev->path = (char *)xmlNodeGetContent(node);
             } else if (virXMLNodeNameEqual(node, "weight")) {
                 c = (char *)xmlNodeGetContent(node);
+                // validate value
                 if (virStrToLong_ui(c, NULL, 10, &dev->weight) < 0) {
                     virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                                    _("could not parse weight %s"),
@@ -1261,6 +1262,7 @@ virDomainBlkioDeviceParseXML(xmlNodePtr root,
                 VIR_FREE(c);
             } else if (virXMLNodeNameEqual(node, "read_bytes_sec")) {
                 c = (char *)xmlNodeGetContent(node);
+                //validate value
                 if (virStrToLong_ull(c, NULL, 10, &dev->rbps) < 0) {
                     virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                                    _("could not parse read bytes sec %s"),
@@ -1299,6 +1301,7 @@ virDomainBlkioDeviceParseXML(xmlNodePtr root,
         }
         node = node->next;
     }
+    // validate, must set path for each device
     if (!dev->path) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("missing per-device path"));
@@ -2875,6 +2878,8 @@ virDomainIOThreadIDDefArrayInit(virDomainDefPtr def,
     /* Same value (either 0 or some number), then we have none to fill in or
      * the iothreadid array was filled from the XML
      */
+
+    // niothreadids are io thread who has details, iothreads are total io threads.
     if (iothreads == def->niothreadids)
         return 0;
 
@@ -2887,6 +2892,7 @@ virDomainIOThreadIDDefArrayInit(virDomainDefPtr def,
      * already provided by the user */
     ignore_value(virBitmapClearBit(thrmap, 0));
     for (i = 0; i < def->niothreadids; i++)
+        // clear io thread bit which has details set by user.
         ignore_value(virBitmapClearBit(thrmap,
                                        def->iothreadids[i]->iothread_id));
 
@@ -2897,12 +2903,15 @@ virDomainIOThreadIDDefArrayInit(virDomainDefPtr def,
     /* Populate iothreadids[] using the set bit number from thrmap */
     while (def->niothreadids < iothreads) {
         if ((nxt = virBitmapNextSetBit(thrmap, nxt)) < 0) {
+            // check next set bit that means that io thread has no user setting, auto fill here.
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("failed to populate iothreadids"));
             goto error;
         }
         if (VIR_ALLOC(iothrid) < 0)
             goto error;
+        // NOTE: thread id starts from 1,
+        // io thread in the array whose thread id may be different with its index of the array.
         iothrid->iothread_id = nxt;
         iothrid->autofill = true;
         def->iothreadids[def->niothreadids++] = iothrid;
@@ -8331,6 +8340,15 @@ virSecurityLabelDefsParseXML(virDomainDefPtr def,
     saved_node = ctxt->node;
 
     /* Allocate a security labels based on XML */
+    // sec label can be several, hence it's set
+    /*
+     * <domain>
+     *   <seclabel type='dynamic' model='selinux'/>
+     *   <seclabel type='dynamic' model='selinux'>
+     *     <baselabel>system_u:system_r:my_svirt_t:s0</baselabel>
+     *   </seclabel>
+     * </domain>
+     */
     if ((n = virXPathNodeSet("./seclabel", ctxt, &list)) < 0)
         goto error;
     if (n == 0)
@@ -9983,8 +10001,10 @@ virDomainParseScaledValue(const char *xpath,
         (!units_xpath &&
          virAsprintf(&xpath_full, "string(%s/@unit)", xpath) < 0))
         goto cleanup;
+    // get unit of memory size
     unit = virXPathString(xpath_full, ctxt);
 
+    // valid unit, can convert it to bytes, here we get value of bytes, no unit
     if (virScaleInteger(&bytes, unit, scale, max) < 0)
         goto cleanup;
 
@@ -10037,8 +10057,10 @@ virDomainParseMemory(const char *xpath,
         return -1;
 
     /* Yes, we really do use kibibytes for our internal sizing.  */
+    // convert bytes to kb by round up to 1024 which is used internal.
     *mem = VIR_DIV_UP(bytes, 1024);
 
+    // valid max value for memory
     if (*mem >= VIR_DIV_UP(max, 1024)) {
         virReportError(VIR_ERR_OVERFLOW, "%s", _("size value too large"));
         return -1;
@@ -15665,29 +15687,34 @@ virDomainPerfEventDefParseXML(virDomainPerfDefPtr perf,
     int event;
     int ret = -1;
 
+    // must set name for perf event
     if (!(name = virXMLPropString(node, "name"))) {
         virReportError(VIR_ERR_XML_ERROR, "%s", _("missing perf event name"));
         goto cleanup;
     }
 
+    // validate event
     if ((event = virPerfEventTypeFromString(name)) < 0) {
         virReportError(VIR_ERR_XML_ERROR,
                        _("'unsupported perf event '%s'"), name);
         goto cleanup;
     }
 
+    // must set same event only once
     if (perf->events[event] != VIR_TRISTATE_BOOL_ABSENT) {
         virReportError(VIR_ERR_XML_ERROR,
                        _("perf event '%s' was already specified"), name);
         goto cleanup;
     }
 
+    // must set enabled attr
     if (!(enabled = virXMLPropString(node, "enabled"))) {
         virReportError(VIR_ERR_XML_ERROR,
                        _("missing state of perf event '%s'"), name);
         goto cleanup;
     }
 
+    // validate enabled value
     if ((perf->events[event] = virTristateBoolTypeFromString(enabled)) < 0) {
         virReportError(VIR_ERR_XML_ERROR,
                        _("invalid state '%s' of perf event '%s'"),
@@ -17741,12 +17768,14 @@ virDomainDefParseBootXML(xmlXPathContextPtr ctxt,
 
     for (i = 0; i < n && i < VIR_DOMAIN_BOOT_LAST; i++) {
         int val;
+        // each boot dev must have dev, it can be dev, cdrom etc
         char *dev = virXMLPropString(nodes[i], "dev");
         if (!dev) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
                            "%s", _("missing boot device"));
             goto cleanup;
         }
+        // validate boot dev type
         if ((val = virDomainBootTypeFromString(dev)) < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown boot device '%s'"),
@@ -17761,6 +17790,7 @@ virDomainDefParseBootXML(xmlXPathContextPtr ctxt,
     if ((node = virXPathNode("./os/bootmenu[1]", ctxt))) {
         tmp = virXMLPropString(node, "enable");
         if (tmp) {
+            // validate bootmenu if set, yes or no
             def->os.bootmenu = virTristateBoolTypeFromString(tmp);
             if (def->os.bootmenu <= 0) {
                 /* In order not to break misconfigured machines, this
@@ -17775,6 +17805,7 @@ virDomainDefParseBootXML(xmlXPathContextPtr ctxt,
 
         tmp = virXMLPropString(node, "timeout");
         if (tmp && def->os.bootmenu == VIR_TRISTATE_BOOL_YES) {
+            // bootmenu timeout of it's enabled
             if (virStrToLong_uip(tmp, NULL, 0, &def->os.bm_timeout) < 0 ||
                 def->os.bm_timeout > 65535) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -17801,6 +17832,7 @@ virDomainDefParseBootXML(xmlXPathContextPtr ctxt,
         if (tmp) {
             /* that was really just for the check if it is there */
 
+            // validate rebootTimeout value
             if (virStrToLong_i(tmp, NULL, 0, &def->os.bios.rt_delay) < 0 ||
                 def->os.bios.rt_delay < -1 || def->os.bios.rt_delay > 65535) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -17855,6 +17887,7 @@ virDomainIdmapDefParseXML(xmlXPathContextPtr ctxt,
 
     for (i = 0; i < num; i++) {
         ctxt->node = node[i];
+        // validate value
         if (virXPathUInt("string(./@start)", ctxt, &idmap[i].start) < 0 ||
             virXPathUInt("string(./@target)", ctxt, &idmap[i].target) < 0 ||
             virXPathUInt("string(./@count)", ctxt, &idmap[i].count) < 0) {
@@ -17902,6 +17935,7 @@ virDomainIOThreadIDDefParseXML(xmlNodePtr node)
     if (VIR_ALLOC(iothrid) < 0)
         return NULL;
 
+    // must set id of io thread
     if (!(tmp = virXMLPropString(node, "id"))) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
                        _("Missing 'id' attribute in <iothread> element"));
@@ -17937,6 +17971,7 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
 
     tmp = virXPathString("string(./iothreads[1])", ctxt);
     if (tmp && virStrToLong_uip(tmp, NULL, 10, &iothreads) < 0) {
+        // validate if set, default is 0
         virReportError(VIR_ERR_XML_ERROR,
                        _("invalid iothreads count '%s'"), tmp);
         goto error;
@@ -17948,9 +17983,11 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
         goto error;
 
     if (n > iothreads)
+        // if iothread details is more then count, reset count
         iothreads = n;
 
     if (n && VIR_ALLOC_N(def->iothreadids, n) < 0)
+        // for each iothread, allocate virDomainIOThreadIDDef
         goto error;
 
     for (i = 0; i < n; i++) {
@@ -17958,6 +17995,7 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
         if (!(iothrid = virDomainIOThreadIDDefParseXML(nodes[i])))
             goto error;
 
+        // validate id, different io thread must with different id
         if (virDomainIOThreadIDFind(def, iothrid->iothread_id)) {
             virReportError(VIR_ERR_XML_ERROR,
                            _("duplicate iothread id '%u' found"),
@@ -17965,10 +18003,12 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
             virDomainIOThreadIDDefFree(iothrid);
             goto error;
         }
+        // increase io thread which has details.
         def->iothreadids[def->niothreadids++] = iothrid;
     }
     VIR_FREE(nodes);
 
+    // autofill io thread id if user not set it.
     if (virDomainIOThreadIDDefArrayInit(def, iothreads) < 0)
         goto error;
 
@@ -17983,7 +18023,9 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
 /* Parse the XML definition for a vcpupin
  *
  * vcpupin has the form of
- *   <vcpupin vcpu='0' cpuset='0'/>
+ * <domain>
+ *   <cputune>
+ *     <vcpupin vcpu='0' cpuset='0'/>
  */
 static int
 virDomainVcpuPinDefParseXML(virDomainDefPtr def,
@@ -18283,6 +18325,7 @@ virDomainHugepagesParseXML(xmlNodePtr node,
 
     ctxt->node = node;
 
+    // must set size, unit for huge page
     if (virDomainParseMemory("./@size", "./@unit", ctxt,
                              &hugepage->size, true, false) < 0)
         goto cleanup;
@@ -18294,6 +18337,7 @@ virDomainHugepagesParseXML(xmlNodePtr node,
     }
 
     if ((nodeset = virXMLPropString(node, "nodeset"))) {
+        // valid nodeset if set
         if (virBitmapParse(nodeset, &hugepage->nodemask,
                            VIR_DOMAIN_CPUMASK_LEN) < 0)
             goto cleanup;
@@ -18327,6 +18371,7 @@ virDomainResourceDefParse(xmlNodePtr node,
         goto error;
 
     /* Find out what type of virtualization to use */
+    // if has resource parent element, must set partition!!!
     if (!(def->partition = virXPathString("string(./partition)", ctxt))) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s", _("missing resource partition attribute"));
@@ -18394,6 +18439,7 @@ virDomainLoaderDefParseXML(xmlNodePtr node,
     type_str = virXMLPropString(node, "type");
     loader->path = (char *) xmlNodeGetContent(node);
 
+    // all are optional
     if (readonly_str &&
         (loader->readonly = virTristateBoolTypeFromString(readonly_str)) <= 0) {
         virReportError(VIR_ERR_XML_DETAIL,
@@ -18586,10 +18632,22 @@ virDomainVcpuParse(virDomainDefPtr def,
     unsigned int vcpus;
     int ret = -1;
 
+    // default value for vcpus and max vcpus
     vcpus = maxvcpus = 1;
 
+    /*
+     * <domain>
+     *   <vcpu placement='static' cpuset="1-4,^3,6" current="1">2</vcpu>
+     *     <vcpus>
+     *       <vcpu id='0' enabled='yes' hotpluggable='no' order='1'/>
+     *       <vcpu id='1' enabled='no' hotpluggable='yes'/>
+     *     </vcpus>
+     * </domain>
+     */
     if ((vcpuNode = virXPathNode("./vcpu[1]", ctxt))) {
+        // get content of vcpu
         if ((tmp = virXMLNodeContentString(vcpuNode))) {
+            // validate vcpu count if set
             if (virStrToLong_ui(tmp, NULL, 10, &maxvcpus) < 0) {
                 virReportError(VIR_ERR_XML_ERROR, "%s",
                                _("maximum vcpus count must be an integer"));
@@ -18599,6 +18657,7 @@ virDomainVcpuParse(virDomainDefPtr def,
         }
 
         if ((tmp = virXMLPropString(vcpuNode, "current"))) {
+            // if set, validate
             if (virStrToLong_ui(tmp, NULL, 10, &vcpus) < 0) {
                 virReportError(VIR_ERR_XML_ERROR, "%s",
                                _("current vcpus count must be an integer"));
@@ -18606,11 +18665,13 @@ virDomainVcpuParse(virDomainDefPtr def,
             }
             VIR_FREE(tmp);
         } else {
+            // if not set, use max
             vcpus = maxvcpus;
         }
 
         tmp = virXMLPropString(vcpuNode, "placement");
         if (tmp) {
+            // validate placement set if set
             if ((def->placement_mode =
                  virDomainCpuPlacementModeTypeFromString(tmp)) < 0) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
@@ -18620,6 +18681,7 @@ virDomainVcpuParse(virDomainDefPtr def,
             }
             VIR_FREE(tmp);
         } else {
+            // default value
             def->placement_mode = VIR_DOMAIN_CPU_PLACEMENT_MODE_STATIC;
         }
 
@@ -18640,9 +18702,11 @@ virDomainVcpuParse(virDomainDefPtr def,
         }
     }
 
+    // set maxvcpus and allocate memory for all vcpus
     if (virDomainDefSetVcpusMax(def, maxvcpus, xmlopt) < 0)
         goto cleanup;
 
+    // vcpus is optional
     if ((n = virXPathNodeSet("./vcpus/vcpu", ctxt, &nodes)) < 0)
         goto cleanup;
 
@@ -18656,7 +18720,9 @@ virDomainVcpuParse(virDomainDefPtr def,
             unsigned int id;
             unsigned int order;
 
+            // must set id
             if (!(tmp = virXMLPropString(nodes[i], "id")) ||
+                // must set id for each vcpu
                 virStrToLong_uip(tmp, NULL, 10, &id) < 0) {
                 virReportError(VIR_ERR_XML_ERROR, "%s",
                                _("missing or invalid vcpu id"));
@@ -18665,6 +18731,7 @@ virDomainVcpuParse(virDomainDefPtr def,
 
             VIR_FREE(tmp);
 
+            // validate id of each vcpu
             if (id >= def->maxvcpus) {
                 virReportError(VIR_ERR_XML_ERROR,
                                _("vcpu id '%u' is out of range of maximum "
@@ -18674,12 +18741,14 @@ virDomainVcpuParse(virDomainDefPtr def,
 
             vcpu = virDomainDefGetVcpu(def, id);
 
+            // must set enabled
             if (!(tmp = virXMLPropString(nodes[i], "enabled"))) {
                 virReportError(VIR_ERR_XML_ERROR, "%s",
                                _("missing vcpu enabled state"));
                 goto cleanup;
             }
 
+            // validate enabled
             if ((state = virTristateBoolTypeFromString(tmp)) < 0) {
                 virReportError(VIR_ERR_XML_ERROR,
                                _("invalid vcpu 'enabled' value '%s'"), tmp);
@@ -18691,6 +18760,7 @@ virDomainVcpuParse(virDomainDefPtr def,
 
             if ((tmp = virXMLPropString(nodes[i], "hotpluggable"))) {
                 int hotpluggable;
+                // validate if set
                 if ((hotpluggable = virTristateBoolTypeFromString(tmp)) < 0) {
                     virReportError(VIR_ERR_XML_ERROR,
                                    _("invalid vcpu 'hotpluggable' value '%s'"), tmp);
@@ -18701,6 +18771,7 @@ virDomainVcpuParse(virDomainDefPtr def,
             }
 
             if ((tmp = virXMLPropString(nodes[i], "order"))) {
+                // validate order if set
                 if (virStrToLong_uip(tmp, NULL, 10, &order) < 0) {
                     virReportError(VIR_ERR_XML_ERROR, "%s",
                                    _("invalid vcpu order"));
@@ -18711,6 +18782,7 @@ virDomainVcpuParse(virDomainDefPtr def,
             }
         }
     } else {
+        // if no vcpus is set, the first current vcpus are online, the left ones are offline
         if (virDomainDefSetVcpus(def, vcpus) < 0)
             goto cleanup;
     }
@@ -18744,7 +18816,17 @@ virDomainDefParseBootOptions(virDomainDefPtr def,
      *   - A boot device (and optional kernel+initrd) (hvm)
      *   - An init script                             (exe)
      */
-
+    /* qemu example
+     * <domain>
+     *   <os>
+     *     <type>hvm</type>
+     *     <boot dev='cdrom'/>
+     *     <bootmenu enable='yes' timeout='3000'/>
+     *     <smbios mode='sysinfo'/>
+     *     <bios useserial='yes' rebootTimeout='0'/>
+     *   </os>
+     */
+    // we parse os.type at the beginning from './os/type'
     if (def->os.type == VIR_DOMAIN_OSTYPE_EXE) {
         def->os.init = virXPathString("string(./os/init[1])", ctxt);
         def->os.cmdline = virXPathString("string(./os/cmdline[1])", ctxt);
@@ -18830,12 +18912,14 @@ virDomainDefParseBootOptions(virDomainDefPtr def,
             goto error;
 
         if (n > 1) {
+            // validate items
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("Only one acpi table is supported"));
             goto error;
         }
 
         if (n == 1) {
+            // must set type for table
             tmp = virXMLPropString(nodes[0], "type");
 
             if (!tmp) {
@@ -18844,6 +18928,7 @@ virDomainDefParseBootOptions(virDomainDefPtr def,
                 goto error;
             }
 
+            // validate table type
             if (STREQ_NULLABLE(tmp, "slic")) {
                 VIR_FREE(tmp);
                 tmp = virXMLNodeContentString(nodes[0]);
@@ -18884,7 +18969,8 @@ virDomainCachetuneDefParseCache(xmlXPathContextPtr ctxt,
     int ret = -1;
 
     ctxt->node = node;
-
+    // <cache id='0' level='3' type='both' size='3' unit='MiB'/>
+    // cache must have id, level, type, size, unit
     tmp = virXMLPropString(node, "id");
     if (!tmp) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -18899,6 +18985,7 @@ virDomainCachetuneDefParseCache(xmlXPathContextPtr ctxt,
     }
     VIR_FREE(tmp);
 
+    // restrict cpu cache(data, code) at different levels.
     tmp = virXMLPropString(node, "level");
     if (!tmp) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -18919,6 +19006,7 @@ virDomainCachetuneDefParseCache(xmlXPathContextPtr ctxt,
                        _("Missing cachetune attribute 'type'"));
         goto cleanup;
     }
+    // validate type, cpu cache(code, data cache or both)
     type = virCacheTypeFromString(tmp);
     if (type < 0) {
         virReportError(VIR_ERR_XML_ERROR,
@@ -18928,6 +19016,7 @@ virDomainCachetuneDefParseCache(xmlXPathContextPtr ctxt,
     }
     VIR_FREE(tmp);
 
+    // return size with bytes unit!!!
     if (virDomainParseScaledValue("./@size", "./@unit",
                                   ctxt, &size, 1024,
                                   ULLONG_MAX, true) < 0)
@@ -18938,6 +19027,7 @@ virDomainCachetuneDefParseCache(xmlXPathContextPtr ctxt,
 
     ret = 0;
  cleanup:
+    // restore current node
     ctxt->node = oldnode;
     VIR_FREE(tmp);
     return ret;
@@ -18970,6 +19060,16 @@ virDomainCachetuneDefParse(virDomainDefPtr def,
     if (VIR_ALLOC(tmp_cachetune) < 0)
         goto cleanup;
 
+    /*
+     * <domain>
+     *   <cputune>
+     *     <cachetune vcpus='0-1'>
+     *       <cache id='0' level='3' type='both' size='3' unit='MiB'/>
+     *       <cache id='1' level='3' type='both' size='3' unit='MiB'/>
+     *     </cachetune>
+     */
+
+    // node is cachetune
     vcpus_str = virXMLPropString(node, "vcpus");
     if (!vcpus_str) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -18992,6 +19092,8 @@ virDomainCachetuneDefParse(virDomainDefPtr def,
         goto cleanup;
     }
 
+
+    // we reset the root, now . is <cputune>
     if ((n = virXPathNodeSet("./cache", ctxt, &nodes)) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Cannot extract cache nodes under cachetune"));
@@ -19003,12 +19105,14 @@ virDomainCachetuneDefParse(virDomainDefPtr def,
             goto cleanup;
     }
 
+    // if no set, return
     if (virResctrlAllocIsEmpty(alloc)) {
         ret = 0;
         goto cleanup;
     }
 
     for (i = 0; i < def->ncachetunes; i++) {
+        // can have several cachetunes, each for differnet vcpus.
         if (virBitmapOverlaps(def->cachetunes[i]->vcpus, vcpus)) {
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("Overlapping vcpus in cachetunes"));
@@ -19042,6 +19146,7 @@ virDomainCachetuneDefParse(virDomainDefPtr def,
     VIR_STEAL_PTR(tmp_cachetune->vcpus, vcpus);
     VIR_STEAL_PTR(tmp_cachetune->alloc, alloc);
 
+    // append the parsed cache tune, NOTE: there could be several cachetune
     if (VIR_APPEND_ELEMENT(def->cachetunes, def->ncachetunes, tmp_cachetune) < 0)
         goto cleanup;
 
@@ -19059,7 +19164,27 @@ virDomainCachetuneDefParse(virDomainDefPtr def,
 }
 
 
-// validate during parse and after parse, validate as well, two validate phases
+// Basic validate during parse
+// After parse, validate as well, two validation phases
+//
+// Why use XPath:
+// XPath uses "path like" syntax to identify and navigate nodes in an XML document
+// XPath contains over 200 built-in functions
+// XPath has functions for string values, numeric values, booleans, date and time comparison, node manipulation, sequence manipulation, and much more
+
+// with Xpath context we can parse all nodes based on xpath, which is easy
+// args: xml and root are not used at all for paring, XPath context is enough!!!
+//
+//
+// XPath syntax: https://www.w3schools.com/xml/xpath_syntax.asp
+//
+// Example:
+// @ 	             :   Selects attributes
+// /bookstore/book[1]:   Selects the first book element that is the child of the bookstore element.
+//
+// /os/type[1]/@arch :   select arch attribute of type element which is first child of os!!!
+//
+// XPath operator: https://www.w3schools.com/xml/xpath_operators.asp
 static virDomainDefPtr
 virDomainDefParseXML(xmlDocPtr xml,
                      xmlNodePtr root,
@@ -19093,22 +19218,30 @@ virDomainDefParseXML(xmlDocPtr xml,
         VIR_FREE(schema);
     }
 
-    /* create a new domain def */
+    /* create a new domain def, during parse, we create sub fields when needed */
     if (!(def = virDomainDefNew()))
         return NULL;
 
+    // XPathLong: ret < 0, no value set or invalid value
+    //            ret = 0, valid value
+    //
+    // ./@id is relative path to current node.
     if (!(flags & VIR_DOMAIN_DEF_PARSE_INACTIVE))
         if (virXPathLong("string(./@id)", ctxt, &id) < 0)
             id = -1;
     def->id = (int)id;
 
     /* Find out what type of virtualization to use */
+    /* Here we does not use XPath sytax, which could be history reason
+     * tmp = virXPathString("string(./@type)", ctxt); should be fine as well
+     */
     if (!(tmp = virXMLPropString(ctxt->node, "type"))) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s", _("missing domain type attribute"));
         goto error;
     }
 
+    // here valid type attribute
     if ((virtType = virDomainVirtTypeFromString(tmp)) < 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("invalid domain type %s"), tmp);
@@ -19117,6 +19250,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     def->virtType = virtType;
     VIR_FREE(tmp);
 
+    // virXPathString will be NULL if not set by user.
     def->os.bootloader = virXPathString("string(./bootloader)", ctxt);
     def->os.bootloaderArgs = virXPathString("string(./bootloader_args)", ctxt);
 
@@ -19125,11 +19259,13 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (def->os.bootloader) {
             def->os.type = VIR_DOMAIN_OSTYPE_XEN;
         } else {
+            // when no bootloader, os type must be set
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("an os <type> must be specified"));
             goto error;
         }
     } else {
+        // valid os type
         if ((def->os.type = virDomainOSTypeFromString(tmp)) < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown OS type '%s'"), tmp);
@@ -19149,6 +19285,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     tmp = virXPathString("string(./os/type[1]/@arch)", ctxt);
+    // valid arch
     if (tmp && !(def->os.arch = virArchFromString(tmp))) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("Unknown architecture %s"),
@@ -19157,6 +19294,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
     VIR_FREE(tmp);
 
+    // NOTE: virXPathString return NULL if not set
     def->os.machine = virXPathString("string(./os/type[1]/@machine)", ctxt);
     def->emulator = virXPathString("string(./devices/emulator[1])", ctxt);
 
@@ -19186,7 +19324,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         VIR_FREE(capsdata);
     }
 
-    /* Extract domain name */
+    /* Extract domain name , must be set*/
     if (!(def->name = virXPathString("string(./name[1])", ctxt))) {
         virReportError(VIR_ERR_NO_NAME, NULL);
         goto error;
@@ -19197,6 +19335,7 @@ virDomainDefParseXML(xmlDocPtr xml,
      * also serve as the uuid. */
     tmp = virXPathString("string(./uuid[1])", ctxt);
     if (!tmp) {
+        // if uuid is not set, generate it
         if (virUUIDGenerate(def->uuid) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
                            "%s", _("Failed to generate UUID"));
@@ -19204,6 +19343,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         }
         uuid_generated = true;
     } else {
+        // valid uuid if set
         if (virUUIDParse(tmp, def->uuid) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
                            "%s", _("malformed uuid element"));
@@ -19229,6 +19369,7 @@ virDomainDefParseXML(xmlDocPtr xml,
                                "%s", _("Failed to generate genid"));
                 goto error;
             }
+            // generate genid if not set when it's required
             def->genidGenerated = true;
         } else {
             if (virUUIDParse(tmp, def->genid) < 0) {
@@ -19243,6 +19384,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     /* Extract short description of domain (title) */
     def->title = virXPathString("string(./title[1])", ctxt);
+    // valid if title set
     if (def->title && strchr(def->title, '\n')) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
                        _("Domain title can't contain newlines"));
@@ -19268,10 +19410,12 @@ virDomainDefParseXML(xmlDocPtr xml,
                              &def->mem.cur_balloon, false, true) < 0)
         goto error;
 
+    // valid size and suffix(unit)
     if (virDomainParseMemory("./maxMemory[1]", NULL, ctxt,
                              &def->mem.max_memory, false, false) < 0)
         goto error;
 
+    // valid slot
     if (virXPathUInt("string(./maxMemory[1]/@slots)", ctxt, &def->mem.memory_slots) == -2) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
                        _("Failed to parse memory slot count"));
@@ -19280,6 +19424,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     /* and info about it */
     if ((tmp = virXPathString("string(./memory[1]/@dumpCore)", ctxt)) &&
+        // valid dumpCore if set
         (def->mem.dump_core = virTristateSwitchTypeFromString(tmp)) <= 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("Invalid memory core dump attribute value '%s'"), tmp);
@@ -19289,6 +19434,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     tmp = virXPathString("string(./memoryBacking/source/@type)", ctxt);
     if (tmp) {
+        // validate if set
         if ((def->mem.source = virDomainMemorySourceTypeFromString(tmp)) <= 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown memoryBacking/source/type '%s'"), tmp);
@@ -19299,6 +19445,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     tmp = virXPathString("string(./memoryBacking/access/@mode)", ctxt);
     if (tmp) {
+        // validate if set
         if ((def->mem.access = virDomainMemoryAccessTypeFromString(tmp)) <= 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown memoryBacking/access/mode '%s'"), tmp);
@@ -19309,6 +19456,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     tmp = virXPathString("string(./memoryBacking/allocation/@mode)", ctxt);
     if (tmp) {
+        // validate if set
         if ((def->mem.allocation = virDomainMemoryAllocationTypeFromString(tmp)) <= 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown memoryBacking/allocation/mode '%s'"), tmp);
@@ -19319,7 +19467,6 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     if (virXPathNode("./memoryBacking/hugepages", ctxt)) {
         /* hugepages will be used */
-
         if (def->mem.allocation == VIR_DOMAIN_MEMORY_ALLOCATION_ONDEMAND) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                            _("hugepages are not allowed with memory allocation ondemand"));
@@ -19339,16 +19486,20 @@ virDomainDefParseXML(xmlDocPtr xml,
         }
 
         if (n) {
+            // create n pages to store huagepages
             if (VIR_ALLOC_N(def->mem.hugepages, n) < 0)
                 goto error;
 
             for (i = 0; i < n; i++) {
+                // parse each page, valid unit and size
                 if (virDomainHugepagesParseXML(nodes[i], ctxt,
                                                &def->mem.hugepages[i]) < 0)
                     goto error;
                 def->mem.nhugepages++;
 
                 for (j = 0; j < i; j++) {
+                    // i is the new page, check overlap with previous pages.
+                    // valid nodeset, overlap case
                     if (def->mem.hugepages[i].nodemask &&
                         def->mem.hugepages[j].nodemask &&
                         virBitmapOverlaps(def->mem.hugepages[i].nodemask,
@@ -19361,6 +19512,7 @@ virDomainDefParseXML(xmlDocPtr xml,
                         goto error;
                     } else if (!def->mem.hugepages[i].nodemask &&
                                !def->mem.hugepages[j].nodemask) {
+                        // validate, allow only one page without nodemask.
                         virReportError(VIR_ERR_XML_DETAIL,
                                        _("two master hugepages detected: "
                                          "%llu and %llu"),
@@ -19377,6 +19529,7 @@ virDomainDefParseXML(xmlDocPtr xml,
             if (VIR_ALLOC(def->mem.hugepages) < 0)
                 goto error;
 
+            // with hugepages but no pages defined, create one page.
             def->mem.nhugepages = 1;
         }
     }
@@ -19393,9 +19546,11 @@ virDomainDefParseXML(xmlDocPtr xml,
     /* Extract blkio cgroup tunables */
     if (virXPathUInt("string(./blkiotune/weight)", ctxt,
                      &def->blkio.weight) < 0)
+        // use default if not set
         def->blkio.weight = 0;
 
     if ((n = virXPathNodeSet("./blkiotune/device", ctxt, &nodes)) < 0) {
+        // must set device if blkiotune exists
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s", _("cannot extract blkiotune nodes"));
         goto error;
@@ -19409,6 +19564,7 @@ virDomainDefParseXML(xmlDocPtr xml,
             goto error;
         def->blkio.ndevices++;
         for (j = 0; j < i; j++) {
+            // validate path of each device
             if (STREQ(def->blkio.devices[j].path,
                       def->blkio.devices[i].path)) {
                 virReportError(VIR_ERR_XML_ERROR,
@@ -19425,6 +19581,7 @@ virDomainDefParseXML(xmlDocPtr xml,
                                   &def->mem.hard_limit) < 0)
         goto error;
 
+    // convert and validate suffix for unit
     if (virDomainParseMemoryLimit("./memtune/soft_limit[1]", NULL, ctxt,
                                   &def->mem.soft_limit) < 0)
         goto error;
@@ -19444,6 +19601,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     /* Extract cpu tunables. */
+    // optional
     if ((n = virXPathULongLong("string(./cputune/shares[1])", ctxt,
                                &def->cputune.shares)) < -1) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -19461,6 +19619,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (def->cputune.period > 0 &&
+            // if set, validate it
         (def->cputune.period < 1000 || def->cputune.period > 1000000)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("Value of cputune period must be in range "
@@ -19476,6 +19635,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (def->cputune.quota > 0 &&
+            // if set validate it
         (def->cputune.quota < 1000 ||
          def->cputune.quota > 18446744073709551LL)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -19492,6 +19652,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (def->cputune.global_period > 0 &&
+            // if set validate it
         (def->cputune.global_period < 1000 || def->cputune.global_period > 1000000)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("Value of cputune global period must be in range "
@@ -19507,6 +19668,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (def->cputune.global_quota > 0 &&
+            // if set validate it
         (def->cputune.global_quota < 1000 ||
          def->cputune.global_quota > 18446744073709551LL)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -19523,6 +19685,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (def->cputune.emulator_period > 0 &&
+            // if set validate it
         (def->cputune.emulator_period < 1000 ||
          def->cputune.emulator_period > 1000000)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -19539,6 +19702,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (def->cputune.emulator_quota > 0 &&
+            // if set validate it
         (def->cputune.emulator_quota < 1000 ||
          def->cputune.emulator_quota > 18446744073709551LL)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -19556,6 +19720,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     if (def->cputune.iothread_period > 0 &&
         (def->cputune.iothread_period < 1000 ||
+            // if set validate it
          def->cputune.iothread_period > 1000000)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("Value of cputune iothread_period must be in range "
@@ -19571,6 +19736,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (def->cputune.iothread_quota > 0 &&
+            // if set validate it
         (def->cputune.iothread_quota < 1000 ||
          def->cputune.iothread_quota > 18446744073709551LL)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -19579,15 +19745,18 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
     }
 
+    // optional
     if ((n = virXPathNodeSet("./cputune/vcpupin", ctxt, &nodes)) < 0)
         goto error;
 
     for (i = 0; i < n; i++) {
+        // for cpumask for each vcpu
         if (virDomainVcpuPinDefParseXML(def, nodes[i]))
             goto error;
     }
     VIR_FREE(nodes);
 
+    // optional
     if ((n = virXPathNodeSet("./cputune/emulatorpin", ctxt, &nodes)) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("cannot extract emulatorpin nodes"));
@@ -19608,6 +19777,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     VIR_FREE(nodes);
 
 
+    // optional
     if ((n = virXPathNodeSet("./cputune/iothreadpin", ctxt, &nodes)) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("cannot extract iothreadpin nodes"));
@@ -19615,6 +19785,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     for (i = 0; i < n; i++) {
+        // for cpumask for each io thread
         if (virDomainIOThreadPinDefParseXML(nodes[i], def) < 0)
             goto error;
     }
@@ -19656,6 +19827,16 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
     VIR_FREE(nodes);
 
+    /* <domain>
+     *   <cpu match="exact" mode="host-passthrough">
+     *      <topology sockets="1" cores="6" threads="2"/>
+     *      <numa>
+     *        <cell id="0" cpus="0-11" memory="50331648" unit="KiB" memAccess="shared"/>
+     *      </numa>
+     *   </cpu>
+     *
+     *   cpu mode and topoloy for vcpu
+      */
     if (virCPUDefParseXML(ctxt, "./cpu[1]", VIR_CPU_TYPE_GUEST, &def->cpu) < 0)
         goto error;
 
@@ -19663,6 +19844,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     if (virDomainNumaGetCPUCountTotal(def->numa) > virDomainDefGetVcpusMax(def)) {
+        // validate cpu mask set in each numa should not be larger than cpu defined
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Number of CPUs in <numa> exceeds the"
                          " <vcpu> count"));
@@ -19675,18 +19857,37 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
     }
 
+    // parse memory allocation(from whcih host numa node) for guest numa node
     if (virDomainNumatuneParseXML(def->numa,
-                                  def->placement_mode ==
+                                  def->placement_mode == // vcpu placement which host cpu to run the vcpu
                                   VIR_DOMAIN_CPU_PLACEMENT_MODE_STATIC,
                                   ctxt) < 0)
         goto error;
 
+    // different threads in Qemu refer to https://access.redhat.com/documentation/en-us/red_hat_openstack_platform/10/html/ovs-dpdk_end_to_end_troubleshooting_guide/using_virsh_emulatorpin_in_virtual_environments_with_nfv
+
+    // emualtor threads: like VNC-worker, qemu-kvm, vhost-net emualtor.
+    // cpu threads: CPU 0/KVM
+    // IO thread: IO iothread1
+    /*
+     * $ ps -Tp 146516
+     * PID   SPID TTY          TIME CMD
+     * 146516 146516 ?        03:24:50 qemu-kvm
+     * 146516 146532 ?        00:00:00 qemu-kvm
+     * 146516 146533 ?        01:20:53 IO iothread1
+     * 146516 146534 ?        00:00:00 IO iothread2
+     * 146516 146564 ?        23-05:50:48 CPU 0/KVM
+     * 146516 146565 ?        23-06:24:37 CPU 1/KVM
+     * 146516 146568 ?        00:00:02 vnc_worker
+     * 146516   6189 ?        00:00:00 worker
+     */
     if (virDomainNumatuneHasPlacementAuto(def->numa) &&
         !def->cpumask && !virDomainDefHasVcpuPin(def) &&
         !def->cputune.emulatorpin &&
         !virDomainIOThreadIDArrayHasPin(def))
         def->placement_mode = VIR_DOMAIN_CPU_PLACEMENT_MODE_AUTO;
 
+    // optional
     if ((n = virXPathNodeSet("./resource", ctxt, &nodes)) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s", _("cannot extract resource nodes"));
@@ -19708,6 +19909,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     for (i = 0; i < n; i++) {
+        // validate feature
         int val = virDomainFeatureTypeFromString((const char *)nodes[i]->name);
         if (val < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
@@ -19735,11 +19937,15 @@ virDomainDefParseXML(xmlDocPtr xml,
         case VIR_DOMAIN_FEATURE_PRIVNET:
         case VIR_DOMAIN_FEATURE_HYPERV:
         case VIR_DOMAIN_FEATURE_KVM:
+            // guest cpu features, if element is there, it is' on
             def->features[val] = VIR_TRISTATE_SWITCH_ON;
             break;
 
+
+        // below feature, needs feature attribute
         case VIR_DOMAIN_FEATURE_CAPABILITIES:
             if ((tmp = virXMLPropString(nodes[i], "policy"))) {
+                // validate policy
                 if ((def->features[val] = virDomainCapabilitiesPolicyTypeFromString(tmp)) == -1) {
                     virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                                    _("unknown policy attribute '%s' of feature '%s'"),
@@ -19748,6 +19954,7 @@ virDomainDefParseXML(xmlDocPtr xml,
                 }
                 VIR_FREE(tmp);
             } else {
+                // not set, absent
                 def->features[val] = VIR_TRISTATE_SWITCH_ABSENT;
             }
             break;
@@ -19758,6 +19965,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         case VIR_DOMAIN_FEATURE_PVSPINLOCK:
         case VIR_DOMAIN_FEATURE_VMPORT:
         case VIR_DOMAIN_FEATURE_SMM:
+            // check feature state  <pvspinlock state='on'/>
             if ((tmp = virXMLPropString(nodes[i], "state"))) {
                 if ((def->features[val] = virTristateSwitchTypeFromString(tmp)) == -1) {
                     virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
@@ -19772,6 +19980,7 @@ virDomainDefParseXML(xmlDocPtr xml,
             break;
 
         case VIR_DOMAIN_FEATURE_GIC:
+            // <gic version='2'/>
             if ((tmp = virXMLPropString(nodes[i], "version"))) {
                 gic_version = virGICVersionTypeFromString(tmp);
                 if (gic_version < 0 || gic_version == VIR_GIC_VERSION_NONE) {
@@ -20001,10 +20210,12 @@ virDomainDefParseXML(xmlDocPtr xml,
         def->tseg_specified = rv;
     }
 
+    // all caps under this xpath
     if ((n = virXPathNodeSet("./features/capabilities/*", ctxt, &nodes)) < 0)
         goto error;
 
     for (i = 0; i < n; i++) {
+        // validate cap
         int val = virDomainCapsFeatureTypeFromString((const char *)nodes[i]->name);
         if (val < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
@@ -20014,6 +20225,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
         if (val >= 0 && val < VIR_DOMAIN_CAPS_FEATURE_LAST) {
             if ((tmp = virXMLPropString(nodes[i], "state"))) {
+                // validate state, if no state, default is ON
                 if ((def->caps_features[val] = virTristateSwitchTypeFromString(tmp)) == -1) {
                     virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                                    _("unknown state attribute '%s' of feature capability '%s'"),
@@ -20066,10 +20278,12 @@ virDomainDefParseXML(xmlDocPtr xml,
                                  &def->pm.s4) < 0)
         goto error;
 
+    // perf event enabled for this guest
     if (virDomainPerfDefParseXML(def, ctxt) < 0)
         goto error;
 
     if ((tmp = virXPathString("string(./clock/@offset)", ctxt)) &&
+        //validate offset if set
         (def->clock.offset = virDomainClockOffsetTypeFromString(tmp)) < 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("unknown clock offset '%s'"), tmp);
@@ -20145,6 +20359,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     for (i = 0; i < n; i++) {
+        // parse timers under clock, can be multiple timers
         virDomainTimerDefPtr timer = virDomainTimerDefParseXML(nodes[i],
                                                                ctxt);
         if (!timer)
@@ -20778,6 +20993,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     VIR_FREE(nodes);
 
     /* analysis of the user namespace mapping */
+    // select all node with tag uid!!!
     if ((n = virXPathNodeSet("./idmap/uid", ctxt, &nodes)) < 0)
         goto error;
 
@@ -20823,6 +21039,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     if ((tmp = virXPathString("string(./os/smbios/@mode)", ctxt))) {
         int mode;
 
+        // validate smbios mode
         if ((mode = virDomainSmbiosModeTypeFromString(tmp)) < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown smbios mode '%s'"), tmp);
@@ -20837,6 +21054,7 @@ virDomainDefParseXML(xmlDocPtr xml,
 
     /* Extract custom metadata */
     if ((node = virXPathNode("./metadata[1]", ctxt)) != NULL)
+        // copy metadat(use it as plain text)
         def->metadata = xmlCopyNode(node, 1);
 
     /* we have to make a copy of all of the callback pointers here since
@@ -20981,7 +21199,7 @@ virDomainDefParse(const char *xmlStr,
     int keepBlanksDefault = xmlKeepBlanksDefault(0);
 
     if ((xml = virXMLParse(filename, xmlStr, _("(domain_definition)")))) {
-        // create xml doc(tree), then call callback based on node
+        // create xml doc(tree with child nodes), then call callback based on node
         def = virDomainDefParseNode(xml, xmlDocGetRootElement(xml), caps,
                                     xmlopt, parseOpaque, flags);
         xmlFreeDoc(xml);
@@ -21033,15 +21251,22 @@ virDomainDefParseNode(xmlDocPtr xml,
         goto cleanup;
     }
 
+    // create XPath context based on xmlDocPtr(xml tree)
+    // XPath context has built-in helper to operate the xml doc by XPath which is easy to use!!!
+    // with XPath helper functions we do not need to find node by node->child, then node->chid we use xpath `device/type/` to find node quickly!!
     ctxt = xmlXPathNewContext(xml);
     if (ctxt == NULL) {
         virReportOOMError();
         goto cleanup;
     }
 
+    // actually root is also xmlNode, but without parent, from root we can find all xmlNodes, by searching node->child, node->sibling.
+    // each xmlNode has name(tag name), properties(attr) and doc (value) ant its childs and siblings
     ctxt->node = root;
 
     // check each xml node at different level, parse and set with default
+    // parse each xml node from root to leaf, root is root node of xml
+    // root(tree) is built from xml string.
     if (!(def = virDomainDefParseXML(xml, root, ctxt, caps, xmlopt, flags)))
         goto cleanup;
 
@@ -28699,6 +28924,9 @@ virDomainDefCopy(virDomainDefPtr src,
                  void *parseOpaque,
                  bool migratable)
 {
+    /* Copy Def: save def to xml(string), then parse it back to new Def
+     * not copy each field one by one as it's complex, juest relay on savexml, parsexml functions we already have
+     */
     char *xml;
     virDomainDefPtr ret;
     unsigned int format_flags = VIR_DOMAIN_DEF_FORMAT_SECURE;
