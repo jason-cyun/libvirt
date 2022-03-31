@@ -8818,6 +8818,12 @@ virDomainDiskSourcePRParse(xmlNodePtr node,
 
     ctxt->node = node;
 
+    /* the reservations can be a sub-element of the source element for storage sources (QEMU driver only). If present it enables persistent reservations for SCSI based disks
+     *
+     * <reservations managed='no'>
+     *    <source type='unix' path='/path/to/qemu-pr-helper' mode='client'/>
+     * </reservations>
+     */
     if (!(ctxt->node = virXPathNode("./reservations", ctxt))) {
         ret = 0;
         goto cleanup;
@@ -8845,6 +8851,9 @@ virDomainStorageSourceParse(xmlNodePtr node,
 
     ctxt->node = node;
 
+    // node is <source>
+    // src->path comes from different attr depends on disk type.
+    // that means disk type determines the attr used in source which will be as source->path!!
     switch ((virStorageType)src->type) {
     case VIR_STORAGE_TYPE_FILE:
         src->path = virXMLPropString(node, "file");
@@ -8879,6 +8888,7 @@ virDomainStorageSourceParse(xmlNodePtr node,
         !(src->encryption = virStorageEncryptionParseNode(tmp, ctxt)))
         goto cleanup;
 
+    // the reservations can be a sub-element of the source element for storage sources (QEMU driver only). If present it enables persistent reservations for SCSI based disks
     if (virDomainDiskSourcePRParse(node, ctxt, &src->pr) < 0)
         goto cleanup;
 
@@ -8910,6 +8920,7 @@ virDomainDiskSourceParse(xmlNodePtr node,
     if (virDomainStorageSourceParse(node, ctxt, src, flags) < 0)
         return -1;
 
+    // no one use it
     if (virDomainDiskSourcePrivateDataParse(node, ctxt, src, flags, xmlopt) < 0)
         return -1;
 
@@ -9180,6 +9191,7 @@ virDomainDiskDefGeometryParse(virDomainDiskDefPtr def,
 {
     char *tmp;
 
+    // for element that has many attr or sub-element, define a separate function to parse it.
     if ((tmp = virXMLPropString(cur, "cyls"))) {
         if (virStrToLong_ui(tmp, NULL, 10, &def->geometry.cylinders) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -9529,12 +9541,28 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
         return NULL;
 
     ctxt->node = node;
+    /*
+     * <disk type='block' device='disk'>
+     *   <driver name='qemu' type='raw'/>
+     *   <source dev='/dev/sda'/>
+     *   <geometry cyls='16383' heads='16' secs='63' trans='lba'/>
+     *   <blockio logical_block_size='512' physical_block_size='4096'/>
+     *   <target dev='hdj' bus='ide'/>
+     * </disk>
+     *
+     * Under disk there are lots of elements and attirubtes
+     * they are different depends on disk type
+     *
+     */
+
 
     /* defaults */
     def->src->type = VIR_STORAGE_TYPE_FILE;
     def->device = VIR_DOMAIN_DISK_DEVICE_DISK;
 
+    // node is <disk type="block">
     if ((tmp = virXMLPropString(node, "type")) &&
+        // if set, validate type, save to def->src->type which comes from disk atttr, not <source>
         (def->src->type = virStorageTypeFromString(tmp)) <= 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("unknown disk type '%s'"), tmp);
@@ -9560,6 +9588,8 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
             continue;
 
         if (!source && virXMLNodeNameEqual(cur, "source")) {
+            // source can have child elements, hence parse it with another function
+            // parse complex source
             if (virDomainDiskSourceParse(cur, ctxt, def->src, flags, xmlopt) < 0)
                 goto error;
 
@@ -9567,6 +9597,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
              * we find one as a child of <source>, then force an error to
              * avoid ambiguity */
             if (authdef && def->src->auth) {
+                // authdef parsed from <disk><auth></auth>, old way!!!
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                                _("an <auth> definition already found for "
                                  "the <disk> definition"));
@@ -9578,6 +9609,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
 
             /* Similarly for <encryption> - it's a child of <source> too
              * and we cannot find in both places */
+            // encryption parsed from <disk><encryption></encryption>, old way!!!
             if (encryption && def->src->encryption) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                                _("an <encryption> definition already found for "
@@ -9588,12 +9620,15 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
             if (def->src->encryption)
                 def->src->encryptionInherited = true;
 
+            // if multiple source, only use the first one!!!
             source = true;
 
+            // startupPolicy is attr of source, we we save it to disk->startupPolicy!!!
             startupPolicy = virXMLPropString(cur, "startupPolicy");
 
         } else if (!target &&
                    virXMLNodeNameEqual(cur, "target")) {
+            // inside each else if, parse attr of this element
             target = virXMLPropString(cur, "dev");
             bus = virXMLPropString(cur, "bus");
             tray = virXMLPropString(cur, "tray");
@@ -9607,7 +9642,9 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
         } else if (!domain_name &&
                    virXMLNodeNameEqual(cur, "backenddomain")) {
             domain_name = virXMLPropString(cur, "name");
+            // only use one if multi set
         } else if (virXMLNodeNameEqual(cur, "geometry")) {
+            // parse complex geometry
             if (virDomainDiskDefGeometryParse(def, cur) < 0)
                 goto error;
         } else if (virXMLNodeNameEqual(cur, "blockio")) {
@@ -9633,6 +9670,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
             }
         } else if (!virDomainDiskGetDriver(def) &&
                    virXMLNodeNameEqual(cur, "driver")) {
+            // parse complex driver
             if (virDomainVirtioOptionsParseXML(cur, &def->virtio) < 0)
                 goto error;
 
@@ -9641,10 +9679,14 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
         } else if (!def->mirror &&
                    virXMLNodeNameEqual(cur, "mirror") &&
                    !(flags & VIR_DOMAIN_DEF_PARSE_INACTIVE)) {
+            // parse complex mirror
             if (virDomainDiskDefMirrorParse(def, cur, ctxt, flags, xmlopt) < 0)
                 goto error;
         } else if (!authdef &&
                    virXMLNodeNameEqual(cur, "auth")) {
+            // auth as sub-element of disk(old version)
+            // new version auth as sub-element of source!!!
+
             /* If we've already parsed <source> and found an <auth> child,
              * then generate an error to avoid ambiguity */
             if (def->src->authInherited) {
@@ -9657,11 +9699,14 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
             if (!(authdef = virStorageAuthDefParse(cur, ctxt)))
                 goto error;
         } else if (virXMLNodeNameEqual(cur, "iotune")) {
+            // parse complex iotune
             if (virDomainDiskDefIotuneParse(def, ctxt) < 0)
                 goto error;
         } else if (virXMLNodeNameEqual(cur, "readonly")) {
+            // parse <disk><readonly/> but set it in source
             def->src->readonly = true;
         } else if (virXMLNodeNameEqual(cur, "shareable")) {
+            // parse <disk><shareable/> but set it in source
             def->src->shared = true;
         } else if (virXMLNodeNameEqual(cur, "transient")) {
             def->transient = true;
@@ -9692,6 +9737,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
             if (!virValidateWWN(wwn))
                 goto error;
         } else if (!vendor &&
+                // validate attribute if possible
                    virXMLNodeNameEqual(cur, "vendor")) {
             vendor = (char *)xmlNodeGetContent(cur);
 
@@ -9721,7 +9767,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
                                _("disk product is not printable string"));
                 goto error;
             }
-        } else if (virXMLNodeNameEqual(cur, "boot")) {
+        } else if (virXMLNodeNameEqual(cur, "boot")) { // skip it here
             /* boot is parsed as part of virDomainDeviceInfoParseXML */
         }
     }
@@ -9729,7 +9775,12 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     /* Only CDROM and Floppy devices are allowed missing source path
      * to indicate no media present. LUN is for raw access CD-ROMs
      * that are not attached to a physical device presently */
+
+    /* NOTE: below validate value and convert string to type
+     * validate depends on type
+     */
     if (virStorageSourceIsEmpty(def->src) &&
+            // disk device must set source
         (def->device == VIR_DOMAIN_DISK_DEVICE_DISK ||
          (flags & VIR_DOMAIN_DEF_PARSE_DISK_SOURCE))) {
         virReportError(VIR_ERR_NO_SOURCE,
@@ -9738,6 +9789,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     }
 
     if (!target && !(flags & VIR_DOMAIN_DEF_PARSE_DISK_SOURCE)) {
+        // must set target
         if (def->src->srcpool) {
             if (virAsprintf(&tmp, "pool = '%s', volume = '%s'",
                 def->src->srcpool->pool, def->src->srcpool->volume) < 0)
@@ -9752,6 +9804,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     }
 
     if (!(flags & VIR_DOMAIN_DEF_PARSE_DISK_SOURCE)) {
+        // validate target name!!!
         if (def->device == VIR_DOMAIN_DISK_DEVICE_FLOPPY &&
             !STRPREFIX(target, "fd")) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
@@ -9789,6 +9842,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     }
 
     if (rawio) {
+        // validate, convert string to type
         if ((def->rawio = virTristateBoolTypeFromString(rawio)) <= 0) {
             virReportError(VIR_ERR_XML_ERROR,
                            _("unknown disk rawio setting '%s'"),
@@ -9798,6 +9852,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     }
 
     if (sgio) {
+        // validate, convert string to type
         if ((def->sgio = virDomainDeviceSGIOTypeFromString(sgio)) <= 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown disk sgio mode '%s'"), sgio);
@@ -9806,12 +9861,14 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     }
 
     if (bus) {
+        // validate, convert string to type
         if ((def->bus = virDomainDiskBusTypeFromString(bus)) < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown disk bus type '%s'"), bus);
             goto error;
         }
     } else {
+        // default bus from target name
         if (def->device == VIR_DOMAIN_DISK_DEVICE_FLOPPY) {
             def->bus = VIR_DOMAIN_DISK_BUS_FDC;
         } else if (!(flags & VIR_DOMAIN_DEF_PARSE_DISK_SOURCE)) {
@@ -9831,6 +9888,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     }
 
     if (tray) {
+        // validate
         if ((def->tray_status = virDomainDiskTrayTypeFromString(tray)) < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unknown disk tray status '%s'"), tray);
@@ -9877,7 +9935,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
                            startupPolicy);
             goto error;
         }
-        def->startupPolicy = val;
+        def->startupPolicy = val; // NOTE: startupPolicy is attr of source
     }
 
     def->dst = target;
@@ -9898,10 +9956,12 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     product = NULL;
 
     if (!(flags & VIR_DOMAIN_DEF_PARSE_DISK_SOURCE)) {
+        // parse complex backing
         if (virDomainDiskBackingStoreParse(ctxt, def->src, flags, xmlopt) < 0)
             goto error;
     }
 
+    // extra validate for disk setting
     if (virDomainDiskDefParseValidate(def, vmSeclabels, nvmSeclabels) < 0)
         goto error;
 
@@ -16752,6 +16812,8 @@ void virDomainDiskInsertPreAlloced(virDomainDefPtr def,
      * that position
      */
     for (idx = (def->ndisks - 1); idx >= 0; idx--) {
+        // loop from end to start
+
         /* If bus matches and current disk is after
          * new disk, then new disk should go here */
         if (def->disks[idx]->bus == disk->bus &&
@@ -16767,6 +16829,7 @@ void virDomainDiskInsertPreAlloced(virDomainDefPtr def,
         }
     }
 
+    // Disks with same bus always site together
     /* VIR_INSERT_ELEMENT_INPLACE will never return an error here. */
     ignore_value(VIR_INSERT_ELEMENT_INPLACE(def->disks, insertAt,
                                             def->ndisks, disk));
@@ -20373,6 +20436,14 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     /* analysis of the disk devices */
+    /*
+     * <domain>
+     *  <devices>
+     *   <disk></disk>
+     *   <disk></disk>
+     *
+     * virXPathNodeSet select all disk tags under devices.
+     */
     if ((n = virXPathNodeSet("./devices/disk", ctxt, &nodes)) < 0)
         goto error;
 
@@ -20389,6 +20460,9 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!disk)
             goto error;
 
+        // insert a disk to disk array, the new disk always sites together with disk that has the same bus(beofor/after it)
+        // if no disk with same bus before, insert at tail.
+        // TODO: why not insert it at last??
         virDomainDiskInsertPreAlloced(def, disk);
     }
     VIR_FREE(nodes);
@@ -20435,11 +20509,14 @@ virDomainDefParseXML(xmlDocPtr xml,
                 usb_master = true;
         }
 
+        // TODO: why not insert it at last??
+        // find the proper position for the new controller to insert
         virDomainControllerInsertPreAlloced(def, controller);
     }
     VIR_FREE(nodes);
 
     if (usb_other && !usb_master) {
+        // if has usb, must set master!!!
         virReportError(VIR_ERR_XML_DETAIL, "%s",
                        _("No master USB controller specified"));
         goto error;
@@ -20458,6 +20535,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!lease)
             goto error;
 
+        // new lease always insert at tail.
         def->leases[def->nleases++] = lease;
     }
     VIR_FREE(nodes);
@@ -20475,6 +20553,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!fs)
             goto error;
 
+        // new fs always insert at tail.
         def->fss[def->nfss++] = fs;
     }
     VIR_FREE(nodes);
@@ -20494,6 +20573,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!net)
             goto error;
 
+        // insert interface at tail
         def->nets[def->nnets++] = net;
 
         /* <interface type='hostdev'> (and <interface type='net'>
@@ -20522,6 +20602,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!card)
             goto error;
 
+        // insert new smartcard at tail
         def->smartcards[def->nsmartcards++] = card;
     }
     VIR_FREE(nodes);
@@ -20548,9 +20629,13 @@ virDomainDefParseXML(xmlDocPtr xml,
             for (j = 0; j < i; j++) {
                 if (def->parallels[j]->target.port > maxport)
                     maxport = def->parallels[j]->target.port;
+                // find the max port of existing parallel
             }
+
+            // set new parallel target.port as the next of maxport.
             chr->target.port = maxport + 1;
         }
+        // insert new parallel at tail
         def->parallels[def->nparallels++] = chr;
     }
     VIR_FREE(nodes);
@@ -20577,8 +20662,10 @@ virDomainDefParseXML(xmlDocPtr xml,
                 if (def->serials[j]->target.port > maxport)
                     maxport = def->serials[j]->target.port;
             }
+            // auto set target.port if not set by user
             chr->target.port = maxport + 1;
         }
+        // save thing as parallel device
         def->serials[def->nserials++] = chr;
     }
     VIR_FREE(nodes);
@@ -20601,6 +20688,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!chr)
             goto error;
 
+        // console port is just an index
         chr->target.port = i;
         def->consoles[def->nconsoles++] = chr;
     }
@@ -20642,6 +20730,7 @@ virDomainDefParseXML(xmlDocPtr xml,
             goto error;
 
         /* Check if USB bus is required */
+        // usb controller is not set, but use device is present here, error
         if (input->bus == VIR_DOMAIN_INPUT_BUS_USB && usb_none) {
             virDomainInputDefFree(input);
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -20701,6 +20790,7 @@ virDomainDefParseXML(xmlDocPtr xml,
             goto error;
 
         if (video->primary) {
+            // validate video primary device
             if (def->nvideos != 0 && def->videos[0]->primary) {
                 virDomainVideoDefFree(video);
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -20710,6 +20800,9 @@ virDomainDefParseXML(xmlDocPtr xml,
 
             insertAt = 0;
         }
+
+        // primary video device is insertAt head
+        // TODO: why???
         if (VIR_INSERT_ELEMENT_INPLACE(def->videos,
                                        insertAt,
                                        def->nvideos,
@@ -20761,6 +20854,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     if ((n = virXPathNodeSet("./devices/watchdog", ctxt, &nodes)) < 0)
         goto error;
     if (n > 1) {
+        // validate watchdog
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("only a single watchdog device is supported"));
         goto error;
@@ -20772,6 +20866,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!watchdog)
             goto error;
 
+        // only one watchdog
         def->watchdog = watchdog;
         VIR_FREE(nodes);
     }
@@ -20792,6 +20887,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!memballoon)
             goto error;
 
+        // only one memballoon
         def->memballoon = memballoon;
         VIR_FREE(nodes);
     }
@@ -20822,11 +20918,13 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
 
     if (n > 0) {
+        // only one tpm
         if (!(def->tpm = virDomainTPMDefParseXML(xmlopt, nodes[0], ctxt, flags)))
             goto error;
     }
     VIR_FREE(nodes);
 
+    // only one nvram
     if ((n = virXPathNodeSet("./devices/nvram", ctxt, &nodes)) < 0)
         goto error;
 
@@ -20855,6 +20953,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!hub)
             goto error;
 
+        // validate device wich depends on use controller.
         if (hub->type == VIR_DOMAIN_HUB_TYPE_USB && usb_none) {
             virDomainHubDefFree(hub);
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
