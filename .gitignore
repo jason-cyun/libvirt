@@ -213,3 +213,4 @@ tags
 !/gnulib/lib/Makefile.am
 !/gnulib/tests/Makefile.am
 !/m4/virt-*.m4
+.clangd
