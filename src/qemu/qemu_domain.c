@@ -3719,6 +3719,7 @@ qemuDomainDefPostParse(virDomainDefPtr def,
     virQEMUCapsPtr qemuCaps = parseOpaque;
     int ret = -1;
 
+    // validate from qemu point of view.
     if (def->os.bootloader || def->os.bootloaderArgs) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("bootloader is not supported by QEMU"));
@@ -3740,26 +3741,34 @@ qemuDomainDefPostParse(virDomainDefPtr def,
             goto cleanup;
     }
 
+    // default devices, features enabled by qemu
     if (qemuDomainDefAddDefaultDevices(def, qemuCaps) < 0)
         goto cleanup;
 
+    // get canon machine supported by qemu, user may use alias for that
+    // convert it
     if (qemuCanonicalizeMachine(def, qemuCaps) < 0)
         goto cleanup;
 
+    // update gic version
     qemuDomainDefEnableDefaultFeatures(def, qemuCaps);
 
+    // recheck graphicsType
     if (qemuDomainRecheckInternalPaths(def, cfg, parseFlags) < 0)
         goto cleanup;
 
     if (qemuSecurityVerify(driver->securityManager, def) < 0)
         goto cleanup;
 
+    // validate vcpu setting from qemu point of view
     if (qemuDomainDefVcpusPostParse(def) < 0)
         goto cleanup;
 
+    // validate guest cpu topology, cache etc
     if (qemuDomainDefCPUPostParse(def) < 0)
         goto cleanup;
 
+    // validate tseg
     if (qemuDomainDefTsegPostParse(def, qemuCaps) < 0)
         goto cleanup;
 
@@ -6284,6 +6293,7 @@ qemuDomainPostParseDataFree(void *parseOpaque)
 }
 
 
+// callback bind with Qemu, set defautl or validate from qemu point of view
 virDomainDefParserConfig virQEMUDriverDomainDefParserConfig = {
     .domainPostParseBasicCallback = qemuDomainDefPostParseBasic,
     .domainPostParseDataAlloc = qemuDomainPostParseDataAlloc,

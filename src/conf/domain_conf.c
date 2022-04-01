@@ -4909,6 +4909,11 @@ virDomainDeviceDefPostParse(virDomainDeviceDefPtr dev,
     int ret;
 
     if (xmlopt->config.devicesPostParseCallback) {
+        // validate, set default of particular devices
+        // inside devicesPostParseCallback, call particular validate function based on device type
+        // net: qemuDomainDeviceNetDefPostParse
+        // disk: qemuDomainDeviceDiskDefPostParse
+        // video: qemuDomainDeviceVideoDefPostParse
         ret = xmlopt->config.devicesPostParseCallback(dev, def, caps, flags,
                                                       xmlopt->config.priv,
                                                       parseOpaque);
@@ -4916,6 +4921,7 @@ virDomainDeviceDefPostParse(virDomainDeviceDefPtr dev,
             return ret;
     }
 
+    // validate, set default common  element(attr) of devices
     if ((ret = virDomainDeviceDefPostParseCommon(dev, def, caps, flags, xmlopt)) < 0)
         return ret;
 
@@ -5227,6 +5233,8 @@ virDomainDefPostParse(virDomainDefPtr def,
 
     /* call the basic post parse callback */
     if (xmlopt->config.domainPostParseBasicCallback) {
+        // for qemu: qemuDomainDefPostParseBasic
+        // set emulator if user not set
         ret = xmlopt->config.domainPostParseBasicCallback(def, caps,
                                                           xmlopt->config.priv);
 
@@ -5236,6 +5244,8 @@ virDomainDefPostParse(virDomainDefPtr def,
 
     if (!data.parseOpaque &&
         xmlopt->config.domainPostParseDataAlloc) {
+        // for qemu: qemuDomainPostParseDataAlloc
+        // allocate and fill qempCaps cache
         ret = xmlopt->config.domainPostParseDataAlloc(def, caps, parseFlags,
                                                       xmlopt->config.priv,
                                                       &data.parseOpaque);
@@ -5252,6 +5262,10 @@ virDomainDefPostParse(virDomainDefPtr def,
 
     /* call the domain config callback */
     if (xmlopt->config.domainPostParseCallback) {
+        // for qemu: qemuDomainDefPostParse
+        // Add default devices, enable default features from qemu point of view.
+        // default devices like: PS2, USB, memballon
+        // say booloader is not supported by Qemu, if user set, error.
         ret = xmlopt->config.domainPostParseCallback(def, caps, parseFlags,
                                                      xmlopt->config.priv,
                                                      data.parseOpaque);
@@ -5259,7 +5273,9 @@ virDomainDefPostParse(virDomainDefPtr def,
             goto cleanup;
     }
 
-    /* iterate the devices */
+    /* iterate the devices
+     * parse and set default values
+     * */
     ret = virDomainDeviceInfoIterateInternal(def,
                                              virDomainDefPostParseDeviceIterator,
                                              true,
@@ -5268,10 +5284,13 @@ virDomainDefPostParse(virDomainDefPtr def,
     if (virDomainDefPostParseCheckFailure(def, parseFlags, ret) < 0)
         goto cleanup;
 
+    // Set defautl from generic view, not depends on hypervisor
     if ((ret = virDomainDefPostParseCommon(def, &data)) < 0)
         goto cleanup;
 
     if (xmlopt->config.assignAddressesCallback) {
+        // assign serial address, pci address, usb address, memory slots.
+        // it's big work here.
         ret = xmlopt->config.assignAddressesCallback(def, caps, parseFlags,
                                                      xmlopt->config.priv,
                                                      data.parseOpaque);
@@ -6174,12 +6193,15 @@ virDomainDefValidate(virDomainDefPtr def,
         xmlopt->config.domainValidateCallback(def, caps, xmlopt->config.priv) < 0)
         return -1;
 
-    /* iterate the devices */
+    /* iterate the devices, do validation.
+     * so double check again.
+     */
     if (virDomainDeviceInfoIterateInternal(def,
                                            virDomainDefValidateDeviceIterator,
                                            true, &data) < 0)
         return -1;
 
+    // validate from domain point of view
     if (virDomainDefValidateInternal(def) < 0)
         return -1;
 
@@ -21369,11 +21391,14 @@ virDomainDefParseNode(xmlDocPtr xml,
     if (!(def = virDomainDefParseXML(xml, root, ctxt, caps, xmlopt, flags)))
         goto cleanup;
 
-    /* callback to fill driver specific domain aspects */
+    /* callback to fill driver specific domain aspects
+     * set default from qemu point of view.
+     * big work, assign address
+     */
     if (virDomainDefPostParse(def, caps, flags, xmlopt, parseOpaque) < 0)
         goto cleanup;
 
-    /* valdiate configuration */
+    /* valdiate configuration, here only does validation, no setting default as we did this in virDomainDefPostParse */
     if (virDomainDefValidate(def, caps, flags, xmlopt) < 0)
         goto cleanup;
 
