@@ -367,11 +367,23 @@ qemuBuildDeviceAddressStr(virBufferPtr buf,
         if (!(contAlias = virDomainControllerAliasFind(domainDef,
                                                        VIR_DOMAIN_CONTROLLER_TYPE_USB,
                                                        info->addr.usb.bus)))
+            // <devices>
+            //  <hub type="usb"/>
+            // </devices>
+            //
+            // -device ich9-usb-ehci1,id=usb,bus=pci.0,addr=0x3.0x7                 master bus
+            // -device ich9-usb-uhci1,masterbus=usb.0,firstport=0,bus=pci.0,multifunction=on,addr=0x3 (controller compansion, it linked to masterbus), then provides its own usb ports
+            // -device ich9-usb-uhci2,masterbus=usb.0,firstport=2,bus=pci.0,addr=0x3.0x1
+            // -device ich9-usb-uhci3,masterbus=usb.0,firstport=4,bus=pci.0,addr=0x3.0x2
+            // -device usb-hub,id=hub0,bus=usb.0,port=1                             Plugging a hub into uhci port 1 not ehci!!!
+            //
+            // NOTE: each UHCI has only two root ports!!!
             goto cleanup;
         virBufferAsprintf(buf, ",bus=%s.0", contAlias);
         if (virDomainUSBAddressPortIsValid(info->addr.usb.port)) {
             virBufferAddLit(buf, ",port=");
             virDomainUSBAddressPortFormatBuf(buf, info->addr.usb.port);
+            // NOTE: the first port on a use controller is port 1
         }
     } else if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_SPAPRVIO) {
         if (info->addr.spaprvio.has_reg)
@@ -2569,6 +2581,14 @@ qemuBuildUSBControllerDevStr(const virDomainDef *domainDef,
                            _("masterbus not found"));
             return -1;
         }
+
+        /*
+         * The UHCI and OHCI controllers can attach to a USB bus created by EHCI as companion controllers.
+         * This is done by specifying the masterbus and firstport properties.
+         * masterbus specifies the bus name the controller should attach to.
+         * firstport specifies the first port the controller should attach to,
+         * which is needed as usually one EHCI controller with six ports has three UHCI companion controllers with two ports each.
+         */
         virBufferAsprintf(buf, ",masterbus=%s.0,firstport=%d",
                           masterbus, def->info.master.usb.startport);
     } else {

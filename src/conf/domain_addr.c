@@ -1692,6 +1692,7 @@ virDomainUSBAddressPortFormatBuf(virBufferPtr buf,
     for (i = 0; i < VIR_DOMAIN_DEVICE_USB_MAX_PORT_DEPTH; i++) {
         if (port[i] == 0)
             break;
+        // add dot of each mediated port(hub)
         virBufferAsprintf(buf, "%u.", port[i]);
     }
     virBufferTrim(buf, ".", -1);
@@ -1810,6 +1811,7 @@ virDomainUSBAddressHubNew(size_t nports)
 
     if (VIR_ALLOC_N(hub->ports, nports) < 0)
         goto cleanup;
+    // hub defines how max ports on this hub and bitmap of each port, track port status
     hub->nports = nports;
 
     ret = hub;
@@ -1833,10 +1835,12 @@ virDomainUSBAddressSetAddController(virDomainUSBAddressSetPtr addrs,
               nports);
 
     /* Skip UHCI{1,2,3} companions; only add the EHCI1 */
-    if (nports == 0)
+    if (nports == 0) // if no allow ports of this usb controller set, skip it
         return 0;
 
+    // addrs->buses only track EHCI usb controller
     if (addrs->nbuses <= cont->idx) {
+        // add bus in usb address set(bus--->usb controller)
         if (VIR_EXPAND_N(addrs->buses, addrs->nbuses, cont->idx - addrs->nbuses + 1) < 0)
             goto cleanup;
     } else if (addrs->buses[cont->idx]) {
@@ -1846,9 +1850,16 @@ virDomainUSBAddressSetAddController(virDomainUSBAddressSetPtr addrs,
         goto cleanup;
     }
 
+    // for each usb controller, we create a root hub!!!
+    // later you can create hub to this usb controller by user
+    // <devices>
+    // <hub type="usb"> // attach hub to any usb controller
+    // <devices>
     if (!(hub = virDomainUSBAddressHubNew(nports)))
         goto cleanup;
 
+    // add usb controller in bus set with idx as its index, value is hub
+    // hub defines how many ports on this controller, one hub for each <controller>!!!
     addrs->buses[cont->idx] = hub;
     hub = NULL;
 
@@ -1945,26 +1956,34 @@ virDomainUSBAddressSetAddHub(virDomainUSBAddressSetPtr addrs,
         goto cleanup;
     }
 
+    // address of hub set by user
     if (!(portStr = virDomainUSBAddressPortFormat(hub->info.addr.usb.port)))
         goto cleanup;
 
     VIR_DEBUG("Adding a USB hub with 8 ports on bus=%u port=%s",
               hub->info.addr.usb.bus, portStr);
 
+    // use create hub has 8 usb ports.
     if (!(newHub = virDomainUSBAddressHubNew(VIR_DOMAIN_USB_HUB_PORTS)))
         goto cleanup;
 
+    // as this hub has to link to use controller which is identified by hub address.
+    // check the target hub of that usb controller.
     if (!(targetHub = virDomainUSBAddressFindPort(addrs, &(hub->info), &targetPort,
                                                   portStr)))
         goto cleanup;
 
     if (targetHub->ports[targetPort]) {
+        // hub as a port on targethub, so that port of targethub should be not set before.
         virReportError(VIR_ERR_XML_ERROR,
                        _("Duplicate USB hub on bus %u port %s"),
                        hub->info.addr.usb.bus, portStr);
         goto cleanup;
     }
+
+    // set the port on targethub used
     ignore_value(virBitmapSetBit(targetHub->portmap, targetPort));
+    // link user create hub to usb controller.
     targetHub->ports[targetPort] = newHub;
     newHub = NULL;
 
@@ -1985,18 +2004,26 @@ virDomainUSBAddressSetAddControllers(virDomainUSBAddressSetPtr addrs,
     for (i = 0; i < def->ncontrollers; i++) {
         virDomainControllerDefPtr cont = def->controllers[i];
         if (cont->type == VIR_DOMAIN_CONTROLLER_TYPE_USB) {
+            // for each usb controller
             if (virDomainUSBAddressSetAddController(addrs, cont) < 0)
                 return -1;
         }
     }
 
     for (i = 0; i < def->nhubs; i++) {
+        /* <devices>
+         *  <hub type='usb'/>
+         * </devices>
+         * The hub element has one mandatory attribute, the type whose value can only be 'usb'.
+         * The hub element has an optional sub-element <address> with type='usb'which can tie the device to a particular controller
+         */
         virDomainHubDefPtr hub = def->hubs[i];
         if (hub->type == VIR_DOMAIN_HUB_TYPE_USB &&
             hub->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB &&
             virDomainUSBAddressPortIsValid(hub->info.addr.usb.port)) {
             /* USB hubs that do not yet have an USB address have to be
              * dealt with later */
+            // hub with usb address set by user
             if (virDomainUSBAddressSetAddHub(addrs, hub) < 0)
                 return -1;
         }
@@ -2032,6 +2059,7 @@ virDomainUSBAddressFindFreePort(virDomainUSBAddressHubPtr hub,
         if (!hub->ports[i])
             continue;
 
+        // child port of current which is a hub as well
         port = i + 1;
         VIR_DEBUG("Looking at USB hub at level: %u port: %u", level, port);
         if (virDomainUSBAddressFindFreePort(hub->ports[i], portpath,
@@ -2076,18 +2104,21 @@ virDomainUSBAddressAssignFromBus(virDomainUSBAddressSetPtr addrs,
                                  virDomainDeviceInfoPtr info,
                                  size_t bus)
 {
+    // max port depth is 4
     unsigned int portpath[VIR_DOMAIN_DEVICE_USB_MAX_PORT_DEPTH] = { 0 };
+    // ports of this bus
     virDomainUSBAddressHubPtr hub = addrs->buses[bus];
     char *portStr = NULL;
     int ret = -1;
 
-    if (!hub)
+    if (!hub) // no ports on this usb bus
         return -2;
 
     if (virDomainUSBAddressFindFreePort(hub, portpath, 0) < 0)
         return -2;
 
     /* we found a free port */
+    // portStr: 2.1.2 or 2.1.3.5
     if (!(portStr = virDomainUSBAddressPortFormat(portpath)))
         goto cleanup;
 
@@ -2096,6 +2127,8 @@ virDomainUSBAddressAssignFromBus(virDomainUSBAddressSetPtr addrs,
     memcpy(info->addr.usb.port, portpath, sizeof(portpath));
     VIR_DEBUG("Assigning USB addr bus=%u port=%s",
               info->addr.usb.bus, portStr);
+    // mark the port on that hub is used.
+    // TODO: why not mark it when found it above???
     if (virDomainUSBAddressReserve(info, addrs) < 0)
         goto cleanup;
 
@@ -2126,8 +2159,11 @@ virDomainUSBAddressAssign(virDomainUSBAddressSetPtr addrs,
         if (rc >= -1)
             return rc;
     } else {
+        // USB device has no address assigned, pick a free usb port on all buses
+        // break when find a one
         VIR_DEBUG("Looking for a free USB port on all the buses");
         for (i = 0; i < addrs->nbuses; i++) {
+            // check all usb buses, if find a port on one bus, return
             rc = virDomainUSBAddressAssignFromBus(addrs, info, i);
             if (rc >= -1)
                 return rc;

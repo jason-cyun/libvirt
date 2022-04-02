@@ -1922,6 +1922,8 @@ virDomainControllerDefNew(virDomainControllerType type)
         def->opts.vioserial.vectors = -1;
         break;
     case VIR_DOMAIN_CONTROLLER_TYPE_USB:
+        // initialize usb controller, -1 mean undef
+        // ports: ports supports on this usb controller
         def->opts.usbopts.ports = -1;
         break;
     case VIR_DOMAIN_CONTROLLER_TYPE_PCI:
@@ -6615,6 +6617,7 @@ virDomainDeviceUSBAddressParsePort(virDomainDeviceUSBAddressPtr addr,
     char *tmp = port;
     size_t i;
 
+    // port (a dotted notation of up to four octets, such as 1.2 or 2.1.3.1)
     for (i = 0; i < VIR_DOMAIN_DEVICE_USB_MAX_PORT_DEPTH; i++) {
         if (virStrToLong_uip(tmp, &tmp, 10, &addr->port[i]) < 0)
             break;
@@ -6622,6 +6625,7 @@ virDomainDeviceUSBAddressParsePort(virDomainDeviceUSBAddressPtr addr,
         if (*tmp == '\0')
             return 0;
 
+        // skip dot, it just means usb tree(layout, the last on is port, other are hub)
         if (*tmp == '.')
             tmp++;
     }
@@ -6835,6 +6839,10 @@ virDomainDeviceAddressParseXML(xmlNodePtr address,
     int ret = -1;
     char *type = virXMLPropString(address, "type");
 
+    // address of device
+    // NOTE: address is different depends on its type.
+    // like PCI address: <address type='pci' domain='0x0000' bus='0x00' slot='0x0a' function='0x0'/>
+    // drive:            <address type='drive' controller='0' bus='0' target='3' unit='0'/>
     if (type) {
         if ((info->type = virDomainDeviceAddressTypeFromString(type)) <= 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
@@ -6849,27 +6857,32 @@ virDomainDeviceAddressParseXML(xmlNodePtr address,
 
     switch ((virDomainDeviceAddressType) info->type) {
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI:
+        // PCI addresses have the following additional attributes: domain (a 2-byte hex integer, not currently used by qemu), bus (a hex value between 0 and 0xff, inclusive), slot (a hex value between 0x0 and 0x1f, inclusive), and function (a value between 0 and 7, inclusive). Also available is the multifunction attribute, which controls turning on the multifunction bit for a particular slot/function in the PCI control register
         if (virPCIDeviceAddressParseXML(address, &info->addr.pci) < 0)
             goto cleanup;
         break;
 
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_DRIVE:
+        // Drive addresses have the following additional attributes: controller (a 2-digit controller number), bus (a 2-digit bus number), target (a 2-digit target number), and unit (a 2-digit unit number on the bus).
         if (virDomainDeviceDriveAddressParseXML(address, &info->addr.drive) < 0)
             goto cleanup;
         break;
 
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_VIRTIO_SERIAL:
+        // Each virtio-serial address has the following additional attributes: controller (a 2-digit controller number), bus (a 2-digit bus number), and slot (a 2-digit slot within the bus).
         if (virDomainDeviceVirtioSerialAddressParseXML
                 (address, &info->addr.vioserial) < 0)
             goto cleanup;
         break;
 
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_CCID:
+        // A CCID address, for smart-cards, has the following additional attributes: bus (a 2-digit bus number), and slot attribute (a 2-digit slot within the bus).
         if (virDomainDeviceCcidAddressParseXML(address, &info->addr.ccid) < 0)
             goto cleanup;
         break;
 
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB:
+        // USB addresses have the following additional attributes: bus (a hex value between 0 and 0xfff, inclusive), and port (a dotted notation of up to four octets, such as 1.2 or 2.1.3.1).
         if (virDomainDeviceUSBAddressParseXML(address, &info->addr.usb) < 0)
             goto cleanup;
         break;
@@ -6880,6 +6893,7 @@ virDomainDeviceAddressParseXML(xmlNodePtr address,
         break;
 
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_CCW:
+        // S390 guests with a machine value of s390-ccw-virtio use the native CCW bus for I/O devices. CCW bus addresses have the following additional attributes: cssid (a hex value between 0 and 0xfe, inclusive), ssid (a value between 0 and 3, inclusive) and devno (a hex value between 0 and 0xffff, inclusive)
         if (virDomainDeviceCCWAddressParseXML
                 (address, &info->addr.ccw) < 0)
             goto cleanup;
@@ -6889,6 +6903,7 @@ virDomainDeviceAddressParseXML(xmlNodePtr address,
         break;
 
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_ISA:
+        // ISA addresses have the following additional attributes: iobase and irq
         if (virDomainDeviceISAAddressParseXML(address, &info->addr.isa) < 0)
             goto cleanup;
         break;
@@ -6951,6 +6966,14 @@ virDomainDeviceInfoParseXML(virDomainXMLOptionPtr xmlopt ATTRIBUTE_UNUSED,
 
     cur = node->children;
     while (cur != NULL) {
+        // device info element includes
+        // alias, address, boot, rom
+        // there are sub elements of different devcies like controller, disk, interface etc.
+        // <boot order='1'/>
+        // <alias name='ua-myDisk'/>
+        // <master startport='0'/>
+        // <address type='pci' domain='0' bus='0' slot='4' function='7'/>
+        // <rom bar='off'/>
         if (cur->type == XML_ELEMENT_NODE) {
             if (alias == NULL &&
                 virXMLNodeNameEqual(cur, "alias")) {
@@ -6985,12 +7008,14 @@ virDomainDeviceInfoParseXML(virDomainXMLOptionPtr xmlopt ATTRIBUTE_UNUSED,
     }
 
     if (master) {
+        // master port(startport of <master>) I'm bind to
         info->mastertype = VIR_DOMAIN_CONTROLLER_MASTER_USB;
         if (virDomainDeviceUSBMasterParseXML(master, &info->master.usb) < 0)
             goto cleanup;
     }
 
     if (boot) {
+        // as boot device, its order
         if (virDomainDeviceBootParseXML(boot, info))
             goto cleanup;
     }
@@ -10259,6 +10284,7 @@ virDomainControllerModelTypeFromString(const virDomainControllerDef *def,
     if (def->type == VIR_DOMAIN_CONTROLLER_TYPE_SCSI)
         return virDomainControllerModelSCSITypeFromString(model);
     else if (def->type == VIR_DOMAIN_CONTROLLER_TYPE_USB)
+        // use mode support several controller like uchi, echi, xchi
         return virDomainControllerModelUSBTypeFromString(model);
     else if (def->type == VIR_DOMAIN_CONTROLLER_TYPE_PCI)
         return virDomainControllerModelPCITypeFromString(model);
@@ -10320,10 +10346,15 @@ virDomainControllerDefParseXML(virDomainXMLOptionPtr xmlopt,
     xmlNodePtr saved = ctxt->node;
     int rc;
 
+    /*
+     *
+     *
+     */
     ctxt->node = node;
 
     typeStr = virXMLPropString(node, "type");
     if (typeStr) {
+        // type of controller
         if ((type = virDomainControllerTypeFromString(typeStr)) < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("Unknown controller type '%s'"), typeStr);
@@ -10352,6 +10383,10 @@ virDomainControllerDefParseXML(virDomainXMLOptionPtr xmlopt,
                            _("Cannot parse controller index %s"), idx);
             goto error;
         }
+        // idx is used to build device alias
+        // alias is used as id when add device. charchannel$idx
+        //
+        // -chardev socket,id=charchannel0,fd=33,server,nowait
         def->idx = idxVal;
     }
 
@@ -10377,6 +10412,7 @@ virDomainControllerDefParseXML(virDomainXMLOptionPtr xmlopt,
                 modelName = virXMLPropString(cur, "name");
                 processedModel = true;
             } else if (virXMLNodeNameEqual(cur, "target")) {
+                // For PCI controller(user should not set this)
                 if (processedTarget) {
                     virReportError(VIR_ERR_XML_ERROR, "%s",
                                    _("Multiple <target> elements in "
@@ -10442,9 +10478,17 @@ virDomainControllerDefParseXML(virDomainXMLOptionPtr xmlopt,
         VIR_DEBUG("Ignoring device address for none model usb controller");
     } else if (virDomainDeviceInfoParseXML(xmlopt, node,
                                            &def->info, flags) < 0) {
+    // controller is also a device, so it has devcie info for it.
+    // like For controllers that are themselves devices on a PCI or USB bus, an optional sub-element <address> can specify the exact relationship of the controller to its master bus
+    /* <controller type='virtio-serial' index='1'>
+     *   <address type='pci' domain='0x0000' bus='0x00' slot='0x0a' function='0x0'/>
+     * </controller>
+     */
         goto error;
     }
 
+    // USB/virtio-serial controllers accept a ports attribute to configure how many devices can be connected to the controller.
+    //  <controller type='virtio-serial' index='0' ports='16' vectors='4'/>
     portsStr = virXMLPropString(node, "ports");
     if (portsStr) {
         int r = virStrToLong_i(portsStr, NULL, 10, &ports);
@@ -10457,6 +10501,7 @@ virDomainControllerDefParseXML(virDomainXMLOptionPtr xmlopt,
 
     switch (def->type) {
     case VIR_DOMAIN_CONTROLLER_TYPE_VIRTIO_SERIAL: {
+        // ports only valid for controller virtio serial and usb
         def->opts.vioserial.ports = ports;
 
         char *vectors = virXMLPropString(node, "vectors");
@@ -10494,6 +10539,7 @@ virDomainControllerDefParseXML(virDomainXMLOptionPtr xmlopt,
             def->info.master.usb.startport = masterPort;
         }
 
+        // ports only valid for controller virtio serial and usb
         def->opts.usbopts.ports = ports;
         break;
     }
@@ -13113,6 +13159,7 @@ virDomainInputDefParseXML(virDomainXMLOptionPtr xmlopt,
             }
         }
     } else {
+        // default bus for input if not set
         if (dom->os.type == VIR_DOMAIN_OSTYPE_HVM) {
             if ((def->type == VIR_DOMAIN_INPUT_TYPE_MOUSE ||
                 def->type == VIR_DOMAIN_INPUT_TYPE_KBD) &&
@@ -13134,6 +13181,7 @@ virDomainInputDefParseXML(virDomainXMLOptionPtr xmlopt,
         goto error;
 
     if (def->bus == VIR_DOMAIN_INPUT_BUS_USB &&
+        // for input device without address, type is NONE
         def->info.type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_NONE &&
         def->info.type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -20497,6 +20545,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     for (i = 0; i < n; i++) {
+        // most used controller, usb, pci, virtio-serial
         virDomainControllerDefPtr controller = virDomainControllerDefParseXML(xmlopt,
                                                                               nodes[i],
                                                                               ctxt,
@@ -20508,14 +20557,16 @@ virDomainDefParseXML(xmlDocPtr xml,
         /* sanitize handling of "none" usb controller */
         if (controller->type == VIR_DOMAIN_CONTROLLER_TYPE_USB) {
             if (controller->model == VIR_DOMAIN_CONTROLLER_MODEL_USB_NONE) {
-                if (usb_other || usb_none) {
+                // if one controller set mode  to NONE, means disable usb for this domain
+                // then you can NOT add another use controller(s)
+                if (usb_other || usb_none) { // more usb controller found when usb is disabled.
                     virDomainControllerDefFree(controller);
                     virReportError(VIR_ERR_XML_DETAIL, "%s",
                                    _("Can't add another USB controller: "
                                      "USB is disabled for this domain"));
                     goto error;
                 }
-                usb_none = true;
+                usb_none = true;// disable use controller for the domain
             } else {
                 if (usb_none) {
                     virDomainControllerDefFree(controller);
@@ -20524,10 +20575,12 @@ virDomainDefParseXML(xmlDocPtr xml,
                                      "USB is disabled for this domain"));
                     goto error;
                 }
-                usb_other = true;
+                usb_other = true; // found at least one use controller which is not NONE
             }
 
+            // if controller without master set indicate I'm master(controllers has the same index)
             if (controller->info.mastertype == VIR_DOMAIN_CONTROLLER_MASTER_NONE)
+                // found one user master
                 usb_master = true;
         }
 
@@ -20537,8 +20590,25 @@ virDomainDefParseXML(xmlDocPtr xml,
     }
     VIR_FREE(nodes);
 
+    // uhci controller can be combined with ehci controller(USB2.0)
+    // uhci provides USB1.0 ports, ehci as the master, uhci uses a port on ehci
+    /*
+     * USB companion controllers has the same index, controller with <master> is slave
+     *
+     * <controller type='usb' index='0' model='ich9-ehci1'>
+     *   <alias name='usb'/>
+     *   <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x7'/>
+     * </controller>
+     *
+     * <controller type='usb' index='0' model='ich9-uhci1'> // same index as it's master
+     *   <alias name='usb'/>
+     *   <master startport='0'/> // bind to port 0 of its master, I'm slave
+     *   <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0' multifunction='on'/>
+     * </controller>
+     */
     if (usb_other && !usb_master) {
-        // if has usb, must set master!!!
+        // we have at least one use controller enable
+        // but all use controllers declare its self as slave, with master set, no master controller
         virReportError(VIR_ERR_XML_DETAIL, "%s",
                        _("No master USB controller specified"));
         goto error;
@@ -20743,6 +20813,11 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     for (i = 0; i < n; i++) {
+          /*
+           * <input type='mouse' bus='usb'/>
+           * <input type='keyboard' bus='usb'/>
+           * <input type='tablet' bus='virtio'/>
+           */
         virDomainInputDefPtr input = virDomainInputDefParseXML(xmlopt,
                                                                def,
                                                                nodes[i],
@@ -20752,7 +20827,7 @@ virDomainDefParseXML(xmlDocPtr xml,
             goto error;
 
         /* Check if USB bus is required */
-        // usb controller is not set, but use device is present here, error
+        // usb controller is disable, input device bus is USB.
         if (input->bus == VIR_DOMAIN_INPUT_BUS_USB && usb_none) {
             virDomainInputDefFree(input);
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",

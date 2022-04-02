@@ -783,6 +783,7 @@ typedef enum {
 typedef struct _virDomainVirtioSerialOpts virDomainVirtioSerialOpts;
 typedef virDomainVirtioSerialOpts *virDomainVirtioSerialOptsPtr;
 struct _virDomainVirtioSerialOpts {
+    // The virtio-serial controller has two additional optional attributes ports and vectors, which control how many devices can be connected through the controller
     int ports;   /* -1 == undef */
     int vectors; /* -1 == undef */
 };
@@ -822,6 +823,7 @@ struct _virDomainPCIControllerOpts {
 typedef struct _virDomainUSBControllerOpts virDomainUSBControllerOpts;
 typedef virDomainUSBControllerOpts *virDomainUSBControllerOptsPtr;
 struct _virDomainUSBControllerOpts {
+    //  USB controllers accept a ports attribute to configure how many devices can be connected to the controller
     int ports;   /* -1 == undef */
 };
 
@@ -836,6 +838,7 @@ struct _virDomainControllerDef {
     int ioeventfd; /* enum virTristateSwitch */
     unsigned int iothread; /* unused = 0, > 0 specific thread # */
     union {
+        // opts for different controller, like ports on this controller
         virDomainVirtioSerialOpts vioserial;
         virDomainPCIControllerOpts pciopts;
         virDomainUSBControllerOpts usbopts;

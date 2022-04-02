@@ -2676,9 +2676,11 @@ qemuDomainAssignUSBPortsIterator(virDomainDeviceInfoPtr info,
         return 0;
 
     if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB &&
+        // user set usb port of usb device, just return
         virDomainUSBAddressPortIsValid(info->addr.usb.port))
         return 0;
 
+    // if user does not set address of usb device, we assgin a free one to it
     return virDomainUSBAddressAssign(data->addrs, info);
 }
 
@@ -2695,11 +2697,17 @@ qemuDomainAssignUSBHubs(virDomainUSBAddressSetPtr addrs,
             continue;
 
         if (hub->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB &&
+            // user set address of this hub, just valid it
             virDomainUSBAddressPortIsValid(hub->info.addr.usb.port))
             continue;
+
+        // for user create hub without adddress set, go here
+        // find a free usb port on all avaiable usb controllers
+        // set hub->info->addr and mark the port on that controller is used but we did not link hub to usb controller
         if (virDomainUSBAddressAssign(addrs, &hub->info) < 0)
             return -1;
 
+        // bind hub to that usb controller like this: controller->ports[x]=hub
         if (virDomainUSBAddressSetAddHub(addrs, hub) < 0)
             return -1;
     }
@@ -2716,6 +2724,7 @@ qemuDomainAssignUSBPorts(virDomainUSBAddressSetPtr addrs,
 
     return virDomainUSBDeviceDefForeach(def,
                                         qemuDomainAssignUSBPortsIterator,
+                                        // assign usb port from usb controller to usb device if they are not set by user.
                                         &data,
                                         true);
 }
@@ -2881,6 +2890,9 @@ qemuDomainAssignUSBAddresses(virDomainDefPtr def,
          *  domains that already have all the addresses specified
          * otherwise libvirt's attempt to recreate the USB topology via
          * QEMU command line might fail */
+
+
+        // check all use deivces, if they attach to proper usb controller
         if (virDomainUSBDeviceDefForeach(def, virDomainUSBAddressPresent, NULL,
                                          false) < 0)
             return 0;

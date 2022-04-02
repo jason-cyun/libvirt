@@ -287,10 +287,14 @@ struct _virDomainUSBAddressHub {
      * ports[0] represents port 1, because ports are numbered from 1 */
     virBitmapPtr portmap;
     size_t nports;
+    // each hub has child port, but child port can be a hub as well
+    // thats why have ports child as well
+    // for each port of this hub, it's ports[0] which is a hub address
     virDomainUSBAddressHubPtr *ports;
 };
 
 struct _virDomainUSBAddressSet {
+    // all usb controller and bitmap of port on that controllered tracked in hub
     /* every <controller type='usb' index='i'> is represented
      * as a hub at buses[i] */
     virDomainUSBAddressHubPtr *buses;

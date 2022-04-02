@@ -116,6 +116,7 @@ qemuAssignDeviceChrAlias(virDomainDefPtr def,
     if (idx == -1 && (idx = qemuGetNextChrDevIndex(def, chr, prefix)) < 0)
         return -1;
 
+    // alias for chr devices
     return virAsprintf(&chr->info.alias, "%s%zd", prefix, idx);
 }
 
@@ -127,6 +128,7 @@ qemuAssignDeviceControllerAlias(virDomainDefPtr domainDef,
 {
     const char *prefix = virDomainControllerTypeToString(controller->type);
 
+    // generate alias for device controller
     if (controller->info.alias)
         return 0;
 
@@ -164,7 +166,9 @@ qemuAssignDeviceControllerAlias(virDomainDefPtr domainDef,
         if (qemuDomainIsQ35(domainDef) && controller->idx == 0)
             return VIR_STRDUP(controller->info.alias, "ide");
     } else if (controller->type == VIR_DOMAIN_CONTROLLER_TYPE_USB) {
-        /* first USB device is "usb", others are normal "usb%d" */
+
+        /* first USB controller is "usb", others are normal "usb%d" */
+        // -device ich9-usb-ehci1,id=usb,bus=pci.0,addr=0x3.0x7
         if (controller->idx == 0)
             return VIR_STRDUP(controller->info.alias, "usb");
     }

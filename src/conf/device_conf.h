@@ -94,6 +94,7 @@ typedef struct _virDomainDeviceUSBAddress virDomainDeviceUSBAddress;
 typedef virDomainDeviceUSBAddress *virDomainDeviceUSBAddressPtr;
 struct _virDomainDeviceUSBAddress {
     unsigned int bus;
+    // port (a dotted notation of up to four octets, such as 1.2 or 2.1.3.1)
     unsigned int port[VIR_DOMAIN_DEVICE_USB_MAX_PORT_DEPTH];
 };
 
@@ -134,9 +135,10 @@ struct _virDomainDeviceDimmAddress {
 typedef struct _virDomainDeviceInfo virDomainDeviceInfo;
 typedef virDomainDeviceInfo *virDomainDeviceInfoPtr;
 struct _virDomainDeviceInfo {
-    // parameters used for attach-disk QMP command
+    // generic part of different devices like disk/char/fs/console/usb etc
+    // mostly for device address
     char *alias;
-    int type; /* virDomainDeviceAddressType */
+    int type; /* virDomainDeviceAddressType, address type as we have union address here*/
     union {
         virPCIDeviceAddress pci;
         virDomainDeviceDriveAddress drive;
