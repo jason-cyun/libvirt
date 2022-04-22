@@ -5546,6 +5546,7 @@ qemuProcessSetupHotpluggableVcpus(virQEMUDriverPtr driver,
 
         if (vcpu->hotpluggable == VIR_TRISTATE_BOOL_YES && vcpu->online &&
             vcpupriv->vcpus != 0) {
+            // add add online and hotpluggable cpu to array for sorting below
             if (virAsprintf(&vcpupriv->alias, "vcpu%zu", i) < 0)
                 goto cleanup;
 
@@ -5559,6 +5560,11 @@ qemuProcessSetupHotpluggableVcpus(virQEMUDriverPtr driver,
         goto cleanup;
     }
 
+    // sort all hotpluggable cpu with order
+    // so that high order cpu insert to qemu firstly
+    // steps for add hotpluggable vcpu: https://qemu-project.gitlab.io/qemu/system/cpu-hotplug.html
+    // 1. get hotpluggable vcpu info set by qemu with  QMP command
+    // 2. add a cpu device with above info.
     qsort(bootHotplug, nbootHotplug, sizeof(*bootHotplug),
           qemuProcessVcpusSortOrder);
 
@@ -5566,6 +5572,7 @@ qemuProcessSetupHotpluggableVcpus(virQEMUDriverPtr driver,
         goto cleanup;
 
     for (i = 0; i < nbootHotplug; i++) {
+        // insert all hotpluggable and online vcpu with QMP command
         vcpu = bootHotplug[i];
 
         if (!(vcpuprops = qemuBuildHotpluggableCPUProps(vcpu)))
@@ -6538,6 +6545,8 @@ qemuProcessLaunch(virConnectPtr conn,
         goto cleanup;
 
     VIR_DEBUG("setting up hotpluggable cpus");
+    // after qemu-process (vm starts), then we insert hotpluggable vcpu!!!
+    // based on core id, thread id for all cpus get from qemu
     if (qemuDomainHasHotpluggableStartupVcpus(vm->def)) {
         if (qemuDomainRefreshVcpuInfo(driver, vm, asyncJob, false) < 0)
             goto cleanup;

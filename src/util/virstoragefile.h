@@ -261,13 +261,19 @@ struct _virStorageSource {
 
     virObjectPtr privateData;
 
+    // comes from disk driver sub-element
+    // <disk>
+    //   <driver name="qemu" type="raw">
     int format; /* virStorageFileFormat in domain backing chains, but
                  * pool-specific enum for storage volumes */
+
+    // volume related
     virBitmapPtr features;
     char *compat;
     bool nocow;
     bool sparse;
 
+    // volume related
     virStoragePermsPtr perms;
     virStorageTimestampsPtr timestamps;
     unsigned long long capacity; /* in bytes, 0 if unknown */
@@ -323,6 +329,7 @@ struct _virStorageSource {
     /* Libvirt currently stores the following properities in virDomainDiskDef.
      * These instances are currently just copies from the parent definition and
      * are not mapped back to the XML */
+    // value comes from <disk>
     int iomode; /* enum virDomainDiskIo */
     int cachemode; /* enum virDomainDiskCache */
     int discard; /* enum virDomainDiskDiscard */

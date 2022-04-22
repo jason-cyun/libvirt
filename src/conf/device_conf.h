@@ -154,6 +154,7 @@ struct _virDomainDeviceInfo {
     union {
         virDomainDeviceUSBMaster usb;
     } master;
+
     /* rombar and romfile are only used for pci hostdev and network
      * devices. */
     int romenabled; /* enum virTristateBool */

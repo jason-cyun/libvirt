@@ -626,7 +626,13 @@ struct _virDomainDiskDef {
 
     // below are info of disk when attach to guest
     virObjectPtr privateData;
-
+    /*
+     *  <disk type='block' device='cdrom'>
+     *    <driver name='qemu' type='raw'/>
+     *    <target dev='hdd' bus='ide' tray='open'/>
+     *    <readonly/>
+     *  </disk>
+     */
     int device; /* enum virDomainDiskDevice */
     int bus; /* enum virDomainDiskBus */
     // vda, vdb etc
@@ -639,6 +645,7 @@ struct _virDomainDiskDef {
     int mirrorState; /* enum virDomainDiskMirrorState */
     int mirrorJob; /* virDomainBlockJobType */
 
+    // The optional geometry element provides the ability to override geometry settings. This mostly useful for S390 DASD-disks or older DOS-disks
     struct {
         unsigned int cylinders;
         unsigned int heads;
@@ -646,6 +653,7 @@ struct _virDomainDiskDef {
         int trans; /* enum virDomainDiskGeometryTrans */
     } geometry;
 
+    // If present, the blockio element allows to override any of the block device properties listed below.
     struct {
         unsigned int logical_block_size;
         unsigned int physical_block_size;
@@ -654,7 +662,7 @@ struct _virDomainDiskDef {
     // io tune for this disk
     virDomainBlockIoTuneInfo blkdeviotune;
 
-    // qemu
+    // <driver name='qemu' type='qcow2' queues='4' queue_size='256' />
     char *driverName;
 
     char *serial;
@@ -832,11 +840,15 @@ struct _virDomainControllerDef {
     int type;
     int idx;
     int model; /* -1 == undef */
+
+    // <controller>
+    //   <driver queues=''>
     unsigned int queues;
     unsigned int cmd_per_lun;
     unsigned int max_sectors;
     int ioeventfd; /* enum virTristateSwitch */
     unsigned int iothread; /* unused = 0, > 0 specific thread # */
+
     union {
         // opts for different controller, like ports on this controller
         virDomainVirtioSerialOpts vioserial;
@@ -3374,11 +3386,13 @@ virDomainDiskDefPtr virDomainDiskDefParse(const char *xmlStr,
                                           const virDomainDef *def,
                                           virDomainXMLOptionPtr xmlopt,
                                           unsigned int flags);
+// parse domain conf from string
 virDomainDefPtr virDomainDefParseString(const char *xmlStr,
                                         virCapsPtr caps,
                                         virDomainXMLOptionPtr xmlopt,
                                         void *parseOpaque,
                                         unsigned int flags);
+// parse domain conf from file
 virDomainDefPtr virDomainDefParseFile(const char *filename,
                                       virCapsPtr caps,
                                       virDomainXMLOptionPtr xmlopt,
@@ -3390,11 +3404,7 @@ virDomainDefPtr virDomainDefParseNode(xmlDocPtr doc,
                                       virDomainXMLOptionPtr xmlopt,
                                       void *parseOpaque,
                                       unsigned int flags);
-virDomainObjPtr virDomainObjParseNode(xmlDocPtr xml,
-                                      xmlNodePtr root,
-                                      virCapsPtr caps,
-                                      virDomainXMLOptionPtr xmlopt,
-                                      unsigned int flags);
+// parse domain obj from file which contains xml
 virDomainObjPtr virDomainObjParseFile(const char *filename,
                                       virCapsPtr caps,
                                       virDomainXMLOptionPtr xmlopt,

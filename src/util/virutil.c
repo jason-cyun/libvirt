@@ -313,15 +313,19 @@ virScaleInteger(unsigned long long *value, const char *suffix,
             return -1;
         }
         suffix = "";
+        // if suffix is NULL, use user passed in scale(default scale)
     } else if (STRCASEEQ(suffix, "b") || STRCASEEQ(suffix, "byte") ||
                STRCASEEQ(suffix, "bytes")) {
         scale = 1;
+        // if suffix is b, bytes, byte, scale is 1, ignore user set scale(default scale)
     } else {
         int base;
 
         if (!suffix[1] || STRCASEEQ(suffix + 1, "iB")) {
+            // KiB, kiB
             base = 1024;
         } else if (c_tolower(suffix[1]) == 'b' && !suffix[2]) {
+            // KB, MB, kb, kB
             base = 1000;
         } else {
             virReportError(VIR_ERR_INVALID_ARG,

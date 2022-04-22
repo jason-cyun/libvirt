@@ -811,6 +811,7 @@ virXMLParseHelper(int domcode,
     pctxt->sax->error = catchXMLError;
 
     if (filename) {
+        // read from file first, if not set, read from xmlstr
         xml = xmlCtxtReadFile(pctxt, filename, NULL,
                               XML_PARSE_NONET |
                               XML_PARSE_NOWARNING);

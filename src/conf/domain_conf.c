@@ -2898,7 +2898,7 @@ virDomainIOThreadIDDefArrayInit(virDomainDefPtr def,
         ignore_value(virBitmapClearBit(thrmap,
                                        def->iothreadids[i]->iothread_id));
 
-    /* resize array */
+    /* resize array to keep thread which is not set by user */
     if (VIR_REALLOC_N(def->iothreadids, iothreads) < 0)
         goto error;
 
@@ -5920,10 +5920,12 @@ virDomainDeviceDefValidate(const virDomainDeviceDef *dev,
     if (parseFlags & VIR_DOMAIN_DEF_PARSE_SKIP_VALIDATE)
         return 0;
 
+    // validate from qemu point of view
     if (xmlopt->config.deviceValidateCallback &&
         xmlopt->config.deviceValidateCallback(dev, def, xmlopt->config.priv))
         return -1;
 
+    // validate from generic view for devices
     if (virDomainDeviceDefValidateInternal(dev, def) < 0)
         return -1;
 
@@ -6190,12 +6192,12 @@ virDomainDefValidate(virDomainDefPtr def,
     if (parseFlags & VIR_DOMAIN_DEF_PARSE_SKIP_VALIDATE)
         return 0;
 
-    /* call the domain config callback */
+    /* call the domain config callback validation from qemu point of view */
     if (xmlopt->config.domainValidateCallback &&
         xmlopt->config.domainValidateCallback(def, caps, xmlopt->config.priv) < 0)
         return -1;
 
-    /* iterate the devices, do validation.
+    /* iterate the devices defined in this domain, do validation.
      * so double check again.
      */
     if (virDomainDeviceInfoIterateInternal(def,
@@ -8901,6 +8903,9 @@ virDomainStorageSourceParse(xmlNodePtr node,
     // node is <source>
     // src->path comes from different attr depends on disk type.
     // that means disk type determines the attr used in source which will be as source->path!!
+    //
+    // <disk type="block" device="disk">
+    //   <source dev="/dev/disk/by-id/scsi-36d09466046e0f700235257ac0c4c7682"/>
     switch ((virStorageType)src->type) {
     case VIR_STORAGE_TYPE_FILE:
         src->path = virXMLPropString(node, "file");
@@ -9428,6 +9433,7 @@ virDomainDiskDefDriverParseXML(virDomainDiskDefPtr def,
     char *tmp = NULL;
     int ret = -1;
 
+    // <driver name="qemu" type="raw" cache="none" io="native" error_policy="report" rerror_policy="report" iothread="1"/>
     def->driverName = virXMLPropString(cur, "name");
 
     if ((tmp = virXMLPropString(cur, "cache")) &&
@@ -10159,6 +10165,7 @@ virDomainParseMemory(const char *xpath,
 
     max = virMemoryMaxValue(capped);
 
+    // no user set, bytes get 0
     if (virDomainParseScaledValue(xpath, units_xpath, ctxt,
                                   &bytes, 1024, max, required) < 0)
         return -1;
@@ -10212,6 +10219,7 @@ virDomainParseMemoryLimit(const char *xpath,
         return -1;
 
     if (ret == 0)
+        // no user set, default value also max value
         *mem = VIR_DOMAIN_MEMORY_PARAM_UNLIMITED;
     else
         *mem = virMemoryLimitTruncate(VIR_DIV_UP(bytes, 1024));
@@ -11212,6 +11220,18 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
     virDomainChrSourceReconnectDef reconnect = {0};
     int rv, val;
 
+    /*
+     * <interface type="vhostuser">
+     *   <mac address="fa:16:3e:ed:e2:49"/>
+     *   <model type="virtio"/>
+     *   <source bridge="br0" type="unix" path="/var/lib/openvswitch/port-slfw5dr5p1" mode="server"/>
+     *   <target dev="port-slfw5dr5p1"/>
+     *   <driver queues="4" rx_queue_size="1024">
+     *     <host mrg_rxbuf="on"/>
+     *   </driver>
+     *   <bandwidth/>
+     * </interface>
+     */
     if (VIR_ALLOC(def) < 0)
         return NULL;
 
@@ -14273,6 +14293,7 @@ virDomainGraphicsDefParseXML(xmlNodePtr node,
         goto error;
     }
 
+    // type of graphics, vnc or rdp etc
     if ((typeVal = virDomainGraphicsTypeFromString(type)) < 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("unknown graphics device type '%s'"), type);
@@ -18102,6 +18123,15 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
     unsigned int iothreads = 0;
     xmlNodePtr *nodes = NULL;
 
+    /*
+     *  <iothreads>4</iothreads>
+     *  <iothreadids>
+     *   <iothread id="2"/>
+     *   <iothread id="4"/>
+     *   <iothread id="6"/>
+     *   <iothread id="8"/>
+     *  </iothreadids>
+     */
     tmp = virXPathString("string(./iothreads[1])", ctxt);
     if (tmp && virStrToLong_uip(tmp, NULL, 10, &iothreads) < 0) {
         // validate if set, default is 0
@@ -18125,6 +18155,7 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
 
     for (i = 0; i < n; i++) {
         virDomainIOThreadIDDefPtr iothrid = NULL;
+        // each io thread must has an not zero id
         if (!(iothrid = virDomainIOThreadIDDefParseXML(nodes[i])))
             goto error;
 
@@ -18137,6 +18168,7 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
             goto error;
         }
         // increase io thread which has details.
+        // for all user set iothreads
         def->iothreadids[def->niothreadids++] = iothrid;
     }
     VIR_FREE(nodes);
@@ -18776,6 +18808,13 @@ virDomainVcpuParse(virDomainDefPtr def,
      *       <vcpu id='1' enabled='no' hotpluggable='yes'/>
      *     </vcpus>
      * </domain>
+     *
+     * enabled means offline or online
+     * boards supports cpu hotplug, maxvcpus can be set for that, to enable or disalbe vcpu at runtime!!!
+     * vcpu: overview of all vcpu.
+     * vcpus: details about each vcpu
+     * non-fhotpluggable cpu(enabled) added from command line '-smp X'
+     * while hotpluggable cpu aded by QMP
      */
     if ((vcpuNode = virXPathNode("./vcpu[1]", ctxt))) {
         // get content of vcpu
@@ -19360,6 +19399,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     //
     // ./@id is relative path to current node.
     if (!(flags & VIR_DOMAIN_DEF_PARSE_INACTIVE))
+        // parse id only for active domain
         if (virXPathLong("string(./@id)", ctxt, &id) < 0)
             id = -1;
     def->id = (int)id;
@@ -19431,6 +19471,8 @@ virDomainDefParseXML(xmlDocPtr xml,
     def->os.machine = virXPathString("string(./os/type[1]/@machine)", ctxt);
     def->emulator = virXPathString("string(./devices/emulator[1])", ctxt);
 
+    // if either os.arch or os.machine  not set
+    // and skip ostype disable.
     if ((!def->os.arch || !def->os.machine) &&
         !(flags & VIR_DOMAIN_DEF_PARSE_SKIP_OSTYPE_CHECKS)) {
         /* If the logic here seems fairly arbitrary, that's because it is :)
@@ -19676,7 +19718,13 @@ virDomainDefParseXML(xmlDocPtr xml,
     if (virXPathBoolean("boolean(./memoryBacking/discard)", ctxt))
         def->mem.discard = VIR_TRISTATE_BOOL_YES;
 
-    /* Extract blkio cgroup tunables */
+    //===========================================================================================
+    /* NOTE:
+     * Extract blkio cgroup tunables, these parameters are used by cgroup blkio
+     * to tune vm disk io, we should never use this as due to cgroup v1 tune disk io not right
+     * for buffered io, refer to: https://andrestc.com/post/cgroups-io/
+     * we should always use disk io tune featured provided by Qemu by QMP or from command line!!!
+     */
     if (virXPathUInt("string(./blkiotune/weight)", ctxt,
                      &def->blkio.weight) < 0)
         // use default if not set
@@ -19708,6 +19756,8 @@ virDomainDefParseXML(xmlDocPtr xml,
         }
     }
     VIR_FREE(nodes);
+
+    //===========================================================================================
 
     /* Extract other memory tunables */
     if (virDomainParseMemoryLimit("./memtune/hard_limit[1]", NULL, ctxt,
@@ -21382,6 +21432,8 @@ virDomainObjParseXML(xmlDocPtr xml,
 }
 
 
+// use xml from filename if it's set, otherwise from xmlStr
+// xml library provides two way that can be used by libvirt
 static virDomainDefPtr
 virDomainDefParse(const char *xmlStr,
                   const char *filename,
@@ -21460,9 +21512,9 @@ virDomainDefParseNode(xmlDocPtr xml,
     // each xmlNode has name(tag name), properties(attr) and doc (value) ant its childs and siblings
     ctxt->node = root;
 
-    // check each xml node at different level, parse and set with default
+    // check each xml node at different levels, parse and set with default
     // parse each xml node from root to leaf, root is root node of xml
-    // root(tree) is built from xml string.
+    // root(tree) is built from xml string, here only do parse node, do basic check and set default
     if (!(def = virDomainDefParseXML(xml, root, ctxt, caps, xmlopt, flags)))
         goto cleanup;
 
@@ -21486,7 +21538,7 @@ virDomainDefParseNode(xmlDocPtr xml,
 }
 
 
-virDomainObjPtr
+static virDomainObjPtr
 virDomainObjParseNode(xmlDocPtr xml,
                       xmlNodePtr root,
                       virCapsPtr caps,
