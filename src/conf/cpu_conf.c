@@ -280,6 +280,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
 
     *cpu = NULL;
 
+    // NOTE: we do not parse numa here, but use a separate function later on in virDomainNumaDefCPUParseXML
     /*
      * <domain>
      *  <cpu match='exact'>
@@ -298,6 +299,7 @@ virCPUDefParseXML(xmlXPathContextPtr ctxt,
 
     // set context node to cpu node
     if (xpath && !(ctxt->node = virXPathNode(xpath, ctxt))) {
+        // return ok if no cpu found
         ret = 0;
         goto cleanup;
     }

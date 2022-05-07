@@ -152,6 +152,7 @@ virDomainNumatuneNodeParseXML(virDomainNumaPtr numa,
         goto cleanup;
     }
 
+    // if no memory node for each guest numa node, return
     if (!n)
         return 0;
 
@@ -257,9 +258,22 @@ virDomainNumatuneNodeParseXML(virDomainNumaPtr numa,
 
 int
 virDomainNumatuneParseXML(virDomainNumaPtr numa,
+                          // placement_static vcpu's placement static or not
                           bool placement_static,
                           xmlXPathContextPtr ctxt)
 {
+    /*
+     * <domain>
+     *  <numatune>
+     *    <memory mode="strict" placement="static" nodeset="1-4,^3"/>
+     *    <memnode cellid="0" mode="strict" nodeset="1"/>
+     *    <memnode cellid="2" mode="preferred" nodeset="2"/>
+     *  </numatune>
+     *
+     * placement works with nodeset, indicate which nodeset is used for allocating memory for guest numatune
+     * placement is auto, nodeset used for is got by quering numad processs, explicit nodeset is ignored
+     * placement is static, nodeset must be set and used for
+     */
     char *tmp = NULL;
     int mode = -1;
     int n = 0;
@@ -268,6 +282,7 @@ virDomainNumatuneParseXML(virDomainNumaPtr numa,
     virBitmapPtr nodeset = NULL;
     xmlNodePtr node = NULL;
 
+    // if no user set, virXPathInt returns 0!!!
     if (virXPathInt("count(./numatune)", ctxt, &n) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("cannot extract numatune nodes"));
@@ -280,11 +295,13 @@ virDomainNumatuneParseXML(virDomainNumaPtr numa,
 
     node = virXPathNode("./numatune/memory[1]", ctxt);
 
+    // if vcpu placement is not static and no memory setting for numa node
+    // memory placement set to auto
     if (!placement_static && !node)
         // if no default or not static, use auto allocate memory for guest numa node
         placement = VIR_DOMAIN_NUMATUNE_PLACEMENT_AUTO;
 
-    // optional
+    // if user set memory under numa tune, parse it
     if (node) {
         // optional
         if ((tmp = virXMLPropString(node, "mode")) &&
@@ -323,6 +340,7 @@ virDomainNumatuneParseXML(virDomainNumaPtr numa,
         }
     }
 
+    // even no numa tune, still call virDomainNumatuneSet to caculate default values
     if (virDomainNumatuneSet(numa,
                              placement_static,
                              placement,
@@ -550,7 +568,7 @@ virDomainNumatuneSet(virDomainNumaPtr numa,
 {
     int ret = -1;
 
-    /* No need to do anything in this case */
+    /* no numatune and vcpu placement set with static, use vcpu setting */
     if (mode == -1 && placement == -1 && !nodeset)
         return 0;
 
@@ -582,7 +600,7 @@ virDomainNumatuneSet(virDomainNumaPtr numa,
     }
 
     if (mode != -1)
-        // set mode
+        // set memory allocation mode
         numa->memory.mode = mode;
 
     if (nodeset) {
@@ -602,7 +620,7 @@ virDomainNumatuneSet(virDomainNumaPtr numa,
 
     if (placement == VIR_DOMAIN_NUMATUNE_PLACEMENT_STATIC &&
         !numa->memory.nodeset) {
-        // must set nodeset if placement is strict!!!
+        // must set nodeset if placement is static
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("nodeset for NUMA memory tuning must be set "
                          "if 'placement' is 'static'"));
@@ -613,11 +631,12 @@ virDomainNumatuneSet(virDomainNumaPtr numa,
     if (placement == VIR_DOMAIN_NUMATUNE_PLACEMENT_AUTO &&
         numa->memory.nodeset) {
         virBitmapFree(numa->memory.nodeset);
-        // reset host numa nodeset if placment auto is used.
+        // reset host numa nodeset if placment auto is used, ignore nodeset
         numa->memory.nodeset = NULL;
     }
 
     if (placement != -1)
+        // set memory placement
         numa->memory.placement = placement;
 
     numa->memory.specified = true;
@@ -943,7 +962,7 @@ virDomainNumaDefCPUParseXML(virDomainNumaPtr def,
     for (i = 0; i < n; i++) {
         int rc;
         unsigned int cur_cell = i;
-
+        // if no id is present, the first seeing one is 0(use index as id)
         /* cells are in order of parsing or explicitly numbered */
         if ((tmp = virXMLPropString(nodes[i], "id"))) {
             if (virStrToLong_uip(tmp, NULL, 10, &cur_cell) < 0) {

@@ -2358,19 +2358,42 @@ struct _virDomainCputune {
      *     <iothread_period>1000000</iothread_period>
      *     <iothread_quota>-1</iothread_quota>
      *     <emulatorpin cpuset="1-3"/>
+     *
+     * cgroup layout
+     * .vm
+     *   |-- cpuacct.usage_percpu
+     *   |-- cpu.cfs_period_us
+     *   |-- cpu.cfs_quota_us ---------> global setting, all subdir shares these!!!
+     *                                 > say if global has two CPUs, vcpu0 and vpu1 shares these two CPUS, if they do not set its own quota!!!
+     *   |-- cpu.shares ---------------> global setting, all subdir shares these!!!
+     *
+     *   |-- emulator/  --------------->emulator has a group
+     *   |-- iothread1/ --------------->each io thread has a group
+     *   |-- iothread2/
+     *   |-- iothread3/
+     *   |-- iothread8/
+     *   |-- tasks
+     *   |-- vcpu0/   ----------------->each vcpu has a cgroup
+     *   `-- vcpu1/
      */
     unsigned long long shares;
     bool sharesSpecified; // if shares is not set, true
-    // period for each vcpu
+
+    // period setting for each vcpu thread
     unsigned long long period;
     long long quota;
-    // period for all vcpus
+
+    // period for all vcpus(shared by all vcpus, emulator, iothread)
+    // global_quota element specifies the maximum allowed bandwidth (unit: microseconds) within a period for the whole domain
+    // not default value for each vcpu0, iothread emulator!!!
     unsigned long long global_period;
     long long global_quota;
+
     unsigned long long emulator_period;
     long long emulator_quota;
     unsigned long long iothread_period;
     long long iothread_quota;
+
     virBitmapPtr emulatorpin;
 };
 
@@ -2708,7 +2731,7 @@ struct _virDomainDef {
     /* Most {caps_,hyperv_,kvm_,}feature options utilize a virTristateSwitch
      * to handle support. A few assign specific data values to the option.
      * See virDomainDefFeaturesCheckABIStability() for details. */
-    int features[VIR_DOMAIN_FEATURE_LAST]; // guest features switch/on off. this is used by qemu
+    int features[VIR_DOMAIN_FEATURE_LAST]; // guest features switch/on off or value set by that feature this is used by qemu
     // <domain><features><acpi/>
     //
     /*

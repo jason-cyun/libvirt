@@ -9444,6 +9444,8 @@ virDomainDiskDefDriverParseXML(virDomainDiskDefPtr def,
     }
     VIR_FREE(tmp);
 
+    // if default from user, error happens
+    // as when def
     if ((tmp = virXMLPropString(cur, "error_policy")) &&
         (def->error_policy = virDomainDiskErrorPolicyTypeFromString(tmp)) <= 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
@@ -9613,6 +9615,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     def->src->type = VIR_STORAGE_TYPE_FILE;
     def->device = VIR_DOMAIN_DISK_DEVICE_DISK;
 
+    // property of disk node
     // node is <disk type="block">
     if ((tmp = virXMLPropString(node, "type")) &&
         // if set, validate type, save to def->src->type which comes from disk atttr, not <source>
@@ -9636,6 +9639,7 @@ virDomainDiskDefParseXML(virDomainXMLOptionPtr xmlopt,
     rawio = virXMLPropString(node, "rawio");
     sgio = virXMLPropString(node, "sgio");
 
+    // child nodes of disk
     for (cur = node->children; cur != NULL; cur = cur->next) {
         if (cur->type != XML_ELEMENT_NODE)
             continue;
@@ -19827,6 +19831,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
     }
 
+    // global setting are shared by whole domain(vcpu thread, iothread, emulator threads)
     if (virXPathULongLong("string(./cputune/global_period[1])", ctxt,
                           &def->cputune.global_period) < -1) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -20018,11 +20023,12 @@ virDomainDefParseXML(xmlDocPtr xml,
      *      </numa>
      *   </cpu>
      *
-     *   cpu mode and topoloy for vcpu
-      */
+     *   cpu mode and topoloy for guest vcpu
+     */
     if (virCPUDefParseXML(ctxt, "./cpu[1]", VIR_CPU_TYPE_GUEST, &def->cpu) < 0)
         goto error;
 
+    // cpu of numa
     if (virDomainNumaDefCPUParseXML(def->numa, ctxt) < 0)
         goto error;
 
@@ -20040,9 +20046,11 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
     }
 
+    // memory of numa
     // parse memory allocation(from whcih host numa node) for guest numa node
     if (virDomainNumatuneParseXML(def->numa,
-                                  def->placement_mode == // vcpu placement which host cpu to run the vcpu
+                                  // vcpu placement which host cpu to run the vcpu
+                                  def->placement_mode ==
                                   VIR_DOMAIN_CPU_PLACEMENT_MODE_STATIC,
                                   ctxt) < 0)
         goto error;
@@ -20555,6 +20563,7 @@ virDomainDefParseXML(xmlDocPtr xml,
     if (virDomainDefParseBootOptions(def, ctxt) < 0)
         goto error;
 
+    //=================================devices=================================================
     /* analysis of the disk devices */
     /*
      * <domain>
@@ -20580,9 +20589,9 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!disk)
             goto error;
 
-        // insert a disk to disk array, the new disk always sites together with disk that has the same bus(beofor/after it)
+        // insert a disk to disk array, the new disk always sites together with disk that has the same bus(before/after it)
         // if no disk with same bus before, insert at tail.
-        // TODO: why not insert it at last??
+        // TODO: why not insert it at specific position not at tail???
         virDomainDiskInsertPreAlloced(def, disk);
     }
     VIR_FREE(nodes);
@@ -21237,6 +21246,8 @@ virDomainDefParseXML(xmlDocPtr xml,
             goto error;
     }
     VIR_FREE(nodes);
+
+    //=================================devices=================================================
 
     /* analysis of the user namespace mapping */
     // select all node with tag uid!!!

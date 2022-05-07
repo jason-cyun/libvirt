@@ -79,6 +79,7 @@ virXPathString(const char *xpath,
     if ((obj == NULL) || (obj->type != XPATH_STRING) ||
         (obj->stringval == NULL) || (obj->stringval[0] == 0)) {
         xmlXPathFreeObject(obj);
+        // user unset, or user set with empty string
         return NULL;
     }
     ignore_value(VIR_STRDUP(ret, (char *) obj->stringval));
@@ -154,6 +155,8 @@ virXPathNumber(const char *xpath,
     obj = xmlXPathEval(BAD_CAST xpath, ctxt);
     ctxt->node = relnode;
     if ((obj == NULL) || (obj->type != XPATH_NUMBER) ||
+        // user unset, or user set with empty number
+        // NOTE: virXPathNumber is never used at all
         (isnan(obj->floatval))) {
         xmlXPathFreeObject(obj);
         return -1;
@@ -186,13 +189,18 @@ virXPathLongBase(const char *xpath,
     if ((obj != NULL) && (obj->type == XPATH_STRING) &&
         (obj->stringval != NULL) && (obj->stringval[0] != 0)) {
         if (virStrToLong_l((char *) obj->stringval, NULL, base, value) < 0)
+            // user set with invalid value
             ret = -2;
     } else if ((obj != NULL) && (obj->type == XPATH_NUMBER) &&
                (!(isnan(obj->floatval)))) {
+        // also goes here if xpath: count(./cache)
+        // if user unset cache, count return zero, 0 is returned !!!
         *value = (long) obj->floatval;
         if (*value != obj->floatval)
+            // user set with invalid value
             ret = -2;
     } else {
+        // user unset
         ret = -1;
     }
 
@@ -221,8 +229,9 @@ virXPathInt(const char *xpath,
     int ret;
 
     ret = virXPathLongBase(xpath, ctxt, 10, &tmp);
-    if (ret < 0)
+    if (ret < 0) // invalid user setting
         return ret;
+    // as tmp is long, hence if overflow int, return -2!!!
     if ((int) tmp != tmp)
         return -2;
     *value = tmp;
@@ -407,13 +416,16 @@ virXPathULongLong(const char *xpath,
     if ((obj != NULL) && (obj->type == XPATH_STRING) &&
         (obj->stringval != NULL) && (obj->stringval[0] != 0)) {
         if (virStrToLong_ull((char *) obj->stringval, NULL, 10, value) < 0)
+            // user set with invalid string value
             ret = -2;
     } else if ((obj != NULL) && (obj->type == XPATH_NUMBER) &&
                (!(isnan(obj->floatval)))) {
         *value = (unsigned long long) obj->floatval;
         if (*value != obj->floatval)
+            // user set with invalid number value
             ret = -2;
     } else {
+        // user not set, value is not update
         ret = -1;
     }
 
@@ -578,9 +590,12 @@ virXPathBoolean(const char *xpath,
     ctxt->node = relnode;
     if ((obj == NULL) || (obj->type != XPATH_BOOLEAN) ||
         (obj->boolval < 0) || (obj->boolval > 1)) {
+        // invalid during parsing
         xmlXPathFreeObject(obj);
         return -1;
     }
+    // most of time, it check present of node
+    // 0 absent or 1 present is returned
     ret = obj->boolval;
 
     xmlXPathFreeObject(obj);

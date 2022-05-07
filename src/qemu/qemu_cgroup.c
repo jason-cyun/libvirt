@@ -1214,6 +1214,22 @@ int
 qemuSetupGlobalCpuCgroup(virDomainObjPtr vm)
 {
     qemuDomainObjPrivatePtr priv = vm->privateData;
+    // global means default for each iothread, each vcpu, emulator
+    /*
+     * .vm
+     *   |-- cpuacct.usage_percpu
+     *   |-- cpu.cfs_period_us
+     *   |-- cpu.cfs_quota_us
+     *   |-- cpu.shares
+     *   |-- emulator/
+     *   |-- iothread1/
+     *   |-- iothread2/
+     *   |-- iothread3/
+     *   |-- iothread8/
+     *   |-- tasks
+     *   |-- vcpu0/
+     *   `-- vcpu1/
+     */
     unsigned long long period = vm->def->cputune.global_period;
     long long quota = vm->def->cputune.global_quota;
     char *mem_mask = NULL;
