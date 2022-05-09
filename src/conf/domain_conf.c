@@ -6627,7 +6627,7 @@ virDomainDeviceUSBAddressParsePort(virDomainDeviceUSBAddressPtr addr,
         if (*tmp == '\0')
             return 0;
 
-        // skip dot, it just means usb tree(layout, the last on is port, other are hub)
+        // skip dot, it just means usb tree(layout, the last one is port, other are hub)
         if (*tmp == '.')
             tmp++;
     }
@@ -7006,6 +7006,7 @@ virDomainDeviceInfoParseXML(virDomainXMLOptionPtr xmlopt ATTRIBUTE_UNUSED,
             (xmlopt->config.features & VIR_DOMAIN_DEF_FEATURE_USER_ALIAS &&
              virDomainDeviceAliasIsUserAlias(aliasStr) &&
              strspn(aliasStr, USER_ALIAS_CHARS) == strlen(aliasStr)))
+            // use alias only when it's valid
             VIR_STEAL_PTR(info->alias, aliasStr);
     }
 
