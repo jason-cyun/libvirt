@@ -214,3 +214,5 @@ tags
 !/gnulib/tests/Makefile.am
 !/m4/virt-*.m4
 .clangd
+.cache
+compile_commands.json
