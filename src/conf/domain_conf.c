@@ -11270,6 +11270,8 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
                 xmlNodePtr tmpnode = ctxt->node;
 
                 ctxt->node = cur;
+                // Since 2.1.0 network devices of type "ethernet" can optionally be provided one or more IP addresses and
+                // one or more routes to set on the host side of the network device
                 if (virDomainNetIPInfoParseXML(_("interface host IP"),
                                                ctxt, &def->hostIP) < 0)
                     goto error;
@@ -11367,6 +11369,7 @@ virDomainNetDefParseXML(virDomainXMLOptionPtr xmlopt,
                 }
             } else if (!ifname &&
                        virXMLNodeNameEqual(cur, "target")) {
+                // interface name in the guest
                 ifname = virXMLPropString(cur, "dev");
                 if (ifname &&
                     (flags & VIR_DOMAIN_DEF_PARSE_INACTIVE) &&
@@ -20618,7 +20621,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (controller->type == VIR_DOMAIN_CONTROLLER_TYPE_USB) {
             if (controller->model == VIR_DOMAIN_CONTROLLER_MODEL_USB_NONE) {
                 // if one controller set mode  to NONE, means disable usb for this domain
-                // then you can NOT add another use controller(s)
+                // then you can NOT add another usb controller(s)
                 if (usb_other || usb_none) { // more usb controller found when usb is disabled.
                     virDomainControllerDefFree(controller);
                     virReportError(VIR_ERR_XML_DETAIL, "%s",
@@ -20644,8 +20647,8 @@ virDomainDefParseXML(xmlDocPtr xml,
                 usb_master = true;
         }
 
-        // TODO: why not insert it at last??
         // find the proper position for the new controller to insert
+        // same type controller sites together.
         virDomainControllerInsertPreAlloced(def, controller);
     }
     VIR_FREE(nodes);
@@ -20840,7 +20843,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         if (!chr)
             goto error;
 
-        // console port is just an index
+        // use index as port, even user set it at <target>
         chr->target.port = i;
         def->consoles[def->nconsoles++] = chr;
     }
@@ -20947,7 +20950,7 @@ virDomainDefParseXML(xmlDocPtr xml,
             goto error;
 
         if (video->primary) {
-            // validate video primary device
+            // two video devices set primary attribute, as the primary is inserted at head.
             if (def->nvideos != 0 && def->videos[0]->primary) {
                 virDomainVideoDefFree(video);
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -20958,8 +20961,8 @@ virDomainDefParseXML(xmlDocPtr xml,
             insertAt = 0;
         }
 
-        // primary video device is insertAt head
-        // TODO: why???
+        // primary video device is insertAt head, so that for later use, the first one is always the primary one!!!
+        // if no primary is set for any video device,the first one is seen as the primary one
         if (VIR_INSERT_ELEMENT_INPLACE(def->videos,
                                        insertAt,
                                        def->nvideos,

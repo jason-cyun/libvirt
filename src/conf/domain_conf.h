@@ -441,9 +441,38 @@ struct _virDomainHostdevCaps {
     } u;
 };
 
+/*
+ * For block/character device passthrough mode is always "capabilities" and type is "storage" for a block device, "misc" for a character device and "net" for a host network interface
+ * <hostdev mode='capabilities' type='storage'>
+ *  <source>
+ *    <block>/dev/sdf1</block>
+ *  </source>
+ * </hostdev>
+ *
+ * <hostdev mode='capabilities' type='net'>
+ *  <source>
+ *    <interface>eth0</interface>
+ *  </source>
+ * </hostdev>
+ *
+ * Passthrogh for interface two ways
+ * 1. if you have a standard single-port PCI, PCIe, or USB network card that doesn't support SR-IOV (and hence would anyway lose the configured MAC address during reset after being assigned to the guest domain), you should use standard <hostdev> to assign the device to the guest
+ * 2. interface with SR_IOV enabled, use <interface type='hostdev'/>.
+ *  <interface type='hostdev' managed='yes'>
+ *    <driver name='vfio'/>
+ *    <source>
+ *      <address type='pci' domain='0x0000' bus='0x00' slot='0x07' function='0x0'/>
+ *    </source>
+ *    <mac address='52:54:00:6d:90:02'/>
+ *    <virtualport type='802.1Qbh'>
+ *      <parameters profileid='finance'/>
+ *    </virtualport>
+ *  </interface>
+ */
 
 /* basic device for direct passthrough */
 struct _virDomainHostdevDef {
+    // as hostdev can be used inside net interface
     virDomainDeviceDef parent; /* higher level Def containing this */
 
     int mode; /* enum virDomainHostdevMode */
@@ -835,7 +864,7 @@ struct _virDomainUSBControllerOpts {
     int ports;   /* -1 == undef */
 };
 
-/* Stores the virtual disk controller configuration */
+/* Stores the virtual controller configuration */
 struct _virDomainControllerDef {
     int type;
     int idx;
@@ -1002,6 +1031,19 @@ struct _virDomainNetDef {
     char *model;
     union {
         struct {
+            /*
+             * <interface type='network'>
+             *   <source network='default'/>
+             *   <target dev='vnet1'/>
+             *   <model type='virtio'/>
+             *   <driver name='vhost' txmode='iothread' ioeventfd='on' event_idx='off' queues='5' rx_queue_size='256' tx_queue_size='256'>
+             *     <host csum='off' gso='off' tso4='off' tso6='off' ecn='off' ufo='off' mrg_rxbuf='off'/>
+             *     <guest csum='off' tso4='off' tso6='off' ecn='off' ufo='off'/>
+             *   </driver>
+             * </interface>
+             * Some NICs may have tunable driver-specific options. These are set as attributes of the driver sub-element of the interface definition.
+             * Currently the following attributes are available for the "virtio" NIC driver
+             */
             virDomainNetBackendType name; /* which driver backend to use */
             virDomainNetVirtioTxModeType txmode;
             virTristateSwitch ioeventfd;
@@ -1075,9 +1117,38 @@ struct _virDomainNetDef {
     char *script;
     char *domain_name; /* backend domain name */
     char *ifname; /* interface name on the host (<target dev='x'/>) */
+    /*
+     * Since 2.1.0 network devices of type "ethernet" can optionally be provided
+     * one or more IP addresses and one or more routes to set on the host side of the network device.
+     * These are configured as subelements of the <source> element of the interface,
+     * and have the same attributes as the similarly named elements used to configure the guest side of the interface
+     * <interface type='ethernet'>
+     *   <source/>
+     *     <ip address='192.168.123.1' prefix='24'/>
+     *     <ip address='10.0.0.10' prefix='24' peer='192.168.122.5'/>
+     *     <route family='ipv4' address='192.168.42.0' prefix='24' gateway='192.168.123.4'/>
+     *   <source/>
+     */
     virNetDevIPInfo hostIP;
+
+    //Note that for LXC containers, to define the name of the device on the guest side, the guest element should be used
     char *ifname_guest_actual;
     char *ifname_guest;
+
+    /*
+     * Since 1.2.12 network devices and hostdev devices with network capabilities can optionally be provided
+     * one or more IP addresses to set on the network device in the guest.
+     * Note that some hypervisors or network device types will simply ignore them or only use the first one
+     * Since 1.2.12 route elements can also be added to define IP routes to add in the guest. The attributes of this element are described in the documentation for the route element in network definitions. This is used by the LXC driver
+     * <interface type='network'>
+     *   <source network='default'/>
+     *   <target dev='vnet0'/>
+     *   <ip address='192.168.122.5' prefix='24'/>
+     *   <ip address='192.168.122.5' prefix='24' peer='10.0.0.10'/>
+     *   <route family='ipv4' address='192.168.122.0' prefix='24' gateway='192.168.122.1'/>
+     *   <route family='ipv4' address='192.168.122.8' gateway='192.168.122.1'/>
+     * </interface>
+     */
     virNetDevIPInfo guestIP;
     virDomainDeviceInfo info;
     char *filter;
@@ -1085,6 +1156,7 @@ struct _virDomainNetDef {
     virNetDevBandwidthPtr bandwidth;
     virNetDevVlan vlan;
     int trustGuestRxFilters; /* enum virTristateBool */
+    // down or up of this interface
     int linkstate;
     unsigned int mtu;
     virNetDevCoalescePtr coalesce;
@@ -1463,7 +1535,9 @@ VIR_ENUM_DECL(virDomainVideoVGAConf)
 typedef struct _virDomainVideoAccelDef virDomainVideoAccelDef;
 typedef virDomainVideoAccelDef *virDomainVideoAccelDefPtr;
 struct _virDomainVideoAccelDef {
+    // Enable 2D acceleration (for vbox driver only
     int accel2d; /* enum virTristateBool */
+    // Enable 3D acceleration (for vbox driver since 0.7.1 , qemu driver since 1.3.0 )
     int accel3d; /* enum virTristateBool */
 };
 
@@ -1471,15 +1545,24 @@ struct _virDomainVideoAccelDef {
 typedef struct _virDomainVideoDriverDef virDomainVideoDriverDef;
 typedef virDomainVideoDriverDef *virDomainVideoDriverDefPtr;
 struct _virDomainVideoDriverDef {
+   // Control how the video devices exposed to the guest using the vgaconf attribute
+   // which takes the value "io", "on" or "off".
+   // At present, it's only applicable to the bhyve's "gop" video model type
    virDomainVideoVGAConf vgaconf;
 };
 
 struct _virDomainVideoDef {
     int type;
+    // specifies the size of the primary bar
     unsigned int ram;  /* kibibytes (multiples of 1024) */
+    // specifies the secondary bar size
     unsigned int vram; /* kibibytes (multiples of 1024) */
+    // extends secondary bar and makes it addressable as 64bit memory
     unsigned int vram64; /* kibibytes (multiples of 1024) */
+
+    // set the size of VGA framebuffer for fallback mode of QXL device
     unsigned int vgamem; /* kibibytes (multiples of 1024) */
+    // The number of screen
     unsigned int heads;
     bool primary;
     virDomainVideoAccelDefPtr accel;
