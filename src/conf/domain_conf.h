@@ -867,7 +867,7 @@ struct _virDomainUSBControllerOpts {
 /* Stores the virtual controller configuration */
 struct _virDomainControllerDef {
     int type;
-    int idx;
+    int idx; // used for build alias for pci device like: alias=pci.idx
     int model; /* -1 == undef */
 
     // <controller>
@@ -2936,6 +2936,8 @@ struct _virDomainDef {
     size_t nshmems;
     virDomainShmemDefPtr *shmems;
 
+    // <devices>
+    //   <memory>
     size_t nmems;
     virDomainMemoryDefPtr *mems;
 

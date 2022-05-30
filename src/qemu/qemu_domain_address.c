@@ -129,6 +129,8 @@ qemuDomainAssignVirtioSerialAddresses(virDomainDefPtr def)
 {
     int ret = -1;
     size_t i;
+    // virDomainVirtioSerialAddrSetPtr is temporary used struct for tracking all serial controllers and ports allocation status
+    // after mark all existing ones set by users, assign unused address to other serial devices.
     virDomainVirtioSerialAddrSetPtr addrs = NULL;
 
     if (!(addrs = virDomainVirtioSerialAddrSetCreateFromDomain(def)))
@@ -141,6 +143,8 @@ qemuDomainAssignVirtioSerialAddresses(virDomainDefPtr def)
         if (chr->deviceType == VIR_DOMAIN_CHR_DEVICE_TYPE_CONSOLE &&
             chr->targetType == VIR_DOMAIN_CHR_CONSOLE_TARGET_TYPE_VIRTIO &&
             !virDomainVirtioSerialAddrIsComplete(&chr->info) &&
+            // auto assign port for virtio console which is serial device, allow zero means if port 0 can be used
+            // port 0 is reserved for virt console, so here it's allowed
             virDomainVirtioSerialAddrAutoAssignFromCache(def, addrs,
                                                          &chr->info, true) < 0)
             goto cleanup;
@@ -151,6 +155,8 @@ qemuDomainAssignVirtioSerialAddresses(virDomainDefPtr def)
         if (chr->deviceType == VIR_DOMAIN_CHR_DEVICE_TYPE_CHANNEL &&
             chr->targetType == VIR_DOMAIN_CHR_CHANNEL_TARGET_TYPE_VIRTIO &&
             !virDomainVirtioSerialAddrIsComplete(&chr->info) &&
+            // auto assign port for virtio channel which is serial device
+            // port 0 is reserved for virt console, so here it's not allowed for channel
             virDomainVirtioSerialAddrAutoAssignFromCache(def, addrs,
                                                          &chr->info, false) < 0)
             goto cleanup;
@@ -1348,6 +1354,7 @@ qemuDomainCollectPCIAddress(virDomainDefPtr def ATTRIBUTE_UNUSED,
         }
     }
 
+    // reserve address for each pci device
     if (virDomainPCIAddressReserveAddr(addrs, addr,
                                        info->pciConnectFlags,
                                        info->isolationGroup) < 0) {
@@ -1396,6 +1403,7 @@ qemuDomainPCIAddressSetCreate(virDomainDefPtr def,
             goto error;
         }
 
+        // set bus attributes based on controller model in temporary addrs
         if (virDomainPCIAddressBusSetModel(&addrs->buses[idx], cont->model) < 0)
             goto error;
 
@@ -1433,9 +1441,12 @@ qemuDomainPCIAddressSetCreate(virDomainDefPtr def,
 
     for (i = 1; i < addrs->nbuses; i++) {
 
-        if (addrs->buses[i].model)
+        if (addrs->buses[i].model) // as we create buses according to max controller idx
+                                   // but some idx may not have user controller, we auto-add them
             continue;
 
+        // set default model for auto-added pci controller
+        // pci controller model defines how many slots of this controller
         if (virDomainPCIAddressBusSetModel(&addrs->buses[i], defaultModel) < 0)
             goto error;
 
@@ -1819,6 +1830,7 @@ qemuDomainValidateDevicePCISlotsChipsets(virDomainDefPtr def,
                                          virDomainPCIAddressSetPtr addrs)
 {
     if (qemuDomainIsI440FX(def) &&
+        // reserve pci address for this arch, reserve them
         qemuDomainValidateDevicePCISlotsPIIX3(def, qemuCaps, addrs) < 0) {
         return -1;
     }
@@ -2107,11 +2119,14 @@ qemuDomainAssignDevicePCISlots(virDomainDefPtr def,
      * assigned address. */
     if (def->nvideos > 0 &&
         virDeviceInfoPCIAddressWanted(&def->videos[0]->info)) {
+        // no address, need one
         if (qemuDomainPCIAddressReserveNextAddr(addrs, &def->videos[0]->info) < 0)
             goto error;
     }
 
+    // TODO: optimize with above code(primary video)
     for (i = 1; i < def->nvideos; i++) {
+        // has address, continue
         if (!virDeviceInfoPCIAddressWanted(&def->videos[i]->info))
             continue;
 
@@ -2378,6 +2393,7 @@ qemuDomainAssignPCIAddresses(virDomainDefPtr def,
 
         if (cont->type == VIR_DOMAIN_CONTROLLER_TYPE_PCI) {
             if ((int)cont->idx > max_idx)
+                // get the max idx of pci controller
                 max_idx = cont->idx;
         }
     }
@@ -2391,14 +2407,17 @@ qemuDomainAssignPCIAddresses(virDomainDefPtr def,
     if (qemuDomainFillAllPCIConnectFlags(def, qemuCaps, driver) < 0)
         goto cleanup;
 
+    // only ppc64 cares about isolation group
     if (qemuDomainSetupIsolationGroups(def) < 0)
         goto cleanup;
 
     if (nbuses > 0) {
         /* 1st pass to figure out how many PCI bridges we need */
+        // get pci controller from domain def
         if (!(addrs = qemuDomainPCIAddressSetCreate(def, qemuCaps, nbuses, true)))
             goto cleanup;
 
+        // validate and reserve pci address defined by chipset.
         if (qemuDomainValidateDevicePCISlotsChipsets(def, qemuCaps,
                                                      addrs) < 0)
             goto cleanup;
@@ -2432,6 +2451,7 @@ qemuDomainAssignPCIAddresses(virDomainDefPtr def,
 
             for (i = 0; i < addrs->nbuses; i++) {
                 if (!virDomainPCIAddressBusIsFullyReserved(&addrs->buses[i])) {
+                    // if one pci bus is not fully used, we reserve a a slot for future expansion
                     buses_reserved = false;
                     break;
                 }
@@ -2441,6 +2461,8 @@ qemuDomainAssignPCIAddresses(virDomainDefPtr def,
                 goto cleanup;
         }
 
+        // reserve pci address for pci devices, auto added bus
+        // but not save auto get address to pci device, we only check possibility
         if (qemuDomainAssignDevicePCISlots(def, qemuCaps, addrs) < 0)
             goto cleanup;
 
@@ -2481,6 +2503,7 @@ qemuDomainAssignPCIAddresses(virDomainDefPtr def,
             int contIndex;
             virDomainPCIAddressBusPtr bus = &addrs->buses[i];
 
+            // add auto-added controllers to domain def
             if ((rv = virDomainDefMaybeAddController(
                      def, VIR_DOMAIN_CONTROLLER_TYPE_PCI,
                      i, bus->model)) < 0)
@@ -2526,6 +2549,10 @@ qemuDomainAssignPCIAddresses(virDomainDefPtr def,
         addrs = NULL;
     }
 
+    // without dryRun, addrs get controllers from domain def which has user defined and auto-added now
+    // Above without dryRun is true, we add auto add controller to domain def
+    // and check pci address assignment is ok for all pci devices
+    // now, shutdown dryRun to save auto assigned address to pci device(info part)
     if (!(addrs = qemuDomainPCIAddressSetCreate(def, qemuCaps, nbuses, false)))
         goto cleanup;
 
@@ -2671,6 +2698,8 @@ qemuDomainAssignUSBPortsIterator(virDomainDeviceInfoPtr info,
 {
     struct qemuAssignUSBIteratorInfo *data = opaque;
 
+    // VIR_DOMAIN_DEVICE_ADDRESS_TYPE_NONE: usb bus is not given
+    // VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB: usb bus is given, device can have or not addresss set by user
     if (info->type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_NONE &&
         info->type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB)
         return 0;
@@ -2697,7 +2726,7 @@ qemuDomainAssignUSBHubs(virDomainUSBAddressSetPtr addrs,
             continue;
 
         if (hub->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB &&
-            // user set address of this hub, just valid it
+            // user explicitly set usb hub with address, just valid it
             virDomainUSBAddressPortIsValid(hub->info.addr.usb.port))
             continue;
 
@@ -2751,7 +2780,10 @@ qemuDomainUSBAddressAddHubs(virDomainDefPtr def)
     int ret = -1;
     size_t i;
 
+    // sum all usb ports from all usb controllers
     available_ports = virDomainUSBAddressCountAllPorts(def);
+
+    // sum all usb devices by iterate all devices
     ignore_value(virDomainUSBDeviceDefForeach(def,
                                               qemuDomainAssignUSBPortsCounter,
                                               &data,
@@ -2771,6 +2803,7 @@ qemuDomainUSBAddressAddHubs(virDomainDefPtr def)
     VIR_DEBUG("Found %zu USB devices and %zu provided USB ports; adding %zu hubs",
               data.count, available_ports, hubs_needed);
 
+    // each usb hub has 8 ports
     for (i = 0; i < hubs_needed; i++) {
         if (VIR_ALLOC(hub) < 0)
             return -1;
@@ -2885,37 +2918,40 @@ qemuDomainAssignUSBAddresses(virDomainDefPtr def,
     qemuDomainObjPrivatePtr priv = NULL;
 
     if (!newDomain) {
-        /* only create the address cache for:
-         *  new domains
-         *  domains that already have all the addresses specified
-         * otherwise libvirt's attempt to recreate the USB topology via
-         * QEMU command line might fail */
+        // not a new domain, like load config from disk
+        // new domain means, create domain from API like domainDefineXML
 
-
-        // check all use deivces, if they attach to proper usb controller
+        // check all usb deivces, if they have usb port set
         if (virDomainUSBDeviceDefForeach(def, virDomainUSBAddressPresent, NULL,
                                          false) < 0)
+            // if usb address is not present for any usb device, return 0 no check, why not return error
+            // if all is present, goes down
             return 0;
     }
 
     if (!(addrs = virDomainUSBAddressSetCreate()))
         goto cleanup;
 
+    // add usb hubs if more usb devices present while usb controller has less ports
     if (qemuDomainUSBAddressAddHubs(def) < 0)
         goto cleanup;
 
     if (virDomainUSBAddressSetAddControllers(addrs, def) < 0)
         goto cleanup;
 
+    // reserve existing usb address(explicitly set by user for usb device)
+    // skip user hub as it's already reserve above virDomainUSBAddressSetAddControllers
     if (virDomainUSBDeviceDefForeach(def, virDomainUSBAddressReserve, addrs,
                                      true) < 0)
         goto cleanup;
 
     VIR_DEBUG("Existing USB addresses have been reserved");
 
+    // assign address for auto added hub which is not set by user, link it to proper usb controller
     if (qemuDomainAssignUSBHubs(addrs, def) < 0)
         goto cleanup;
 
+    // assing address to other usb device which is not set by user.
     if (qemuDomainAssignUSBPorts(addrs, def) < 0)
         goto cleanup;
 

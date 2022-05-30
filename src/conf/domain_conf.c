@@ -5412,6 +5412,7 @@ virDomainDefHasUSB(const virDomainDef *def)
     size_t i;
 
     for (i = 0; i < def->ncontrollers; i++) {
+        // usb controller defined
         if (def->controllers[i]->type == VIR_DOMAIN_CONTROLLER_TYPE_USB &&
             def->controllers[i]->model != VIR_DOMAIN_CONTROLLER_MODEL_USB_NONE)
             return true;

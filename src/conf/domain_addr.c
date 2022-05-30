@@ -527,6 +527,7 @@ virDomainPCIAddressSetGrow(virDomainPCIAddressSetPtr addrs,
 
     i = addrs->nbuses;
 
+    // auto add bus in addrs, later should add pci controller in domain def as well
     if (VIR_EXPAND_N(addrs->buses, addrs->nbuses, add) < 0)
         return -1;
 
@@ -626,6 +627,7 @@ virDomainPCIAddressReserveAddrInternal(virDomainPCIAddressSetPtr addrs,
         goto cleanup;
     /* Check that the requested bus exists, is the correct type, and we
      * are asking for a valid slot
+     * check pci address: domain/slot/function on the bus
      */
     if (!virDomainPCIAddressValidate(addrs, addr, addrStr, flags, fromConfig))
         goto cleanup;
@@ -667,7 +669,9 @@ virDomainPCIAddressReserveAddrInternal(virDomainPCIAddressSetPtr addrs,
                   addr->domain, addr->bus, isolationGroup, addrStr);
     }
 
-    /* mark the requested function as reserved */
+    /* mark the requested function as reserved
+     * for a given bus, domain is always 0, slot and function are different.
+     */
     bus->slot[addr->slot].functions |= (1 << addr->function);
     VIR_DEBUG("Reserving PCI address %s (aggregate='%s')", addrStr,
               bus->slot[addr->slot].aggregate ? "true" : "false");
@@ -749,6 +753,7 @@ virDomainPCIAddressSetAlloc(unsigned int nbuses)
     if (VIR_ALLOC(addrs) < 0)
         goto error;
 
+    // allocate each bus
     if (VIR_ALLOC_N(addrs->buses, nbuses) < 0)
         goto error;
 
@@ -1019,6 +1024,7 @@ virDomainPCIAddressSetAllMultiIter(virDomainDefPtr def,
     testAddr = &info->addr.pci;
 
     if (testAddr->function != 0) {
+        // only turn multi function on device which at same address with this one but function is 0(master)
         ignore_value(virDomainDeviceInfoIterate(def,
                                                 virDomainPCIAddressSetMultiIter,
                                                 testAddr));
@@ -1363,9 +1369,11 @@ virDomainVirtioSerialAddrSetCreateFromDomain(virDomainDefPtr def)
     if (!(addrs = virDomainVirtioSerialAddrSetCreate()))
         goto cleanup;
 
+    // add all serial controllers from def->controllers to addrs
     if (virDomainVirtioSerialAddrSetAddControllers(addrs, def) < 0)
         goto cleanup;
 
+    // check all serial devices, reserve port of it in that serial controller
     if (virDomainDeviceInfoIterate(def, virDomainVirtioSerialAddrReserve,
                                    addrs) < 0)
         goto cleanup;
@@ -1384,6 +1392,7 @@ virDomainVirtioSerialAddrSetAutoaddController(virDomainDefPtr def,
 {
     int contidx;
 
+    // add controller to def->controllers
     if (virDomainDefMaybeAddController(def,
                                        VIR_DOMAIN_CONTROLLER_TYPE_VIRTIO_SERIAL,
                                        idx, -1) < 0)
@@ -1391,6 +1400,7 @@ virDomainVirtioSerialAddrSetAutoaddController(virDomainDefPtr def,
 
     contidx = virDomainControllerFind(def, VIR_DOMAIN_CONTROLLER_TYPE_VIRTIO_SERIAL, idx);
 
+    // add serial controller to temporary set
     if (virDomainVirtioSerialAddrSetAddController(addrs, def->controllers[contidx]) < 0)
         return -1;
 
@@ -1473,6 +1483,7 @@ virDomainVirtioSerialAddrNextFromController(virDomainVirtioSerialAddrSetPtr addr
     }
 
     map = addrs->controllers[i]->ports;
+    // find a free port after 0, why port 0 can NOt be used ???
     if ((port = virBitmapNextClearBit(map, 0)) <= 0) {
         virReportError(VIR_ERR_XML_ERROR,
                        _("Unable to find a free port on virtio-serial controller %u"),
@@ -1501,6 +1512,7 @@ virDomainVirtioSerialAddrAutoAssignFromCache(virDomainDefPtr def,
     bool portOnly = info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_VIRTIO_SERIAL;
     if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_VIRTIO_SERIAL &&
         info->addr.vioserial.port)
+        // serial device already has port, reserve it
         return virDomainVirtioSerialAddrReserve(NULL, NULL, info, addrs);
     else
         return virDomainVirtioSerialAddrAssign(def, addrs, info, allowZero, portOnly);
@@ -1542,10 +1554,12 @@ virDomainVirtioSerialAddrAssign(virDomainDefPtr def,
     ptr->type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_VIRTIO_SERIAL;
 
     if (portOnly) {
+        // get a free port of the serial controller and assign to it
         if (virDomainVirtioSerialAddrNextFromController(addrs,
                                                         &ptr->addr.vioserial) < 0)
             goto cleanup;
     } else {
+        // get the first available serial controller and assign a free port from it
         if (virDomainVirtioSerialAddrNext(def, addrs, &ptr->addr.vioserial,
                                           allowZero) < 0)
             goto cleanup;
@@ -1594,9 +1608,11 @@ virDomainVirtioSerialAddrReserve(virDomainDefPtr def ATTRIBUTE_UNUSED,
     if (!virDomainVirtioSerialAddrIsComplete(info))
         return 0;
 
+    // serial device has address(port set by user, reserve that used port)
     VIR_DEBUG("Reserving virtio serial %u %u", info->addr.vioserial.controller,
               info->addr.vioserial.port);
 
+    // check the controller of this serial device
     i = virDomainVirtioSerialAddrFindController(addrs, info->addr.vioserial.controller);
     if (i < 0) {
         virReportError(VIR_ERR_XML_ERROR,
@@ -1606,6 +1622,7 @@ virDomainVirtioSerialAddrReserve(virDomainDefPtr def ATTRIBUTE_UNUSED,
     }
 
     map = addrs->controllers[i]->ports;
+    // this port is out of controller range, say controller has 6 port, but this serial device uses port 8
     if (virBitmapGetBit(map, info->addr.vioserial.port, &b) < 0) {
         virReportError(VIR_ERR_XML_ERROR,
                        _("virtio serial controller %u does not have port %u"),
@@ -1615,6 +1632,7 @@ virDomainVirtioSerialAddrReserve(virDomainDefPtr def ATTRIBUTE_UNUSED,
     }
 
     if (b) {
+        // different serial devices use the same address(port)
         virReportError(VIR_ERR_XML_ERROR,
                        _("virtio serial port %u on controller %u is already occupied"),
                        info->addr.vioserial.port,
@@ -1622,6 +1640,7 @@ virDomainVirtioSerialAddrReserve(virDomainDefPtr def ATTRIBUTE_UNUSED,
         goto cleanup;
     }
 
+    // mark this port as used
     ignore_value(virBitmapSetBit(map, info->addr.vioserial.port));
 
     ret = 0;
@@ -1903,6 +1922,7 @@ virDomainUSBAddressFindPort(virDomainUSBAddressSetPtr addrs,
     }
     hub = addrs->buses[info->addr.usb.bus];
 
+    // as port can be 1.2.3 etc, lastIdx means the depth of it.
     lastIdx = virDomainUSBAddressGetLastIdx(info);
 
     for (i = 0; i < lastIdx; i++) {
@@ -1936,6 +1956,7 @@ virDomainUSBAddressFindPort(virDomainUSBAddressSetPtr addrs,
         return NULL;
     }
 
+    // the last one of the port address is the targetport, address: 1.3, target port is 2
     *targetIdx = targetPort;
     return hub;
 }
@@ -1967,7 +1988,7 @@ virDomainUSBAddressSetAddHub(virDomainUSBAddressSetPtr addrs,
     if (!(newHub = virDomainUSBAddressHubNew(VIR_DOMAIN_USB_HUB_PORTS)))
         goto cleanup;
 
-    // as this hub has to link to use controller which is identified by hub address.
+    // as this hub has to link to usb controller which is identified by hub address.
     // check the target hub of that usb controller.
     if (!(targetHub = virDomainUSBAddressFindPort(addrs, &(hub->info), &targetPort,
                                                   portStr)))
@@ -2004,7 +2025,7 @@ virDomainUSBAddressSetAddControllers(virDomainUSBAddressSetPtr addrs,
     for (i = 0; i < def->ncontrollers; i++) {
         virDomainControllerDefPtr cont = def->controllers[i];
         if (cont->type == VIR_DOMAIN_CONTROLLER_TYPE_USB) {
-            // for each usb controller
+            // for each usb controller, add it to temporary addrs
             if (virDomainUSBAddressSetAddController(addrs, cont) < 0)
                 return -1;
         }
@@ -2021,8 +2042,7 @@ virDomainUSBAddressSetAddControllers(virDomainUSBAddressSetPtr addrs,
         if (hub->type == VIR_DOMAIN_HUB_TYPE_USB &&
             hub->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB &&
             virDomainUSBAddressPortIsValid(hub->info.addr.usb.port)) {
-            /* USB hubs that do not yet have an USB address have to be
-             * dealt with later */
+            /* USB hubs(auto added hubs) that do not yet have an USB address have to be dealt with later */
             // hub with usb address set by user
             if (virDomainUSBAddressSetAddHub(addrs, hub) < 0)
                 return -1;
@@ -2056,10 +2076,11 @@ virDomainUSBAddressFindFreePort(virDomainUSBAddressHubPtr hub,
 
     /* Recursively search through the ports that contain another hub */
     for (i = 0; i < hub->nports; i++) {
-        if (!hub->ports[i])
+        if (!hub->ports[i]) // not a mediate hub, check next one
             continue;
 
-        // child port of current which is a hub as well
+        // goes here means child port of current which is a hub as well
+        // avaiable usb port on hub from port 1 !!!
         port = i + 1;
         VIR_DEBUG("Looking at USB hub at level: %u port: %u", level, port);
         if (virDomainUSBAddressFindFreePort(hub->ports[i], portpath,
@@ -2106,7 +2127,7 @@ virDomainUSBAddressAssignFromBus(virDomainUSBAddressSetPtr addrs,
 {
     // max port depth is 4
     unsigned int portpath[VIR_DOMAIN_DEVICE_USB_MAX_PORT_DEPTH] = { 0 };
-    // ports of this bus
+    // ports of this bus(usb controller<----> hub)
     virDomainUSBAddressHubPtr hub = addrs->buses[bus];
     char *portStr = NULL;
     int ret = -1;
@@ -2114,6 +2135,7 @@ virDomainUSBAddressAssignFromBus(virDomainUSBAddressSetPtr addrs,
     if (!hub) // no ports on this usb bus
         return -2;
 
+    // check from root of this controller with level 0
     if (virDomainUSBAddressFindFreePort(hub, portpath, 0) < 0)
         return -2;
 
@@ -2127,8 +2149,8 @@ virDomainUSBAddressAssignFromBus(virDomainUSBAddressSetPtr addrs,
     memcpy(info->addr.usb.port, portpath, sizeof(portpath));
     VIR_DEBUG("Assigning USB addr bus=%u port=%s",
               info->addr.usb.bus, portStr);
+
     // mark the port on that hub is used.
-    // TODO: why not mark it when found it above???
     if (virDomainUSBAddressReserve(info, addrs) < 0)
         goto cleanup;
 
@@ -2147,6 +2169,7 @@ virDomainUSBAddressAssign(virDomainUSBAddressSetPtr addrs,
     int rc;
 
     if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB) {
+        // device has no port assigned but bus given
         VIR_DEBUG("A USB port on bus %u was requested", info->addr.usb.bus);
         if (info->addr.usb.bus >= addrs->nbuses ||
             !addrs->buses[info->addr.usb.bus]) {
@@ -2159,7 +2182,7 @@ virDomainUSBAddressAssign(virDomainUSBAddressSetPtr addrs,
         if (rc >= -1)
             return rc;
     } else {
-        // USB device has no address assigned, pick a free usb port on all buses
+        // USB device has no bus and port assigned, pick a free usb port on all avaiable buses
         // break when find a one
         VIR_DEBUG("Looking for a free USB port on all the buses");
         for (i = 0; i < addrs->nbuses; i++) {
@@ -2200,6 +2223,7 @@ virDomainUSBAddressReserve(virDomainDeviceInfoPtr info,
     if (info->type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_USB)
         return 0;
 
+    // if user already set usb port, goes down, reserve it
     if (!virDomainUSBAddressPortIsValid(info->addr.usb.port))
         return 0;
 
@@ -2208,6 +2232,7 @@ virDomainUSBAddressReserve(virDomainDeviceInfoPtr info,
         goto cleanup;
     VIR_DEBUG("Reserving USB address bus=%u port=%s", info->addr.usb.bus, portStr);
 
+    // get target hub and target port on that hub
     if (!(targetHub = virDomainUSBAddressFindPort(addrs, info, &targetPort,
                                                   portStr)))
         goto cleanup;
@@ -2219,6 +2244,7 @@ virDomainUSBAddressReserve(virDomainDeviceInfoPtr info,
         goto cleanup;
     }
 
+    // mark this port is used on that hub
     ignore_value(virBitmapSetBit(targetHub->portmap, targetPort));
 
     ret = 0;

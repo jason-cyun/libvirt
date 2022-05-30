@@ -6254,6 +6254,9 @@ qemuDomainDefAssignAddresses(virDomainDef *def,
      * function shall not fail in that case. It will be re-run on VM startup
      * with the capabilities populated. */
     virQEMUCapsPtr qemuCaps = parseOpaque;
+
+    // VIR_DOMAIN_DEF_PARSE_ABI_UPDATE is set when define a domain with API domainDefineXML
+    // but VIR_DOMAIN_DEF_PARSE_ABI_UPDATE is not set when load config from disk!!!
     bool newDomain = parseFlags & VIR_DOMAIN_DEF_PARSE_ABI_UPDATE;
 
     /* Skip address assignment if @qemuCaps is not present. In such case devices

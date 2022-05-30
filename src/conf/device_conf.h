@@ -172,6 +172,7 @@ struct _virDomainDeviceInfo {
 
     /* PCI devices will only be automatically placed on a PCI bus
      * that shares the same isolation group */
+    // only ppc64 cares about this setting
     unsigned int isolationGroup;
 
     /* Usually, PCI buses will take on the same isolation group

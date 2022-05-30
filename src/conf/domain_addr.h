@@ -112,12 +112,16 @@ typedef struct {
 typedef virDomainPCIAddressBus *virDomainPCIAddressBusPtr;
 
 struct _virDomainPCIAddressSet {
+    // pci controllers(buses)
     virDomainPCIAddressBus *buses;
     size_t nbuses;
     bool dryRun;          /* on a dry run, new buses are auto-added
                              and addresses aren't saved in device infos */
+
     /* If true, the guest can have multiple pci-root controllers */
+    // only ppc64 supports this
     bool areMultipleRootsSupported;
+
     /* If true, the guest can use the pcie-to-pci-bridge controller */
     bool isPCIeToPCIBridgeSupported;
 };
@@ -206,7 +210,10 @@ int virDomainCCWAddressReleaseAddr(virDomainCCWAddressSetPtr addrs,
 virDomainCCWAddressSetPtr virDomainCCWAddressSetCreate(void);
 
 struct _virDomainVirtioSerialController {
+    // idx is the serial controller idx from def->controllers
+    // each serial controller can have max 32 ports if user not set
     unsigned int idx;
+    // serial port status(used one or not) of this serial controller
     virBitmapPtr ports;
 };
 
