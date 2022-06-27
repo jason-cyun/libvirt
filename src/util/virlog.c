@@ -664,6 +664,8 @@ virLogVMessage(virLogSourcePtr source,
     // dest = VIR_LOG_TO_FILE,
     // name = /var/log/libvirt/libvirtd.log
     // }
+    //
+    // all outputs defined by user
     for (i = 0; i < virLogNbOutputs; i++) {
         if (priority >= virLogOutputs[i]->priority) {
             if (virLogOutputs[i]->logInitMessage) {
@@ -685,6 +687,7 @@ virLogVMessage(virLogSourcePtr source,
                 VIR_FREE(initmsg);
                 virLogOutputs[i]->logInitMessage = false;
             }
+            // f is the function for writing log like : virLogOutputToFd, virLogOutputToSyslog
             virLogOutputs[i]->f(source, priority,
                                filename, linenr, funcname,
                                timestamp, metadata, filterflags,

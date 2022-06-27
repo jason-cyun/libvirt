@@ -1600,6 +1600,7 @@ static virDomainPtr qemuDomainLookupByName(virConnectPtr conn,
     vm = virDomainObjListFindByName(driver->domains, name);
 
     if (!vm) {
+        // virReportError set global error(thread local)
         virReportError(VIR_ERR_NO_DOMAIN,
                        _("no domain with matching name '%s'"), name);
         goto cleanup;

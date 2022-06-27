@@ -803,12 +803,14 @@ virRaiseErrorFull(const char *filename,
      * For compatibility, public API calls will copy them
      * to the per-connection error object when necessary
      */
+    // get global error object(thread local)
     to = virLastErrorObject();
     if (!to) {
         errno = save_errno;
         return; /* Hit OOM allocating thread error object, sod all we can do now */
     }
 
+    // reset global error which could be error of last call who runs on this thread.
     virResetError(to);
 
     if (code == VIR_ERR_OK) {
@@ -835,6 +837,8 @@ virRaiseErrorFull(const char *filename,
      * Deliberately not setting conn, dom & net fields since
      * they're utterly unsafe
      */
+
+    // set global error(thread local), in rpc stub function, it will copy error info from here to NetMessageError which is used for rpc sending
     to->domain = domain;
     to->code = code;
     to->message = str;
@@ -845,6 +849,7 @@ virRaiseErrorFull(const char *filename,
     to->int1 = int1;
     to->int2 = int2;
 
+    // write log to outputs defined by user(file or syslog, or both)
     virRaiseErrorLog(filename, funcname, linenr,
                      to, meta);
 

@@ -517,6 +517,8 @@ int virNetMessageEncodePayloadEmpty(virNetMessagePtr msg)
 }
 
 
+// copy error info from global error(thread local) to virNetMessageErrorPtr
+// which will be sent back to client by rpc.
 void virNetMessageSaveError(virNetMessageErrorPtr rerr)
 {
     /* This func may be called several times & the first
@@ -527,8 +529,10 @@ void virNetMessageSaveError(virNetMessageErrorPtr rerr)
         return;
 
     memset(rerr, 0, sizeof(*rerr));
+    // get thread local global error saved at virLastErr
     virErrorPtr verr = virGetLastError();
     if (verr) {
+        // copy all fields to virNetMessageErrorPtr
         rerr->code = verr->code;
         rerr->domain = verr->domain;
         if (verr->message && VIR_ALLOC(rerr->message) == 0 &&
@@ -547,6 +551,7 @@ void virNetMessageSaveError(virNetMessageErrorPtr rerr)
         rerr->int1 = verr->int1;
         rerr->int2 = verr->int2;
     } else {
+        // libvirt has error, but does not set global error, hence we set rpc error with internal error
         rerr->code = VIR_ERR_INTERNAL_ERROR;
         rerr->domain = VIR_FROM_RPC;
         if (VIR_ALLOC_QUIET(rerr->message) == 0 &&

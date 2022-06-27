@@ -158,6 +158,8 @@ virNetServerProgramSendError(unsigned program,
     msg->header.proc = procedure;
     msg->header.type = type;
     msg->header.serial = serial;
+    // if no error, status is set with:  msg->header.status = VIR_NET_OK;
+    // set header and encode error payload.
     msg->header.status = VIR_NET_ERROR;
 
     if (virNetMessageEncodeHeader(msg) < 0)
@@ -474,6 +476,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
 
     xdr_free(dispatcher->arg_filter, arg);
 
+    // if error happend, error info is saved at rerr by stub, send that
     if (rv < 0)
         goto error;
 
@@ -500,6 +503,8 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
     }
 
     // as payload type is different, so each api has it own filter for encode it.
+    // encode ret which is assigned stub function, send it back
+    // no error: msg->header.status = VIR_NET_OK;
     if (virNetMessageEncodePayload(msg, dispatcher->ret_filter, ret) < 0) {
         xdr_free(dispatcher->ret_filter, ret);
         goto error;
@@ -515,7 +520,9 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
 
  error:
     /* Bad stuff (de-)serializing message, but we have an
-     * RPC error message we can send back to the client */
+     * RPC error message we can send back to the client
+     * send error to client, ret is not used at all.
+     */
     rv = virNetServerProgramSendReplyError(prog, client, msg, &rerr, &msg->header);
 
     VIR_FREE(arg);

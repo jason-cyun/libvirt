@@ -425,6 +425,7 @@ virDomainLookupByName(virConnectPtr conn, const char *name)
     if (conn->driver->domainLookupByName) {
         virDomainPtr dom;
         dom = conn->driver->domainLookupByName(conn, name);
+        // if dom is NULL, we already set global error(thread local).
         if (!dom)
             goto error;
         return dom;
@@ -433,6 +434,8 @@ virDomainLookupByName(virConnectPtr conn, const char *name)
     virReportUnsupportedError();
 
  error:
+    // copy global erro(thread local) to connection and call error handler is present.
+    // handler can be global and per connection, connection error handler has higher priority
     virDispatchError(conn);
     return NULL;
 }
