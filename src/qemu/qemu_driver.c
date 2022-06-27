@@ -2236,6 +2236,7 @@ qemuDomainDestroyFlags(virDomainPtr dom,
     if (virDomainDestroyFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
+    // should be active
     if (virDomainObjCheckActive(vm) < 0)
         goto cleanup;
 
@@ -2244,11 +2245,14 @@ qemuDomainDestroyFlags(virDomainPtr dom,
                 reason == VIR_DOMAIN_PAUSED_STARTING_UP &&
                 !priv->beingDestroyed);
 
+    // by default, flags is 0, force kill, we kill process in qemuProcessBeginStopJob forcely or gracefully
     if (qemuProcessBeginStopJob(driver, vm, QEMU_JOB_DESTROY,
                                 !(flags & VIR_DOMAIN_DESTROY_GRACEFUL)) < 0)
         goto cleanup;
 
     if (!virDomainObjIsActive(vm)) {
+        // should not go here as above, vm is ative(pid != -1), qemuProcessBeginStopJob does not change pid
+        // so it should be active now, TODO: can another thread change it at another thread????
         if (starting) {
             VIR_DEBUG("Domain %s is not running anymore", vm->def->name);
             ret = 0;

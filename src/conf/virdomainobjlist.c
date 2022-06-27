@@ -332,10 +332,13 @@ virDomainObjListAddLocked(virDomainObjListPtr doms,
 
         // no uuid and name found in driver->domains
         // create a new domain object with def, oldDef is NULL in this case
+        // vm is self locked
         if (!(vm = virDomainObjNew(xmlopt)))
             goto cleanup;
         vm->def = def;
 
+        // if we add vm to domlist, it can be get by user if another api call happens
+        // hence we should lock vm before add to list as we need to update vm later on.
         if (virDomainObjListAddObjLocked(doms, vm) < 0)
             goto error;
     }

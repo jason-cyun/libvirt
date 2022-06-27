@@ -1368,6 +1368,7 @@ qemuDiskSourceNeedsProps(virStorageSourcePtr src,
 {
     int actualType = virStorageSourceGetActualType(src);
 
+    // network storage
     if (actualType == VIR_STORAGE_TYPE_NETWORK &&
         src->protocol == VIR_STORAGE_NET_PROTOCOL_GLUSTER &&
         src->nhosts > 1)
@@ -2238,6 +2239,8 @@ qemuBuildBlockStorageSourceAttachDataCommandline(virCommandPtr cmd,
 }
 
 
+// For one disk, there are two parts
+// -drive(source) and -device(pci device)
 static int
 qemuBuildDiskCommandLine(virCommandPtr cmd,
                          const virDomainDef *def,
@@ -2249,6 +2252,8 @@ qemuBuildDiskCommandLine(virCommandPtr cmd,
     qemuBlockStorageSourceAttachDataPtr data = NULL;
     char *optstr;
 
+    // build disk source parameters for the disk
+    // -drive file=/run/ebs/softlink/nbd_vol-4dkna39a6y_i-wr43gf3ne1,if=none,id=drive-virtio-disk0,serial=vol-4dkna39a6y,cache=none,werror=report,rerror=report,aio=native,throttling.bps-read=83886080,throttling.bps-write=83886080,throttling.iops-read=2000,throttling.iops-write=2000
     if (!(data = qemuBuildStorageSourceAttachPrepareDrive(disk, qemuCaps,
                                                           driveBoot)))
         return -1;
@@ -2269,6 +2274,8 @@ qemuBuildDiskCommandLine(virCommandPtr cmd,
         } else {
             virCommandAddArg(cmd, "-device");
 
+            // build pci device where the disk plugined, set it source with drive=drive-virtio-disk0
+            // -device virtio-blk-pci,iothread=iothread1,scsi=off,bus=pci.0,addr=0x5,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1
             if (!(optstr = qemuBuildDriveDevStr(def, disk, bootindex,
                                                 qemuCaps)))
                 return -1;
@@ -6789,10 +6796,14 @@ qemuBuildCpuCommandLine(virCommandPtr cmd,
                         const virDomainDef *def,
                         virQEMUCapsPtr qemuCaps)
 {
+    // -cpu Westmere,pcid=on,...
     virArch hostarch = virArchFromHost();
     char *cpu = NULL, *cpu_flags = NULL;
     int ret = -1;
+
+    // cpu arch buf
     virBuffer cpu_buf = VIR_BUFFER_INITIALIZER;
+    // cpu flags buf like cache etc
     virBuffer buf = VIR_BUFFER_INITIALIZER;
     size_t i;
 
@@ -6960,7 +6971,9 @@ qemuBuildCpuCommandLine(virCommandPtr cmd,
     if (virBufferCheckError(&buf) < 0)
         goto cleanup;
 
+    // get cpu info
     cpu = virBufferContentAndReset(&cpu_buf);
+    // get cpu flags
     cpu_flags = virBufferContentAndReset(&buf);
 
     if (cpu_flags && !cpu) {
@@ -7076,6 +7089,7 @@ qemuBuildNameCommandLine(virCommandPtr cmd,
     if (virQEMUCapsGet(qemuCaps, QEMU_CAPS_NAME_GUEST))
         virBufferAddLit(&buf, "guest=");
 
+    //excape chars in def->name
     virQEMUBuildBufferEscapeComma(&buf, def->name);
 
     if (cfg->setProcessName)
@@ -7528,6 +7542,12 @@ qemuBuildNumaArgStr(virQEMUDriverConfigPtr cfg,
                     virCommandPtr cmd,
                     qemuDomainObjPrivatePtr priv)
 {
+    /* ================================================================================================
+     * -numa option doesn’t allocate any of the specified resources,
+     * it just assigns existing resources to NUMA nodes.
+     * This means that one still has to use the -m, -smp options to allocate RAM and VCPUs respectively
+     * ================================================================================================
+     */
     size_t i, j;
     virQEMUCapsPtr qemuCaps = priv->qemuCaps;
     virBuffer buf = VIR_BUFFER_INITIALIZER;
@@ -7558,6 +7578,7 @@ qemuBuildNumaArgStr(virQEMUDriverConfigPtr cfg,
         goto cleanup;
     }
 
+    // check all node used by vm are available from host nodes
     if (!virDomainNumatuneNodesetIsAvailable(def->numa, priv->autoNodeset))
         goto cleanup;
 
@@ -7576,8 +7597,10 @@ qemuBuildNumaArgStr(virQEMUDriverConfigPtr cfg,
             pos = ncells - 1;
         }
 
+        // we should not set node after pos(as pos is the larget numa node id)
         next_bit = virBitmapNextSetBit(def->mem.hugepages[i].nodemask, pos);
         if (next_bit >= 0) {
+            // found bit set after pos, error
             virReportError(VIR_ERR_XML_DETAIL,
                            _("hugepages: node %zd not found"),
                            next_bit);
@@ -7590,10 +7613,15 @@ qemuBuildNumaArgStr(virQEMUDriverConfigPtr cfg,
 
     /* using of -numa memdev= cannot be combined with -numa mem=, thus we
      * need to check which approach to use */
+
+    /* legacy: -numa mem=
+     * new:
+     */
     for (i = 0; i < ncells; i++) {
         if (virQEMUCapsGet(qemuCaps, QEMU_CAPS_OBJECT_MEMORY_RAM) ||
             virQEMUCapsGet(qemuCaps, QEMU_CAPS_OBJECT_MEMORY_FILE)) {
 
+            // memory backend object (ram or file) for each node
             if ((rc = qemuBuildMemoryCellBackendStr(def, cfg, i, priv,
                                                     &nodeBackends[i])) < 0)
                 goto cleanup;
@@ -7610,6 +7638,7 @@ qemuBuildNumaArgStr(virQEMUDriverConfigPtr cfg,
         }
     }
 
+    // if not use backend object, use legacy way
     if (!needBackend &&
         qemuBuildMemPathStr(cfg, def, cmd) < 0)
         goto cleanup;
@@ -7649,6 +7678,12 @@ qemuBuildNumaArgStr(virQEMUDriverConfigPtr cfg,
                               virDomainNumaGetNodeMemorySize(def->numa, i) / 1024);
 
         virCommandAddArgBuffer(cmd, &buf);
+        /* use backend example
+         * -object memory-backend-file,id=ram-node0,prealloc=yes,mem-path=/mnt/huge_2MB/libvirt/qemu/2640-i-03d8brrinz,share=yes,size=34359738368,host-nodes=0-1,policy=bind -numa node,nodeid=0,cpus=0-15,memdev=ram-node0
+         *
+         *  legacy way:
+         *  -mem-prealloc -mem-path /mnt/huge_2MB/libvirt/qemu/2640-i-03d8brrinz -numa node,nodeid=0,cpus=0-15,mem=34359738368
+         */
     }
 
     /* If NUMA node distance is specified for at least one pair
@@ -8187,6 +8222,9 @@ qemuBuildGraphicsCommandLine(virQEMUDriverConfigPtr cfg,
     return 0;
 }
 
+// -chardev socket,id=charnet0,path=/var/lib/openvswitch/port-2bdlc61ijf,server
+// -netdev vhost-user,chardev=charnet0,id=hostnet0
+// -device virtio-net-pci,mrg_rxbuf=on,rx_queue_size=1024,netdev=hostnet0,id=net0,mac=fa:16:3e:d2:39:b8,bus=pci.0,addr=0x3
 static int
 qemuBuildVhostuserCommandLine(virQEMUDriverPtr driver,
                               virLogManagerPtr logManager,
@@ -8259,6 +8297,9 @@ qemuBuildVhostuserCommandLine(virQEMUDriverPtr driver,
     virCommandAddArg(cmd, "-chardev");
     virCommandAddArg(cmd, chardev);
 
+    // add one arg
+    // use AddArg, same as below
+    // virCommandAddArgList(cmd, "-netdev", netdev, NULL)
     virCommandAddArg(cmd, "-netdev");
     virCommandAddArg(cmd, netdev);
 
@@ -8267,6 +8308,7 @@ qemuBuildVhostuserCommandLine(virQEMUDriverPtr driver,
         goto cleanup;
     }
 
+    // add two args use AddArgList
     virCommandAddArgList(cmd, "-device", nic, NULL);
 
     ret = 0;
@@ -8455,7 +8497,7 @@ qemuBuildInterfaceCommandLine(virQEMUDriverPtr driver,
     }
 
     case VIR_DOMAIN_NET_TYPE_USER:
-    case VIR_DOMAIN_NET_TYPE_VHOSTUSER:
+    case VIR_DOMAIN_NET_TYPE_VHOSTUSER: // should never reach for this type, see above goto
     case VIR_DOMAIN_NET_TYPE_SERVER:
     case VIR_DOMAIN_NET_TYPE_CLIENT:
     case VIR_DOMAIN_NET_TYPE_MCAST:
@@ -8643,6 +8685,7 @@ qemuBuildNetCommandLine(virQEMUDriverPtr driver,
                 *bootHostdevNet == 0) {
                 *bootHostdevNet = bootNet;
             }
+            // TODO: Why this is reset for first net???
             bootNet = 0;
         }
     }

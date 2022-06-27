@@ -3957,11 +3957,14 @@ virDomainDefRejectDuplicateControllers(virDomainDefPtr def)
     int ret = -1;
     size_t i;
 
+
+    // initialize to -1
     memset(max_idx, -1, sizeof(max_idx));
 
     for (i = 0; i < def->ncontrollers; i++) {
         cont = def->controllers[i];
         if (cont->idx > max_idx[cont->type])
+            // max idx for each controller type
             max_idx[cont->type] = cont->idx;
     }
 
@@ -3969,6 +3972,7 @@ virDomainDefRejectDuplicateControllers(virDomainDefPtr def)
     max_idx[VIR_DOMAIN_CONTROLLER_TYPE_USB] = -1;
 
     for (i = 0; i < VIR_DOMAIN_CONTROLLER_TYPE_LAST; i++) {
+        // create temporary bitmap for each type if it has controller defined(except for usb)
         if (max_idx[i] >= 0 && !(bitmaps[i] = virBitmapNew(max_idx[i] + 1)))
             goto cleanup;
         nbitmaps++;
@@ -3977,10 +3981,12 @@ virDomainDefRejectDuplicateControllers(virDomainDefPtr def)
     for (i = 0; i < def->ncontrollers; i++) {
         cont = def->controllers[i];
 
+        // usb controller, ignore it
         if (max_idx[cont->type] == -1)
             continue;
 
         if (virBitmapIsBitSet(bitmaps[cont->type], cont->idx)) {
+            // same idx for same type of controller
             virReportError(VIR_ERR_XML_ERROR,
                            _("Multiple '%s' controllers with index '%d'"),
                            virDomainControllerTypeToString(cont->type),
@@ -5153,6 +5159,10 @@ virDomainDefPostParseCommon(virDomainDefPtr def,
 
         /* videos[0] might have been added in AddImplicitDevices, after we've
          * done the per-device post-parse */
+
+        // TODO: why should we set and validate for the primary device here
+        // acutally we already call virDomainDefPostParseDeviceIterator for all device before
+        // here only for device which is added by AddImplicitDevices!!!
         if (virDomainDefPostParseDeviceIterator(def, &device, NULL, data) < 0)
             return -1;
     }
@@ -5165,6 +5175,9 @@ virDomainDefPostParseCommon(virDomainDefPtr def,
 
         /* serials[0] might have been added in AddImplicitDevices, after we've
          * done the per-device post-parse */
+        // TODO: why should we set and validate for the first serial device here
+        // acutally we already call virDomainDefPostParseDeviceIterator for all device before
+        // here only for device which is added by AddImplicitDevices!!!
         if (virDomainDefPostParseDeviceIterator(def, &device, NULL, data) < 0)
             return -1;
     }

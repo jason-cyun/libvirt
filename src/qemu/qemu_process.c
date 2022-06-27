@@ -516,6 +516,8 @@ qemuProcessShutdownOrReboot(virQEMUDriverPtr driver,
     qemuDomainObjPrivatePtr priv = vm->privateData;
 
     if (priv->fakeReboot) {
+        // if fakeReboot is enabled, reboot OS
+        // otherwise, kill process(process quit)
         qemuDomainSetFakeReboot(driver, vm, false);
         virObjectRef(vm);
         virThread th;
@@ -6004,6 +6006,7 @@ qemuProcessPrepareHostStorage(virQEMUDriverPtr driver,
     size_t i;
     bool cold_boot = flags & VIR_QEMU_PROCESS_START_COLD;
 
+    // why prepare from last disk to first???
     for (i = vm->def->ndisks; i > 0; i--) {
         size_t idx = i - 1;
         virDomainDiskDefPtr disk = vm->def->disks[idx];
@@ -6099,6 +6102,7 @@ qemuProcessPrepareHost(virQEMUDriverPtr driver,
         hostdev_flags |= VIR_HOSTDEV_STRICT_ACS_CHECK;
     if (flags & VIR_QEMU_PROCESS_START_NEW)
         hostdev_flags |= VIR_HOSTDEV_COLD_BOOT;
+
     // actually only scsi deivce needs action
     if (qemuHostdevPrepareDomainDevices(driver, vm->def, priv->qemuCaps,
                                         hostdev_flags) < 0)
@@ -6881,12 +6885,14 @@ qemuProcessKill(virDomainObjPtr vm, unsigned int flags)
     }
 
     if (flags & VIR_QEMU_PROCESS_KILL_NOWAIT) {
+        // only send signal, then return right now
         virProcessKill(vm->pid,
                        (flags & VIR_QEMU_PROCESS_KILL_FORCE) ?
                        SIGKILL : SIGTERM);
         return 0;
     }
 
+    // try, sigterm, if not ok, try kill, otherwise timedout
     ret = virProcessKillPainfully(vm->pid,
                                   !!(flags & VIR_QEMU_PROCESS_KILL_FORCE));
 
@@ -7179,6 +7185,8 @@ void qemuProcessStop(virQEMUDriverPtr driver,
             if (graphics->data.vnc.autoport) {
                 virPortAllocatorRelease(graphics->data.vnc.port);
             } else if (graphics->data.vnc.portReserved) {
+                // TODO: should access data.vnc.port even data.spice.port is same as spice and vnc use are fields of union
+                // both its first field are port!!!
                 virPortAllocatorRelease(graphics->data.spice.port);
                 graphics->data.vnc.portReserved = false;
             }

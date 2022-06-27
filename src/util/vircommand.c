@@ -1528,6 +1528,7 @@ virCommandAddEnvPassCommon(virCommandPtr cmd)
 void
 virCommandAddArg(virCommandPtr cmd, const char *val)
 {
+    // add one formatted arg
     char *arg;
 
     if (!cmd || cmd->has_error)
@@ -1595,6 +1596,7 @@ virCommandAddArgBuffer(virCommandPtr cmd, virBufferPtr buf)
 void
 virCommandAddArgFormat(virCommandPtr cmd, const char *format, ...)
 {
+    // add one arg and format it here
     char *arg;
     va_list list;
 
@@ -1684,6 +1686,7 @@ virCommandAddArgSet(virCommandPtr cmd, const char *const*vals)
 void
 virCommandAddArgList(virCommandPtr cmd, ...)
 {
+    // add several formated args, use NULL as the end
     va_list list;
     int narg = 0;
 

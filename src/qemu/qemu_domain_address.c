@@ -1525,6 +1525,7 @@ qemuDomainValidateDevicePCISlotsPIIX3(virDomainDefPtr def,
             /* this controller is not skipped in qemuDomainCollectPCIAddress */
             continue;
         }
+
         if (addrs->nbuses &&
             virDomainPCIAddressReserveAddr(addrs, &cont->info.addr.pci, flags, 0) < 0)
             goto cleanup;
@@ -2919,16 +2920,18 @@ qemuDomainAssignUSBAddresses(virDomainDefPtr def,
 
     if (!newDomain) {
         // not a new domain, like load config from disk
-        // new domain means, create domain from API like domainDefineXML
+        // new domain means, create domain from API like DomainStart
 
         // check all usb deivces, if they have usb port set
         if (virDomainUSBDeviceDefForeach(def, virDomainUSBAddressPresent, NULL,
                                          false) < 0)
-            // if usb address is not present for any usb device, return 0 no check, why not return error
+            // if usb address is not present for any usb device, return directly, no assign usb port on controller at call.
+            // later on we will do it again when start this domain, in that case newDomain is  true
             // if all is present, goes down
             return 0;
     }
 
+    // all usb devices has usb address set, assign usb port to usb controller, add hub is possible
     if (!(addrs = virDomainUSBAddressSetCreate()))
         goto cleanup;
 

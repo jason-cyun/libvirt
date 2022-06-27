@@ -3053,6 +3053,10 @@ struct _virDomainObj {
     // autostart here is set with 1.
     // a soft link created under: /etc/libvirt/qemu/autostart/, this is used for libvirtd to know this vm is autostart when libvirtd starts
     unsigned int autostart : 1;
+    // persisten vm if xml from
+    // 1. /etc/libvirtd/qemu/xx.xml
+    // 2. call DefinXML api
+    // if xml only sits at /var/run/libvirt/qemu/xx.xml, it's not persistent
     unsigned int persistent : 1;
     unsigned int updated : 1;
     unsigned int removing : 1;

@@ -297,6 +297,8 @@ struct _qemuDomainObjPrivate {
     virQEMUCapsPtr qemuCaps;
     char *lockState;
 
+    // this is set by user, later on when when got SHUTDOWN event from qemu process
+    // based on this(fakeReboot) to see if we reboot it or shutdown it
     bool fakeReboot;
     virTristateBool allowReboot;
 
@@ -326,6 +328,18 @@ struct _qemuDomainObjPrivate {
     bool hookRun;  /* true if there was a hook run over this domain */
 
     /* Bitmaps below hold data from the auto NUMA feature */
+    /*
+     * <domain>
+     *   <numad>
+     *     <nodeset>
+     *     </nodeset>
+     *     <cpuset>
+     *     </cpuset>
+     *   </numad>
+     * </domain>
+     *
+     * most of time it' not set by user
+     */
     virBitmapPtr autoNodeset;
     virBitmapPtr autoCpuset;
 
