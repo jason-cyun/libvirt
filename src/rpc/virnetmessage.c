@@ -357,10 +357,10 @@ int virNetMessageEncodePayload(virNetMessagePtr msg,
      * virNetMessageEncodeHeader has already been run, so
      * just appends to that data */
     xdrmem_create(&xdr, msg->buffer + msg->bufferOffset,
-                  msg->bufferLength - msg->bufferOffset, XDR_ENCODE);
+                  msg->bufferLength - msg->bufferOffset, XDR_ENCODE); //encode operation
 
     /* Try to encode the payload. If the buffer is too small increase it. */
-    while (!(*filter)(&xdr, data, 0)) {
+    while (!(*filter)(&xdr, data, 0)) { // from data to xdr
         unsigned int newlen = msg->bufferLength - VIR_NET_MESSAGE_LEN_MAX;
         newlen *= 2;
 
@@ -416,9 +416,15 @@ int virNetMessageDecodePayload(virNetMessagePtr msg,
      * virNetMessageDecodeHeader has already been run, so
      * just start from after that data */
     xdrmem_create(&xdr, msg->buffer + msg->bufferOffset,
-                  msg->bufferLength - msg->bufferOffset, XDR_DECODE);
+                  msg->bufferLength - msg->bufferOffset, XDR_DECODE); //decode operation
 
-    if (!(*filter)(&xdr, data, 0)) {
+    // filter and type defined at src/remote/remote_protocol.[ch]
+    //
+    // like example: bool_t xdr_remote_domain_lookup_by_name_args (XDR *xdrs, remote_domain_lookup_by_name_args *objp) {}
+    // as we passed void* to filter, actually it's char* passed by caller.
+    // remote_domain_lookup_by_name_args*---->void*--->char*
+    if (!(*filter)(&xdr, data, 0)) { // filter created remote_domain_lookup_by_name_args object!!!
+                                     // from xdr to data
         virReportError(VIR_ERR_RPC, "%s", _("Unable to decode message payload"));
         goto error;
     }

@@ -390,7 +390,9 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
         goto error;
     }
 
-    // dispatcher is the rpc function registered and identified by proc number
+    // dispatcher is the rpc helper function registered and identified by proc number
+    // located at ./src/remote/src/remote/remote_daemon_dispatch_stubs.h
+    // virNetServerProgramProc remoteProcs[]={}
     dispatcher = virNetServerProgramGetProc(prog, msg->header.proc);
 
     if (!dispatcher) {
@@ -412,12 +414,16 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
         goto error;
     }
 
+    // As different rpc apis use different arg type and ret type
+    // The length for each type is store at dispatcher->arg_len, dispatcher->ret_len
+    // create arg type for decoding
+    // create ret type for encoding
     if (VIR_ALLOC_N(arg, dispatcher->arg_len) < 0)
         goto error;
     if (VIR_ALLOC_N(ret, dispatcher->ret_len) < 0)
         goto error;
 
-    // arg is decoded payload
+    // arg is used for saving decoded payload by arg_filter, it's created above
     if (virNetMessageDecodePayload(msg, dispatcher->arg_filter, arg) < 0)
         goto error;
 
@@ -437,7 +443,14 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
      *
      *   'args and 'ret'
      */
-    // ret is used for saving the return value
+    // ret is used for saving the return value which is created here(above)
+    // stub function converts return value from internal to ret(assign field of ret from internal)
+    //
+    // arg is decoded from user input to char * but different APIs use different types of args
+    // so dispatcher is a stub for each rpc, it convert char*--->void*--->specific api args type.
+    // same thing happens for ret as well specific api result type--->void*---->char*
+    //
+    // ret is already created above!!!
     rv = (dispatcher->func)(server, client, msg, &rerr, arg, ret);
 
     if (virIdentitySetCurrent(NULL) < 0)
@@ -473,6 +486,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
     /*msg->header.serial = msg->header.serial;*/
     msg->header.status = VIR_NET_OK;
 
+    // as header has fixed format for all rpc, hen use the same api, not filter is needed
     if (virNetMessageEncodeHeader(msg) < 0) {
         xdr_free(dispatcher->ret_filter, ret);
         goto error;
@@ -485,6 +499,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
         goto error;
     }
 
+    // as payload type is different, so each api has it own filter for encode it.
     if (virNetMessageEncodePayload(msg, dispatcher->ret_filter, ret) < 0) {
         xdr_free(dispatcher->ret_filter, ret);
         goto error;
