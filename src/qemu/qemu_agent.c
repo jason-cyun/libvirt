@@ -1353,6 +1353,7 @@ void qemuAgentNotifyEvent(qemuAgentPtr mon,
          * to tell him, it's done!!!
          */
         if (mon->msg && !mon->msg->finished) {
+            // make agent waiting message as down and wake thread who is blocking on this msg
             mon->msg->finished = 1;
             virCondSignal(&mon->notify);
         }
