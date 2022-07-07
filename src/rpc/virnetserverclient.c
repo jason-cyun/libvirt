@@ -116,6 +116,7 @@ struct _virNetServerClient
     void *privateData;
     virFreeCallback privateDataFreeFunc;
     virNetServerClientPrivPreExecRestart privateDataPreExecRestart;
+    // callback when client is closed for free private resource
     virNetServerClientCloseFunc privateDataCloseFunc;
 
     virKeepAlivePtr keepalive;
@@ -1024,6 +1025,8 @@ virNetServerClientCloseLocked(virNetServerClientPtr client)
         cf = client->privateDataCloseFunc;
         virObjectRef(client);
         virObjectUnlock(client);
+        // free private source by calling private close callback which is set when allocate private data.
+        // it's remoteClientCloseFunc()
         (cf)(client);
         virObjectLock(client);
         virObjectUnref(client);

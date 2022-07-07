@@ -93,11 +93,15 @@ static void qemuMonitorJSONHandleBlockThreshold(qemuMonitorPtr mon, virJSONValue
 static void qemuMonitorJSONHandleDumpCompleted(qemuMonitorPtr mon, virJSONValuePtr data);
 
 typedef struct {
+    // compared with 'event field' in qemu message
     const char *type;
     void (*handler)(qemuMonitorPtr mon, virJSONValuePtr data);
 } qemuEventHandler;
 
 static qemuEventHandler eventHandlers[] = {
+    // qemu monitor event handler(preprocessing), then call monitorCallbacks for processing
+    // while for event that takes longer time, monitorCallbacks transfer that event to another thread for processing
+    // eventHandlers  and monitorCallbacks runs in event thread.
     { "ACPI_DEVICE_OST", qemuMonitorJSONHandleAcpiOstInfo, },
     { "BALLOON_CHANGE", qemuMonitorJSONHandleBalloonChange, },
     { "BLOCK_IO_ERROR", qemuMonitorJSONHandleIOError, },
@@ -156,6 +160,7 @@ qemuMonitorJSONIOProcessEvent(qemuMonitorPtr mon,
 
     VIR_DEBUG("mon=%p obj=%p", mon, obj);
 
+    // event type from json string, it's capital letter
     type = virJSONValueObjectGetString(obj, "event");
     if (!type) {
         VIR_WARN("missing event type in message");
@@ -172,13 +177,19 @@ qemuMonitorJSONIOProcessEvent(qemuMonitorPtr mon,
         ignore_value(virJSONValueObjectGetNumberUint(timestamp, "microseconds",
                                                      &micros));
     }
-    // add new event to driver->domainEventState queue
+
+    // add qemu monitor event to event queue which will be used for qemu monitor event notify
     qemuMonitorEmitEvent(mon, type, seconds, micros, details);
     VIR_FREE(details);
 
-    // qemu defines sveral events, libvirt handle somes
+    // qemu defines several events, libvirt handle some qemu events
     // BLOCK_IO_ERROR, BLOCK_JOB_COMPLETED, DEVICE_DELETED, MIGRATION,
     // RESET, RESUMEm,SHUTDOWN,STOP, SUSPEND, VNC_CONNECTED etc
+    //
+    // here handler is used for preprocessing for json data from qemu
+    // as different monitor events have different json data, should treat them separately
+    // this is called preprocessing(parse value from json string), then we pass the parsed data to monitorCallbacks
+    // which will handle monitor event carefully
     handler = bsearch(type, eventHandlers, ARRAY_CARDINALITY(eventHandlers),
                       sizeof(eventHandlers[0]), qemuMonitorEventCompare);
     if (handler) {
@@ -199,7 +210,7 @@ qemuMonitorJSONIOProcessLine(qemuMonitorPtr mon,
     int ret = -1;
 
     /* process one line of reply
-     * acutally the whole reply is in one line!!!
+     * actually the whole reply is in one line!!!
      */
     VIR_DEBUG("Line [%s]", line);
 
@@ -528,6 +539,28 @@ qemuMonitorJSONMakeCommandInternal(const char *cmdname,
     return ret;
 }
 
+// build json object(like dict from args pairs)
+// arg0(key): arg1(value), value type is indicated at key with prefix below
+// S,s------->char *
+// z,y,j,i--->int
+// p,u------->uint
+// Z,Y,J,I--->long long
+// P,U------->long long
+// d--------->double
+// B,b------->bool
+// A,a------->json
+// M,m------->bitmap
+//
+// cmd = qemuMonitorJSONMakeCommand("drive-mirror",
+//                                  "s:device", device,
+//                                  "s:target", file,
+//                                  "Y:speed", speed,
+//                                  "z:granularity", granularity,
+//                                  "P:buf-size", buf_size,
+//                                  "s:sync", shallow ? "top" : "full",
+//                                  "s:mode", reuse ? "existing" : "absolute-paths",
+//                                  "S:format", format,
+//                                  NULL);
 
 static virJSONValuePtr ATTRIBUTE_SENTINEL
 qemuMonitorJSONMakeCommandRaw(bool transaction,

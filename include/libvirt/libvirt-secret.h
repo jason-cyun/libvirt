@@ -126,6 +126,7 @@ int                     virSecretFree           (virSecretPtr secret);
  * signature of callback function will be used.
  */
 typedef enum {
+    // secret event ids
     VIR_SECRET_EVENT_ID_LIFECYCLE = 0, /* virConnectSecretEventLifecycleCallback */
     VIR_SECRET_EVENT_ID_VALUE_CHANGED = 1, /* virConnectSecretEventGenericCallback */
 

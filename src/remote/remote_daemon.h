@@ -51,6 +51,11 @@ struct daemonClientPrivate {
     /* Hold while accessing any data except conn */
     virMutex lock;
 
+    // all callbacks registered by this client
+    // driver maintain all callbacks of all clients with more details
+    // here each client tracks its own callbacks with just eventID + callbackID assigned by driver.
+    // so that when client is closed, we should deregister any callbacks if user does not deregister it before by calling RPC
+    // quickly without loop all callbacks to see if it's registered by me or not
     daemonClientEventCallbackPtr *domainEventCallbacks;
     size_t ndomainEventCallbacks;
     daemonClientEventCallbackPtr *networkEventCallbacks;

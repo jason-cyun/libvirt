@@ -37,13 +37,22 @@ VIR_LOG_INIT("util.object");
 
 static unsigned int magicCounter = 0xCAFE0000;
 
+/*
+ * For example:
+ * static virClassPtr virDomainEventLifecycleClass
+ * name: virDomainEventLifecycle
+ * objectSize: sizeof(virDomainEventLifecycle)
+ * dispose: virDomainEventLifecycleDispose
+ */
 struct _virClass {
     virClassPtr parent;
 
     unsigned int magic;
     char *name;
+    // size of this event it's representing
     size_t objectSize;
 
+    // free function for event which belongs to this class
     virObjectDisposeCallback dispose;
 };
 
@@ -160,6 +169,7 @@ virClassNew(virClassPtr parent,
             size_t objectSize,
             virObjectDisposeCallback dispose)
 {
+    // class is created only when driver starts
     virClassPtr klass;
 
     if (parent == NULL &&
@@ -177,6 +187,7 @@ virClassNew(virClassPtr parent,
     if (VIR_ALLOC(klass) < 0)
         goto error;
 
+    // create class
     klass->parent = parent;
     klass->magic = virAtomicIntInc(&magicCounter);
     if (klass->magic > 0xCAFEFFFF) {
@@ -186,6 +197,8 @@ virClassNew(virClassPtr parent,
     }
     if (VIR_STRDUP(klass->name, name) < 0)
         goto error;
+
+    // two import fields, event object size and free function for that event object
     klass->objectSize = objectSize;
     klass->dispose = dispose;
 
@@ -356,6 +369,7 @@ virObjectUnref(void *anyobj)
             if (klass->dispose)
                 klass->dispose(obj);
             klass = klass->parent;
+            //free resource from child-->parent-->parent
         }
 
         /* Clear & poison object */

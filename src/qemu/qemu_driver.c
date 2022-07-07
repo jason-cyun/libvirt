@@ -624,7 +624,7 @@ qemuStateInitialize(bool privileged,
     if (!(qemu_driver->domains = virDomainObjListNew()))
         goto error;
 
-    /* Init domain events event queue */
+    /* Init domain events(not network event, or pool event) event queue, it's driver queue */
     qemu_driver->domainEventState = virObjectEventStateNew();
     if (!qemu_driver->domainEventState)
         goto error;
@@ -937,7 +937,7 @@ qemuStateInitialize(bool privileged,
     /* must be initialized before trying to reconnect to all the
      * running domains since there might occur some QEMU monitor
      * events that will be dispatched to the worker pool */
-    // only one worker for this pool to handle QMP command and reponse
+    // only one worker for this pool to handle event that neeeds longer time
     // as min: 0, that mean thread is created only when the first qemu event happens(event from qemu process by monitor fd), then keep it there
     qemu_driver->workerPool = virThreadPoolNew(0, 1, 0, qemuProcessEventHandler, qemu_driver);
     if (!qemu_driver->workerPool)
@@ -4871,8 +4871,10 @@ processMonitorEOFEvent(virQEMUDriverPtr driver,
 }
 
 
-// this is called by woker when this is qemuProcessEvent in the joblist
-// each qemu worker call me with one qemuProcessEvent which is stored at job->data
+// this is called by the worker when this is qemuProcessEvent in the joblist
+// event thread adds one qemuProcessEvent which is stored at job->data
+// event thread hands most event by itself, but for event that takes longer time
+// we would not block event thread so long, so transfer event here which is another thread.
 static void qemuProcessEventHandler(void *data, void *opaque)
 {
     struct qemuProcessEvent *processEvent = data;
@@ -4883,6 +4885,7 @@ static void qemuProcessEventHandler(void *data, void *opaque)
 
     virObjectLock(vm);
 
+    // only handle event that may take time long
     switch (processEvent->eventType) {
     case QEMU_PROCESS_EVENT_WATCHDOG:
         processWatchdogEvent(driver, vm, processEvent->action);

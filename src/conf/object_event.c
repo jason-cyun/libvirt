@@ -41,7 +41,9 @@ VIR_LOG_INIT("conf.object_event");
 
 /*
  * meta for each dynamically created cb if client call proper API
- * callbackID: ID in the callback list
+ * callbackID: ID in the callback list( used as identifier of this callback, will be sent back to client
+ * later on client can use it to deregister this callback)
+ *
  * eventID: event type
  * conn: client connection
  * key and key_filter for check matching, if matched, cb is called
@@ -60,6 +62,16 @@ struct _virObjectEventCallback {
     virObjectEventCallbackFilter filter;
     void *filter_opaque;
     virConnectObjectEventGenericCallback cb;
+    // opaque is any data that will be used by sender function who send events to client!!
+    // most of time it's daemonClientEventCallbackPtr passed by register api when register one event.
+    /*
+     * struct daemonClientEventCallback {
+     *     virNetServerClientPtr client;
+     *     int eventID;
+     *     int callbackID;
+     *     bool legacy;
+     * };
+     */
     void *opaque;
     virFreeCallback freecb;
     bool deleted;
@@ -70,11 +82,13 @@ typedef virObjectEventCallback *virObjectEventCallbackPtr;
 
 struct _virObjectEventCallbackList {
     unsigned int nextID;
+    // callback registered by user from API
     size_t count;
     virObjectEventCallbackPtr *callbacks;
 };
 
 struct _virObjectEventQueue {
+    // event count in the queue
     size_t count;
     virObjectEventPtr *events;
 };
@@ -90,6 +104,9 @@ struct _virObjectEventState {
      */
     virObjectEventQueuePtr queue;
     /* Timer for flushing events queue */
+    /* timer is -1 when there is no user callback registered
+     * created when the first user callback registered
+     */
     int timer;
     /* Flag if we're in process of dispatching */
     bool isDispatching;
@@ -448,6 +465,8 @@ virObjectEventCallbackListAddID(virConnectPtr conn,
     /* Allocate new cb */
     if (VIR_ALLOC(cb) < 0)
         goto cleanup;
+
+    // client client used for sending event to such client when necessary
     cb->conn = virObjectRef(conn);
     *callbackID = cb->callbackID = cbList->nextID++;
     cb->cb = callback;
@@ -573,7 +592,9 @@ virObjectEventTimer(int timer ATTRIBUTE_UNUSED, void *opaque)
 
     /* when event pusher(other threads) puts event in the event queue
      * it starts a timer event with timeout 0, that means timer handler
-     * virObjectEventTimer called by next poll()
+     * virObjectEventTimer called after next poll() or right now, it depends where the event thread loop.
+     * when poll waked up, it first check timers, then fd, so if timer is added check timers, its runs this loop
+     * otherwise, next loop poll() wakeup right now, and run this timer.
      */
     virObjectEventStateFlush(state);
 }
@@ -644,9 +665,39 @@ virObjectEventNew(virClassPtr klass,
         return NULL;
     }
 
+    // create event based on klass which represent different class(events)
+    // klass can be shutdown, lifecycle class
     if (!(event = virObjectNew(klass)))
         return NULL;
 
+    // generic event object
+    // each specific event must put generic event object as it's first field!!!
+
+    /* domain event
+     * struct _virDomainEventLifecycle {
+     *     virDomainEvent parent;
+     *     int type;
+     *     int detail;
+     * };
+     *
+     * struct _virDomainEvent {
+     *     virObjectEvent parent;
+     *     bool dummy;
+     * }
+     *
+     * storage pool event
+     * struct _virStoragePoolEventLifecycle {
+     *     virStoragePoolEvent parent;
+     *
+     *     int type;
+     *     int detail;
+     * };
+     * struct _virStoragePoolEvent {
+     *     virObjectEvent parent;
+     *     bool dummy;
+     * };
+     *
+     */
     event->dispatch = dispatcher;
     event->eventID = eventID;
     event->remoteID = -1;
@@ -661,6 +712,7 @@ virObjectEventNew(virClassPtr klass,
         memcpy(event->meta.uuid, uuid, VIR_UUID_BUFLEN);
 
     VIR_DEBUG("obj=%p", event);
+    // event is specific type, but here we only set its generic parts
     return event;
 }
 
@@ -681,6 +733,8 @@ virObjectEventQueuePush(virObjectEventQueuePtr evtQueue,
     if (!evtQueue)
         return -1;
 
+    // queue size can be extended dynamically
+    // but can not be shrunk(smaller)
     if (VIR_APPEND_ELEMENT(evtQueue->events, evtQueue->count, event) < 0)
         return -1;
     return 0;
@@ -693,6 +747,7 @@ virObjectEventDispatchMatchCallback(virObjectEventPtr event,
 {
     if (!cb)
         return false;
+    // callbacked is marked deleting
     if (cb->deleted)
         return false;
     if (!virObjectIsClass(event, cb->klass))
@@ -702,6 +757,7 @@ virObjectEventDispatchMatchCallback(virObjectEventPtr event,
     if (cb->remoteID != event->remoteID)
         return false;
 
+    // filter and key, both are checked if set
     if (cb->filter && !(cb->filter)(cb->conn, event, cb->filter_opaque))
         return false;
 
@@ -788,12 +844,21 @@ virObjectEventStateQueueRemote(virObjectEventStatePtr state,
         return;
 
     if (state->timer < 0) {
+        // no user callback register, event is NOT pushed into the queue
         virObjectUnref(event);
         return;
     }
 
     virObjectLock(state);
-    /* at client side, the built event has remoteID which is callbackID in server */
+    /* At client side, the built event has remoteID which is callbackID in server */
+    /* event is pushed to queue if there is at least one callback
+     * no matter if it's registered for this type of event
+     * that means, if client register for event A, libvirt generates B, C, D etc
+     * all these events will be added into the queue and try to send them to client by compare
+     * each callback one by one, at last no sending, waste cpu cycle
+     * should we add event only when someone is listening on this type of event, otherwise, no addition?
+     * As event does not happen quickly, so it's acceptable for current solution.
+     */
     event->remoteID = remoteID;
     if (virObjectEventQueuePush(state->queue, event) < 0) {
         VIR_DEBUG("Error adding event to queue");
@@ -801,6 +866,8 @@ virObjectEventStateQueueRemote(virObjectEventStatePtr state,
     }
 
     if (state->queue->count == 1)
+        // first event in the queue, update timer to now
+        // so that timer handler will be called by event thread `right now`
         virEventUpdateTimeout(state->timer, 0);
     virObjectUnlock(state);
 }
@@ -819,6 +886,8 @@ void
 virObjectEventStateQueue(virObjectEventStatePtr state,
                          virObjectEventPtr event)
 {
+    // add event to event queue(state)
+    // NOTE: there are several event queues, one for domain event, one for network event, node device event etc
     virObjectEventStateQueueRemote(state, event, -1);
 }
 
@@ -834,9 +903,11 @@ virObjectEventStateCleanupTimer(virObjectEventStatePtr state, bool clear_queue)
     if (state->timer == -1)
         return;
 
+    // remove timer from poll as no user callbacks, no one monitor any event.
     virEventRemoveTimeout(state->timer);
     state->timer = -1;
 
+    // as no user callback, clear events in the queue as no one cares about it.
     if (clear_queue)
         virObjectEventQueueClear(state->queue);
 }
@@ -849,6 +920,8 @@ virObjectEventStateFlush(virObjectEventStatePtr state)
 
     /* We need to lock as well as ref due to the fact that we might
      * unref the state we're working on in this very function */
+
+    // when flushing event, we lock the queue, so no more event can be added.
     virObjectRef(state);
     virObjectLock(state);
     state->isDispatching = true;
@@ -874,12 +947,14 @@ virObjectEventStateFlush(virObjectEventStatePtr state)
     /* Purge any deleted callbacks */
     virObjectEventCallbackListPurgeMarked(state->callbacks);
 
-    /* If we purged all callbacks, we need to remove the timeout as
-     * well like virObjectEventStateDeregisterID() would do. */
-    /* if no callbacks registered by client, remove timer event */
+    /* If we purged all callbacks, we need to remove the timeout as well
+     * like virObjectEventStateDeregisterID() would do.
+     * if no callbacks registered by client, remove timer event
+     */
     virObjectEventStateCleanupTimer(state, true);
 
     state->isDispatching = false;
+
     virObjectUnlock(state);
     virObjectUnref(state);
 }
@@ -938,15 +1013,24 @@ virObjectEventStateRegisterID(virConnectPtr conn,
 
     virObjectLock(state);
 
-    /* if there is no domain event timer, add one with never expire
-     * as dom event timer starts for the first time when client registers one event
-     * and remove for the last time when client register the last registered event
+    /* if there is no event timer(domain event, network event depends on what stat it's), add one with never expire
+     * As event timer starts for the first time when client registers one event
+     * remove it when client deregister the last registered event
+     *
+     * Timer is added to poll only when it's the first callback from user
+     * as Timer is for all event queue which is shared by all connection and domain
+     *
+     * for other callbacks from user, as we already have timer starts, no needed to create it
      */
     if ((state->callbacks->count == 0) &&
         (state->timer == -1) &&
         (state->timer = virEventAddTimeout(-1,
+                                           // event timer handler run by event thread when expired!!!
                                            virObjectEventTimer,
-                                           state,
+                                           state, // state can be domain event queue, or network event queue, or storage pool event queue
+                                                  // all use the same timer handler, state is identified by RPC API which is called
+                                                  // if it's domain event register, domain event state is used
+                                                  // if it's network event register, network event state is used
                                            virObjectFreeCallback)) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("could not initialize domain event timer"));
@@ -1002,6 +1086,11 @@ virObjectEventStateDeregisterID(virConnectPtr conn,
 
     virObjectLock(state);
     if (state->isDispatching)
+        // actually this never happens as when isDispatching is true
+        // thread who flushing events must have the lock,
+        // so this thread blocks on virObjectLock()
+        // when flushing thread unlock state, it sets isDispatching with false
+        // so here when we got the lock, isDispatching is always false!!!
         ret = virObjectEventCallbackListMarkDeleteID(conn,
                                                      state->callbacks,
                                                      callbackID);
@@ -1009,6 +1098,7 @@ virObjectEventStateDeregisterID(virConnectPtr conn,
         ret = virObjectEventCallbackListRemoveID(conn, state->callbacks,
                                                  callbackID, doFreeCb);
 
+    // try to remove timer if no user callbacks
     virObjectEventStateCleanupTimer(state, true);
 
     virObjectUnlock(state);

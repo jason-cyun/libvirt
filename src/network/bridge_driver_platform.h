@@ -54,6 +54,7 @@ struct _virNetworkDriverState {
     dnsmasqCapsPtr dnsmasqCaps;
 
     /* Immutable pointer, self-locking APIs */
+    // network event queue
     virObjectEventStatePtr networkEventState;
 };
 

@@ -550,6 +550,17 @@ qemuProcessHandleEvent(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
     VIR_DEBUG("vm=%p", vm);
 
     virObjectLock(vm);
+    // event is virDomainQemuMonitorEventPtr
+    /*
+     * struct _virDomainQemuMonitorEvent {
+     *     virObjectEvent parent;
+     *
+     *     char *event;
+     *     long long seconds;
+     *     unsigned int micros;
+     *     char *details;
+     * };
+     */
     event = virDomainQemuMonitorEventNew(vm->def->id, vm->def->name,
                                          vm->def->uuid, eventName,
                                          seconds, micros, details);
@@ -720,8 +731,11 @@ qemuProcessHandleResume(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         VIR_DEBUG("Transitioned guest %s out of paused into resumed state",
                   vm->def->name);
 
+        // RESUME event from qemu, set its state with RUNNING
+        // and generate RESUMED event, push it to event queue if someone is listening on event
         virDomainObjSetState(vm, VIR_DOMAIN_RUNNING,
                                  VIR_DOMAIN_RUNNING_UNPAUSED);
+        //actuall event type is virDomainEventLifecyclePtr, convert it to virObjectEventPtr, then convert it back in event callbacks
         event = virDomainEventLifecycleNewFromObj(vm,
                                          VIR_DOMAIN_EVENT_RESUMED,
                                          VIR_DOMAIN_EVENT_RESUMED_UNPAUSED);
