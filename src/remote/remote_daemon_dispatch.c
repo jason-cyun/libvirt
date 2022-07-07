@@ -1358,6 +1358,53 @@ remoteRelayDomainEventBlockThreshold(virConnectPtr conn,
 }
 
 
+static void
+remoteRelayDomainQemuMonitorEvent(virConnectPtr conn,
+                                  virDomainPtr dom,
+                                  const char *event,
+                                  long long seconds,
+                                  unsigned int micros,
+                                  const char *details,
+                                  void *opaque)
+{
+    daemonClientEventCallbackPtr callback = opaque;
+    qemu_domain_monitor_event_msg data;
+    char **details_p = NULL;
+
+    if (callback->callbackID < 0 ||
+        !remoteRelayDomainQemuMonitorEventCheckACL(callback->client, conn,
+                                                   dom))
+        return;
+
+    VIR_DEBUG("Relaying qemu monitor event %s %s, callback %d",
+              event, details, callback->callbackID);
+
+    /* build return data */
+    memset(&data, 0, sizeof(data));
+    data.callbackID = callback->callbackID;
+    if (VIR_STRDUP(data.event, event) < 0)
+        goto error;
+    data.seconds = seconds;
+    data.micros = micros;
+    if (details &&
+        ((VIR_ALLOC(details_p) < 0) ||
+         VIR_STRDUP(*details_p, details) < 0))
+        goto error;
+    data.details = details_p;
+    make_nonnull_domain(&data.dom, dom);
+
+    remoteDispatchObjectEventSend(callback->client, qemuProgram,
+                                  QEMU_PROC_DOMAIN_MONITOR_EVENT,
+                                  (xdrproc_t)xdr_qemu_domain_monitor_event_msg,
+                                  &data);
+    return;
+
+ error:
+    VIR_FREE(data.event);
+    VIR_FREE(details_p);
+}
+
+
 /* all supports events, these events can be registered by client at server
  * side, when such event happens, server sends event with data to client
  * each event has an ID defined at libvirt-domain.h
@@ -1434,6 +1481,7 @@ static virConnectDomainEventGenericCallback domainEventCallbacks[] = {
     VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainEventDeviceRemovalFailed),
     VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainEventMetadataChange),
     VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainEventBlockThreshold),
+    VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainQemuMonitorEvent),
 };
 
 verify(ARRAY_CARDINALITY(domainEventCallbacks) == VIR_DOMAIN_EVENT_ID_LAST);
@@ -1679,52 +1727,6 @@ static virConnectSecretEventGenericCallback secretEventCallbacks[] = {
 };
 
 verify(ARRAY_CARDINALITY(secretEventCallbacks) == VIR_SECRET_EVENT_ID_LAST);
-
-static void
-remoteRelayDomainQemuMonitorEvent(virConnectPtr conn,
-                                  virDomainPtr dom,
-                                  const char *event,
-                                  long long seconds,
-                                  unsigned int micros,
-                                  const char *details,
-                                  void *opaque)
-{
-    daemonClientEventCallbackPtr callback = opaque;
-    qemu_domain_monitor_event_msg data;
-    char **details_p = NULL;
-
-    if (callback->callbackID < 0 ||
-        !remoteRelayDomainQemuMonitorEventCheckACL(callback->client, conn,
-                                                   dom))
-        return;
-
-    VIR_DEBUG("Relaying qemu monitor event %s %s, callback %d",
-              event, details, callback->callbackID);
-
-    /* build return data */
-    memset(&data, 0, sizeof(data));
-    data.callbackID = callback->callbackID;
-    if (VIR_STRDUP(data.event, event) < 0)
-        goto error;
-    data.seconds = seconds;
-    data.micros = micros;
-    if (details &&
-        ((VIR_ALLOC(details_p) < 0) ||
-         VIR_STRDUP(*details_p, details) < 0))
-        goto error;
-    data.details = details_p;
-    make_nonnull_domain(&data.dom, dom);
-
-    remoteDispatchObjectEventSend(callback->client, qemuProgram,
-                                  QEMU_PROC_DOMAIN_MONITOR_EVENT,
-                                  (xdrproc_t)xdr_qemu_domain_monitor_event_msg,
-                                  &data);
-    return;
-
- error:
-    VIR_FREE(data.event);
-    VIR_FREE(details_p);
-}
 
 static
 void remoteRelayConnectionClosedEvent(virConnectPtr conn ATTRIBUTE_UNUSED, int reason, void *opaque)
@@ -6418,7 +6420,7 @@ qemuDispatchConnectDomainMonitorEventRegister(virNetServerPtr server ATTRIBUTE_U
                                                                dom,
                                                                event,
                                                                // callback for monitor event
-                                                               remoteRelayDomainQemuMonitorEvent,
+                                                               (virConnectDomainQemuMonitorEventCallback)domainEventCallbacks[VIR_DOMAIN_EVENT_ID_QEMU_MONITOR],
                                                                ref,
                                                                remoteEventCallbackFree,
                                                                args->flags)) < 0) {

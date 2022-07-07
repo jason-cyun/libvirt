@@ -274,7 +274,7 @@ struct _virQEMUDriver {
      * and event queue which holds event pushed by other parts.
      * In event handler, check each event and call cb if has and matched
      *
-     * domainEventState tracks all callbacks from different connection of domain event and monitor event (not network event, or storage pool event etc)
+     * domainEventState tracks all callbacks from different connection of domain event and monitor event (not network event, or storage pool event which uses another State etc)
      */
     virObjectEventStatePtr domainEventState;
 

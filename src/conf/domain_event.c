@@ -91,11 +91,11 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
                                   virConnectObjectEventGenericCallback cb,
                                   void *cbopaque);
 
-static void
-virDomainQemuMonitorEventDispatchFunc(virConnectPtr conn,
-                                      virObjectEventPtr event,
-                                      virConnectObjectEventGenericCallback cb,
-                                      void *cbopaque);
+//static void
+//virDomainQemuMonitorEventDispatchFunc(virConnectPtr conn,
+//                                      virObjectEventPtr event,
+//                                      virConnectObjectEventGenericCallback cb,
+//                                      void *cbopaque);
 
 struct _virDomainEvent {
     // must use virObjectEvent as the first field
@@ -229,6 +229,19 @@ struct _virDomainQemuMonitorEvent {
 };
 typedef struct _virDomainQemuMonitorEvent virDomainQemuMonitorEvent;
 typedef virDomainQemuMonitorEvent *virDomainQemuMonitorEventPtr;
+
+/* In order to filter by event name, we need to store a copy of the
+ * name to filter on.  By wrapping the caller's freecb, we can
+ * piggyback our cleanup to happen at the same time the caller
+ * deregisters.  */
+struct virDomainQemuMonitorEventData {
+    char *event;
+    regex_t regex;
+    unsigned int flags;
+    void *opaque;
+    virFreeCallback freecb;
+};
+typedef struct virDomainQemuMonitorEventData virDomainQemuMonitorEventData;
 
 struct _virDomainEventTunable {
     virDomainEvent parent;
@@ -552,6 +565,11 @@ virDomainEventBlockThresholdDispose(void *obj)
 }
 
 
+// there are several domain event like lifecycle, reboot
+// here is the lower level API to create event with special size
+// and set generic part(virObjectEvent)
+//
+// high level API who call this, convert it to specific event and set extra fields of that type
 static void *
 virDomainEventNew(virClassPtr klass,
                   int eventID,
@@ -612,6 +630,8 @@ virDomainEventLifecycleNew(int id,
     return (virObjectEventPtr)event;
 }
 
+// create life cycle vent from different source
+// like from dom, from dom obj, from, domain def
 virObjectEventPtr
 virDomainEventLifecycleNewFromDom(virDomainPtr dom,
                                   int type,
@@ -1683,7 +1703,7 @@ virDomainEventBlockThresholdNewFromDom(virDomainPtr dom,
                                            dev, path, threshold, excess);
 }
 
-
+// each domain event object must set it dispatcher with this
 static void
 virDomainEventDispatchDefaultFunc(virConnectPtr conn,
                                   virObjectEventPtr event,
@@ -1703,12 +1723,16 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
         return;
 
     switch ((virDomainEventID) event->eventID) {
+    // we can put qemu monitor event here if we give an eventID for it.
     case VIR_DOMAIN_EVENT_ID_LIFECYCLE:
         {
             virDomainEventLifecyclePtr lifecycleEvent;
 
             /* pass speific event info to speific callback
-             * remoteRelayDomainEventLifecycle
+             * remoteRelayDomainEventLifecycle()
+             * as you can see we did not pass the virDomainEventLifecyclePtr itself
+             * but expand it for parameter passing, so that cb(API level)
+             * does not know internal event type virDomainEventLifecyclePtr
              */
             lifecycleEvent = (virDomainEventLifecyclePtr)event;
             ((virConnectDomainEventCallback)cb)(conn, dom,
@@ -1979,6 +2003,20 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
                                                               cbopaque);
             goto cleanup;
         }
+    case VIR_DOMAIN_EVENT_ID_QEMU_MONITOR:
+        {
+            virDomainQemuMonitorEventPtr qemuMonitorEvent;
+            virDomainQemuMonitorEventData *data = cbopaque;
+            qemuMonitorEvent = (virDomainQemuMonitorEventPtr)event;
+            ((virConnectDomainQemuMonitorEventCallback)cb)(conn, dom,
+                                                           qemuMonitorEvent->event,
+                                                           qemuMonitorEvent->seconds,
+                                                           qemuMonitorEvent->micros,
+                                                           qemuMonitorEvent->details,
+                                                           data->opaque);
+            goto cleanup;
+
+        }
     case VIR_DOMAIN_EVENT_ID_LAST:
         break;
     }
@@ -2006,12 +2044,18 @@ virDomainQemuMonitorEventNew(int id,
         return NULL;
 
     virUUIDFormat(uuid, uuidstr);
-    // NOTE: it's qemu monitor event not domain event.
+    // NOTE: it's qemu monitor event not domain event, but share the same event queue with domain event
+    // but use different dispatcher function.
+    //
     // qemuDispatchConnectDomainMonitorEventRegister() for register monitor event
     // one callback for all qemu monitor event, eventID has no meaning, always set with 0
+    //
+    // why qemu monitor uses different dispatcher?
+    // that's because eventID is set with 0 for qemu monitor event same value with VIR_DOMAIN_EVENT_ID_LIFECYCLE
+    // so in virDomainEventDispatchDefaultFunc you distinguish these two, that's why we use another dispatcher
     if (!(ev = virObjectEventNew(virDomainQemuMonitorEventClass,
-                                 virDomainQemuMonitorEventDispatchFunc,
-                                 0, id, name, uuid, uuidstr)))
+                                 virDomainEventDispatchDefaultFunc,
+                                 VIR_DOMAIN_EVENT_ID_QEMU_MONITOR, id, name, uuid, uuidstr)))
         return NULL;
 
     /* event is mandatory, details are optional */
@@ -2032,45 +2076,30 @@ virDomainQemuMonitorEventNew(int id,
     return NULL;
 }
 
-
-/* In order to filter by event name, we need to store a copy of the
- * name to filter on.  By wrapping the caller's freecb, we can
- * piggyback our cleanup to happen at the same time the caller
- * deregisters.  */
-struct virDomainQemuMonitorEventData {
-    char *event;
-    regex_t regex;
-    unsigned int flags;
-    void *opaque;
-    virFreeCallback freecb;
-};
-typedef struct virDomainQemuMonitorEventData virDomainQemuMonitorEventData;
-
-
 // dispatcher for monitor event, for lifecycle it's different dispatcher
-static void
-virDomainQemuMonitorEventDispatchFunc(virConnectPtr conn,
-                                      virObjectEventPtr event,
-                                      virConnectObjectEventGenericCallback cb,
-                                      void *cbopaque)
-{
-    virDomainPtr dom;
-    virDomainQemuMonitorEventPtr qemuMonitorEvent;
-    virDomainQemuMonitorEventData *data = cbopaque;
-
-    if (!(dom = virGetDomain(conn, event->meta.name,
-                             event->meta.uuid, event->meta.id)))
-        return;
-
-    qemuMonitorEvent = (virDomainQemuMonitorEventPtr)event;
-    ((virConnectDomainQemuMonitorEventCallback)cb)(conn, dom,
-                                                   qemuMonitorEvent->event,
-                                                   qemuMonitorEvent->seconds,
-                                                   qemuMonitorEvent->micros,
-                                                   qemuMonitorEvent->details,
-                                                   data->opaque);
-    virObjectUnref(dom);
-}
+//static void
+//virDomainQemuMonitorEventDispatchFunc(virConnectPtr conn,
+//                                      virObjectEventPtr event,
+//                                      virConnectObjectEventGenericCallback cb,
+//                                      void *cbopaque)
+//{
+//    virDomainPtr dom;
+//    virDomainQemuMonitorEventPtr qemuMonitorEvent;
+//    virDomainQemuMonitorEventData *data = cbopaque;
+//
+//    if (!(dom = virGetDomain(conn, event->meta.name,
+//                             event->meta.uuid, event->meta.id)))
+//        return;
+//
+//    qemuMonitorEvent = (virDomainQemuMonitorEventPtr)event;
+//    ((virConnectDomainQemuMonitorEventCallback)cb)(conn, dom,
+//                                                   qemuMonitorEvent->event,
+//                                                   qemuMonitorEvent->seconds,
+//                                                   qemuMonitorEvent->micros,
+//                                                   qemuMonitorEvent->details,
+//                                                   data->opaque);
+//    virObjectUnref(dom);
+//}
 
 
 /**
@@ -2379,10 +2408,10 @@ virDomainQemuMonitorEventStateRegisterID(virConnectPtr conn,
 
     if (dom)
         virUUIDFormat(dom->uuid, uuidstr);
-    // for qeum monitor events, eventID is always 0, no meaning for it.
     return virObjectEventStateRegisterID(conn, state, dom ? uuidstr : NULL,
                                          filter, data,
-                                         virDomainQemuMonitorEventClass, 0,
+                                         // for qeum monitor events, eventID is always 0, no meaning for it.
+                                         virDomainQemuMonitorEventClass, VIR_DOMAIN_EVENT_ID_QEMU_MONITOR,
                                          VIR_OBJECT_EVENT_CALLBACK(cb),
                                          data, freecb,
                                          false, callbackID, false);
