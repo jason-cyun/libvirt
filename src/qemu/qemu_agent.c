@@ -857,6 +857,7 @@ static int qemuAgentSend(qemuAgentPtr mon,
     qemuAgentUpdateWatch(mon);
 
     while (!mon->msg->finished) {
+        // wait condtion or timeout if not reponse for longer time
         if ((then && virCondWaitUntil(&mon->notify, &mon->parent.lock, then) < 0) ||
             (!then && virCondWait(&mon->notify, &mon->parent.lock) < 0)) {
             if (errno == ETIMEDOUT) {
@@ -1198,6 +1199,8 @@ qemuAgentMakeStringsArray(const char **strings, unsigned int len)
     return NULL;
 }
 
+// this is caled by event thread when it processed
+// shutdown, reset, suspend event from qemu.
 void qemuAgentNotifyEvent(qemuAgentPtr mon,
                           qemuAgentEvent event)
 {
@@ -1208,6 +1211,7 @@ void qemuAgentNotifyEvent(qemuAgentPtr mon,
         mon->await_event = QEMU_AGENT_EVENT_NONE;
         /* somebody waiting for this event, wake him up. */
         if (mon->msg && !mon->msg->finished) {
+            // make agent waiting message as down and wake thread who is blocking on this msg
             mon->msg->finished = 1;
             virCondSignal(&mon->notify);
         }

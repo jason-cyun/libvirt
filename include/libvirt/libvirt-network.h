@@ -265,6 +265,7 @@ typedef void (*virConnectNetworkEventLifecycleCallback)(virConnectPtr conn,
  * signature of callback function will be used.
  */
 typedef enum {
+    // network event type, only one
     VIR_NETWORK_EVENT_ID_LIFECYCLE = 0,       /* virConnectNetworkEventLifecycleCallback */
 
 # ifdef VIR_ENUM_SENTINELS

@@ -85,7 +85,9 @@ struct _qemuMonitor {
 
     virDomainObjPtr vm;
 
+    // callbacks for qemu event
     qemuMonitorCallbacksPtr cb;
+    // qemu driver as opaque
     void *callbackOpaque;
 
     /* If there's a command being processed this will be
@@ -1386,6 +1388,7 @@ qemuMonitorEmitEvent(qemuMonitorPtr mon, const char *event,
 
     // call domainEvent callback set at monitorCallbacks with qemuProcessHandleEvent
     // qemuProcessHandleEvent is called here, add an new event to driver->domainEventState
+    // then event is notified to client by event thread later on if someone is monitoring such event
     QEMU_MONITOR_CALLBACK(mon, ret, domainEvent, mon->vm, event, seconds,
                           micros, details);
     return ret;

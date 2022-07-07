@@ -141,6 +141,7 @@ int                     virNodeDeviceDestroy    (virNodeDevicePtr dev);
  * signature of callback function will be used.
  */
 typedef enum {
+    // node device event ID
     VIR_NODE_DEVICE_EVENT_ID_LIFECYCLE = 0, /* virConnectNodeDeviceEventLifecycleCallback */
     VIR_NODE_DEVICE_EVENT_ID_UPDATE = 1, /* virConnectNodeDeviceEventGenericCallback */
 

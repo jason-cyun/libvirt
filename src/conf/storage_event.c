@@ -120,9 +120,11 @@ virStoragePoolEventDispatchDefaultFunc(virConnectPtr conn,
     switch ((virStoragePoolEventID)event->eventID) {
     case VIR_STORAGE_POOL_EVENT_ID_LIFECYCLE:
         {
+            // convert event to specific type and call callback for this type of event
             virStoragePoolEventLifecyclePtr storagePoolLifecycleEvent;
 
             storagePoolLifecycleEvent = (virStoragePoolEventLifecyclePtr)event;
+            // callback is defined by libvirt, selected by API when a callback is registered for this event type!!!
             ((virConnectStoragePoolEventLifecycleCallback)cb)(conn, pool,
                                                               storagePoolLifecycleEvent->type,
                                                               storagePoolLifecycleEvent->detail,
@@ -293,5 +295,10 @@ virStoragePoolEventRefreshNew(const char *name,
                                     0, name, uuid, uuidstr)))
         return NULL;
 
+    // as event queue is shared by domain event, network event, storage pool event, hence
+    // we must convert to generic event type that's virObjectEventPtr
+    // all events must put virObjectEvent as it's first field
+    // dispatcher has the same signature, so that event can be handled in the same generic function
+    // before dispatcher is called, inside dispatcher, we can convert event to specific type and do extra work.
     return (virObjectEventPtr)event;
 }

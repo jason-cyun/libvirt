@@ -296,6 +296,17 @@ remoteRelayDomainQemuMonitorEventCheckACL(virNetServerClientPtr client,
 }
 
 
+// this is user register callback for sending life cycle event to client
+// Here the parameter is not virDomainEventLifecyclePtr which is used internally
+// but expanded virDomainEventLifecyclePtr.
+// event----virDomainEventLifecyclePtr->type
+// detail---virDomainEventLifecyclePtr->detail
+//
+// expansion is doned by event dispatch function
+// Domain event:          virDomainEventDispatchDefaultFunc
+// qemu monitor event:    virDomainQemuMonitorEventDispatchFunc
+// storage pool event:    virStoragePoolEventDispatchDefaultFunc
+// etc
 static int
 remoteRelayDomainEventLifecycle(virConnectPtr conn,
                                 virDomainPtr dom,
@@ -304,6 +315,7 @@ remoteRelayDomainEventLifecycle(virConnectPtr conn,
                                 void *opaque)
 {
     daemonClientEventCallbackPtr callback = opaque;
+    // event data sent to client by rpc(rpc from server side)
     remote_domain_event_lifecycle_msg data;
 
     if (callback->callbackID < 0 ||
@@ -1392,8 +1404,11 @@ remoteRelayDomainEventBlockThreshold(virConnectPtr conn,
 // NOTE: this is callback for each event, not callback registred by client for an event
 // that callback is dynamically created, can be remove when client deregister
 //
-
 static virConnectDomainEventGenericCallback domainEventCallbacks[] = {
+    // callback of each event defined by server.
+    // these callbacks are responsible for sending event info to client.
+    // as each event takes different meta send by different rpc call
+    // hence we have different callbacks here for different event sending
     VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainEventLifecycle),
     VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainEventReboot),
     VIR_DOMAIN_EVENT_CALLBACK(remoteRelayDomainEventRTCChange),
@@ -1455,6 +1470,7 @@ remoteRelayNetworkEventLifecycle(virConnectPtr conn,
 }
 
 static virConnectNetworkEventGenericCallback networkEventCallbacks[] = {
+    // callbacks for network event
     VIR_NETWORK_EVENT_CALLBACK(remoteRelayNetworkEventLifecycle),
 };
 
@@ -1521,6 +1537,7 @@ remoteRelayStoragePoolEventRefresh(virConnectPtr conn,
 }
 
 static virConnectStoragePoolEventGenericCallback storageEventCallbacks[] = {
+    // callbacks for storage pool events
     VIR_STORAGE_POOL_EVENT_CALLBACK(remoteRelayStoragePoolEventLifecycle),
     VIR_STORAGE_POOL_EVENT_CALLBACK(remoteRelayStoragePoolEventRefresh),
 };
@@ -1588,6 +1605,7 @@ remoteRelayNodeDeviceEventUpdate(virConnectPtr conn,
 }
 
 static virConnectNodeDeviceEventGenericCallback nodeDeviceEventCallbacks[] = {
+    // callbacks for node device event
     VIR_NODE_DEVICE_EVENT_CALLBACK(remoteRelayNodeDeviceEventLifecycle),
     VIR_NODE_DEVICE_EVENT_CALLBACK(remoteRelayNodeDeviceEventUpdate),
 };
@@ -1655,6 +1673,7 @@ remoteRelaySecretEventValueChanged(virConnectPtr conn,
 }
 
 static virConnectSecretEventGenericCallback secretEventCallbacks[] = {
+    // callbacks for secret event
     VIR_SECRET_EVENT_CALLBACK(remoteRelaySecretEventLifecycle),
     VIR_SECRET_EVENT_CALLBACK(remoteRelaySecretEventValueChanged),
 };
@@ -1752,6 +1771,7 @@ remoteClientFreePrivateCallbacks(struct daemonClientPrivate *priv)
     virIdentityPtr sysident = virIdentityGetSystem();
     virIdentitySetCurrent(sysident);
 
+    // free all callbacks registered by this client from driver tracking store
     DEREG_CB(priv->conn, priv->domainEventCallbacks,
              priv->ndomainEventCallbacks,
              virConnectDomainEventDeregisterAny, "domain");
@@ -1837,6 +1857,8 @@ void *remoteClientNew(virNetServerClientPtr client,
         return NULL;
     }
 
+    // client close callbacks for free private resources daemonClientPrivate
+    // like callbacks registered before
     virNetServerClientSetCloseHook(client, remoteClientCloseFunc);
     return priv;
 }
@@ -3987,6 +4009,8 @@ remoteDispatchConnectUnregisterCloseCallback(virNetServerPtr server ATTRIBUTE_UN
     return rv;
 }
 
+// register API for lifecycle domain event for simple usage
+// you can also register lifecycle domain event by remoteDispatchConnectDomainEventRegisterAny()
 static int
 remoteDispatchConnectDomainEventRegister(virNetServerPtr server ATTRIBUTE_UNUSED,
                                          virNetServerClientPtr client,
@@ -4293,6 +4317,7 @@ remoteDispatchConnectDomainEventRegisterAny(virNetServerPtr server ATTRIBUTE_UNU
 }
 
 
+// this is the modern API that should be used by user
 static int
 remoteDispatchConnectDomainEventCallbackRegisterAny(virNetServerPtr server ATTRIBUTE_UNUSED,
                                                     virNetServerClientPtr client,
@@ -4337,18 +4362,22 @@ remoteDispatchConnectDomainEventCallbackRegisterAny(virNetServerPtr server ATTRI
     callback->client = virObjectRef(client);
     callback->eventID = args->eventID;
     callback->callbackID = -1;
-    ref = callback;
+    ref = callback; // as VIR_APPEND_ELEMENT clears 'callback' on success
+    // append callback to this connection for tracking
     if (VIR_APPEND_ELEMENT(priv->domainEventCallbacks,
                            priv->ndomainEventCallbacks,
                            callback) < 0)
         goto cleanup;
 
+    // append a callback to driver state(domain event state)
     if ((callbackID = virConnectDomainEventRegisterAny(priv->conn,
                                                        dom,
                                                        args->eventID,
+                                                       // predefined domain event callbacks
                                                        domainEventCallbacks[args->eventID],
                                                        ref,
                                                        remoteEventCallbackFree)) < 0) {
+        // failed to add in driver state, remove it from connection as well
         VIR_SHRINK_N(priv->domainEventCallbacks,
                      priv->ndomainEventCallbacks, 1);
         callback = ref;
@@ -6393,6 +6422,7 @@ qemuDispatchConnectDomainMonitorEventRegister(virNetServerPtr server ATTRIBUTE_U
     if ((callbackID = virConnectDomainQemuMonitorEventRegister(priv->conn,
                                                                dom,
                                                                event,
+                                                               // callback for monitor event
                                                                remoteRelayDomainQemuMonitorEvent,
                                                                ref,
                                                                remoteEventCallbackFree,

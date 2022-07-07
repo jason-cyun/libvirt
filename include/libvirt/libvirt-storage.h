@@ -416,6 +416,7 @@ int virStoragePoolIsPersistent(virStoragePoolPtr pool);
  * signature of callback function will be used.
  */
 typedef enum {
+    // storage pool event IDs
     VIR_STORAGE_POOL_EVENT_ID_LIFECYCLE = 0, /* virConnectStoragePoolEventLifecycleCallback */
     VIR_STORAGE_POOL_EVENT_ID_REFRESH = 1, /* virConnectStoragePoolEventGenericCallback */
 

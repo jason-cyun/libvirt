@@ -299,10 +299,13 @@ void virEventPollUpdateTimeout(int timer, int frequency)
     for (i = 0; i < eventLoop.timeoutsCount; i++) {
         if (eventLoop.timeouts[i].timer == timer) {
             eventLoop.timeouts[i].frequency = frequency;
+            // update expires of this timer
             eventLoop.timeouts[i].expiresAt =
                 frequency >= 0 ? frequency + now : 0;
             VIR_DEBUG("Set timer freq=%d expires=%llu", frequency,
                       eventLoop.timeouts[i].expiresAt);
+            // wakup poll by writing data to write side of pipe
+            // as poll monitors the other side reading, when after return, poll with be waked up
             virEventPollInterruptLocked();
             found = true;
             break;
@@ -725,6 +728,7 @@ static void virEventPollHandleWakeup(int watch ATTRIBUTE_UNUSED,
 {
     char c;
     virMutexLock(&eventLoop.lock);
+    // do nothing as it's used for interrupt poll from blocking
     ignore_value(saferead(fd, &c, sizeof(c)));
     virMutexUnlock(&eventLoop.lock);
 }
@@ -743,6 +747,8 @@ int virEventPollInit(void)
         return -1;
     }
 
+    // reading side of pipe monitored by poll
+    // while write side of pip used for interrupt poll when necessary
     if (virEventPollAddHandle(eventLoop.wakeupfd[0],
                               VIR_EVENT_HANDLE_READABLE,
                               virEventPollHandleWakeup, NULL, NULL) < 0) {
@@ -762,6 +768,7 @@ static int virEventPollInterruptLocked(void)
     char c = '\0';
 
     if (!eventLoop.running ||
+        // event thread is not blocking on poll or I'm event thread
         virThreadIsSelf(&eventLoop.leader)) {
         VIR_DEBUG("Skip interrupt, %d %llu", eventLoop.running,
                   virThreadID(&eventLoop.leader));

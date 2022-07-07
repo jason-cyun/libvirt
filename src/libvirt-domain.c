@@ -9193,6 +9193,7 @@ virConnectDomainEventRegisterAny(virConnectPtr conn,
     VIR_DOMAIN_DEBUG(dom, "conn=%p, eventID=%d, cb=%p, opaque=%p, freecb=%p",
                      conn, eventID, cb, opaque, freecb);
 
+    // last error is clear only when a new rpc all comes.
     virResetLastError();
 
     virCheckConnectReturn(conn, -1);
@@ -9224,6 +9225,7 @@ virConnectDomainEventRegisterAny(virConnectPtr conn,
 
     virReportUnsupportedError();
  error:
+    // dispatch error back to client, error should be set by internal api
     virDispatchError(conn);
     return -1;
 }

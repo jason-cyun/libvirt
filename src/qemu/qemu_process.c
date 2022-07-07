@@ -465,6 +465,7 @@ qemuProcessFakeReboot(void *opaque)
         goto endjob;
     }
 
+    // reboot a shutdown vm by sending reset command to it
     qemuDomainObjEnterMonitor(driver, vm);
     rc = qemuMonitorSystemReset(priv->mon);
 
@@ -474,9 +475,11 @@ qemuProcessFakeReboot(void *opaque)
     if (rc < 0)
         goto endjob;
 
+    // as this run in another thread, so befre it runs, we my got guest panic event
     if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_CRASHED)
         reason = VIR_DOMAIN_RUNNING_CRASHED;
 
+    // start vcpu by sending qemu monitor command
     if (qemuProcessStartCPUs(driver, vm,
                              reason,
                              QEMU_ASYNC_JOB_NONE) < 0) {
@@ -485,6 +488,7 @@ qemuProcessFakeReboot(void *opaque)
                            "%s", _("resume operation failed"));
         goto endjob;
     }
+
     priv->gotShutdown = false;
     event = virDomainEventLifecycleNewFromObj(vm,
                                      VIR_DOMAIN_EVENT_RESUMED,
@@ -515,6 +519,9 @@ qemuProcessShutdownOrReboot(virQEMUDriverPtr driver,
 {
     qemuDomainObjPrivatePtr priv = vm->privateData;
 
+    // if user reboot from qemu monitor, we actually send shutdown to qemu monitor(qemu process never quits as we set -no-shutdown flag
+    // later when we process SHUTDOWN event from qemu, it reaches here
+    // if user reboot, we create another thread to reset it, otherweise kill qemu process
     if (priv->fakeReboot) {
         // if fakeReboot is enabled, reboot OS
         // otherwise, kill process(process quit)
@@ -550,6 +557,17 @@ qemuProcessHandleEvent(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
     VIR_DEBUG("vm=%p", vm);
 
     virObjectLock(vm);
+    // event is virDomainQemuMonitorEventPtr
+    /*
+     * struct _virDomainQemuMonitorEvent {
+     *     virObjectEvent parent;
+     *
+     *     char *event;
+     *     long long seconds;
+     *     unsigned int micros;
+     *     char *details;
+     * };
+     */
     event = virDomainQemuMonitorEventNew(vm->def->id, vm->def->name,
                                          vm->def->uuid, eventName,
                                          seconds, micros, details);
@@ -561,6 +579,7 @@ qemuProcessHandleEvent(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
 }
 
 
+// handle shutdown event
 static int
 qemuProcessHandleShutdown(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
                           virDomainObjPtr vm,
@@ -611,18 +630,22 @@ qemuProcessHandleShutdown(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         break;
     }
 
+    // generate libvirt event
     event = virDomainEventLifecycleNewFromObj(vm,
                                               VIR_DOMAIN_EVENT_SHUTDOWN,
                                               detail);
 
+    // save status to disk
     if (virDomainSaveStatus(driver->xmlopt, cfg->stateDir, vm, driver->caps) < 0) {
         VIR_WARN("Unable to save status on vm %s after state change",
                  vm->def->name);
     }
 
     if (priv->agent)
+        // as vm is shutdown, wakeup thread that's waiting on QEMU_AGENT_EVENT_SHUTDOWN
         qemuAgentNotifyEvent(priv->agent, QEMU_AGENT_EVENT_SHUTDOWN);
 
+    // shutdown or reboot qemu process
     qemuProcessShutdownOrReboot(driver, vm);
 
  unlock:
@@ -634,6 +657,7 @@ qemuProcessHandleShutdown(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
 }
 
 
+// STOP event from qemu monitor for SUSPEND operation(stop vcpus)
 static int
 qemuProcessHandleStop(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
                       virDomainObjPtr vm,
@@ -699,6 +723,7 @@ qemuProcessHandleStop(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
 }
 
 
+// RESUME event from qemu for resume operation(start vcpus)
 static int
 qemuProcessHandleResume(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
                         virDomainObjPtr vm,
@@ -720,8 +745,11 @@ qemuProcessHandleResume(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         VIR_DEBUG("Transitioned guest %s out of paused into resumed state",
                   vm->def->name);
 
+        // RESUME event from qemu, set its state with RUNNING
+        // and generate RESUMED event, push it to event queue if someone is listening on event
         virDomainObjSetState(vm, VIR_DOMAIN_RUNNING,
                                  VIR_DOMAIN_RUNNING_UNPAUSED);
+        //actuall event type is virDomainEventLifecyclePtr, convert it to virObjectEventPtr, then convert it back in event callbacks
         event = virDomainEventLifecycleNewFromObj(vm,
                                          VIR_DOMAIN_EVENT_RESUMED,
                                          VIR_DOMAIN_EVENT_RESUMED_UNPAUSED);
@@ -1634,7 +1662,9 @@ qemuProcessHandleDumpCompleted(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
 }
 
 
-// set monitor callbacks
+// qemu monitor callbacks
+// callbacks should NOT block or takes long as it runs in event loop
+// hence for block operation, send its processing to qemu worker
 static qemuMonitorCallbacks monitorCallbacks = {
     .eofNotify = qemuProcessHandleMonitorEOF,
     .errorNotify = qemuProcessHandleMonitorError,

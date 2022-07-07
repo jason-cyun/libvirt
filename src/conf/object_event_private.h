@@ -52,6 +52,9 @@ typedef void
  */
 struct _virObjectEvent {
     virObject parent;
+    // as this is generic part for all specific event
+    // in some place, we need to convert it to specific event, eventID indicates which specific event it should been
+    // like virDomainEventLifecyclePtr, eventID VIR_DOMAIN_EVENT_ID_LIFECYCLE
     int eventID;
     virObjectMeta meta;
     int remoteID;

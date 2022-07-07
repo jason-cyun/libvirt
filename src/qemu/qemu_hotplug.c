@@ -5472,6 +5472,8 @@ qemuDomainChangeGraphicsPasswords(virQEMUDriverPtr driver,
 
     if (qemuDomainObjEnterMonitorAsync(driver, vm, asyncJob) < 0)
         goto cleanup;
+
+    // -2, unsupported, -1 error, 0 ok
     ret = qemuMonitorSetPassword(priv->mon, type, password, connected);
 
     if (ret == -2) {

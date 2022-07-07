@@ -40,6 +40,7 @@
 
 VIR_LOG_INIT("util.domain_event");
 
+// virDomainEventClass is parent for suclass below(virDomainEventLifecycleClass etc)
 static virClassPtr virDomainEventClass;
 static virClassPtr virDomainEventLifecycleClass;
 static virClassPtr virDomainEventRTCChangeClass;
@@ -97,6 +98,8 @@ virDomainQemuMonitorEventDispatchFunc(virConnectPtr conn,
                                       void *cbopaque);
 
 struct _virDomainEvent {
+    // must use virObjectEvent as the first field
+    // so that we can convert to/from it and share common code/logic for different event type.
     virObjectEvent parent;
 
     /* Unused attribute to allow for subclass creation */
@@ -293,8 +296,10 @@ typedef virDomainEventBlockThreshold *virDomainEventBlockThresholdPtr;
 
 
 static int
+//called by virDomainEventsInitialize()
 virDomainEventsOnceInit(void)
 {
+    // the second parameter is parent
     if (!VIR_CLASS_NEW(virDomainEvent, virClassForObjectEvent()))
         return -1;
     if (!VIR_CLASS_NEW(virDomainEventLifecycle, virDomainEventClass))
@@ -343,6 +348,7 @@ virDomainEventsOnceInit(void)
 VIR_ONCE_GLOBAL_INIT(virDomainEvents)
 
 
+// different sub-classs have different disposes for freeing resource of specific event.
 static void
 virDomainEventDispose(void *obj)
 {
@@ -547,7 +553,7 @@ virDomainEventBlockThresholdDispose(void *obj)
 
 
 static void *
-virDomainEventNew(virClassPtr klass,
+virDomainEventNew(virClassPtr klass, // each event type has own class
                   int eventID,
                   int id,
                   const char *name,
@@ -556,6 +562,8 @@ virDomainEventNew(virClassPtr klass,
     virDomainEventPtr event;
     char uuidstr[VIR_UUID_STRING_BUFLEN];
 
+    // initialize domain class only once by pthread_once
+    // even it's called several times for each new event
     if (virDomainEventsInitialize() < 0)
         return NULL;
 
@@ -570,6 +578,8 @@ virDomainEventNew(virClassPtr klass,
      * Xen sometimes renames guests during migration, thus
      * 'uuid' is the only truly reliable key we can use. */
     virUUIDFormat(uuid, uuidstr);
+    // klass is used for free memory of event field when event object is freed
+    // klass also holds the size of event it's representing.
     if (!(event = virObjectEventNew(klass,
                                     virDomainEventDispatchDefaultFunc,
                                     eventID,
@@ -1680,10 +1690,11 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
                                   virConnectObjectEventGenericCallback cb,
                                   void *cbopaque)
 {
-    /* This is called by event timer handler which runs in event thread(leader thread)
+    // every event has its separate dispatcher function, but it uses same for a group(domain event, network event)
+    /* This is called by event timer handler which runs in event thread(event thread)
      * for each domain event type
      * dispatcher for domain event, as different domain events has different meta
-     * here we convert generic event to specfic event and call it's callback(event callback)
+     * here we convert generic event to specfic event and call its callback(event callback)
      * defined at remote_daemon_dispatch.c domainEventCallbacks[]
      */
     virDomainPtr dom = virGetDomain(conn, event->meta.name,
@@ -1699,6 +1710,9 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
 
             /* pass speific event info to speific callback
              * remoteRelayDomainEventLifecycle
+             * expand remoteRelayDomainEventLifecycle event fields
+             * not pass remoteRelayDomainEventLifecycle to callback which is API level
+             * should not see internal struct.
              */
             lifecycleEvent = (virDomainEventLifecyclePtr)event;
             ((virConnectDomainEventCallback)cb)(conn, dom,
@@ -1996,6 +2010,9 @@ virDomainQemuMonitorEventNew(int id,
         return NULL;
 
     virUUIDFormat(uuid, uuidstr);
+    // NOTE: it's qemu monitor event not domain event.
+    // qemuDispatchConnectDomainMonitorEventRegister() for register monitor event
+    // one callback for all qemu monitor event, eventID has no meaning, always set with 0
     if (!(ev = virObjectEventNew(virDomainQemuMonitorEventClass,
                                  virDomainQemuMonitorEventDispatchFunc,
                                  0, id, name, uuid, uuidstr)))
@@ -2004,6 +2021,9 @@ virDomainQemuMonitorEventNew(int id,
     /* event is mandatory, details are optional */
     if (VIR_STRDUP(ev->event, event) <= 0)
         goto error;
+    // specific event field setting, details is freed by virDomainQemuMonitorEventClass.dispose
+    // virDomainQemuMonitorEventDispose()
+    // when event object is freed
     ev->seconds = seconds;
     ev->micros = micros;
     if (VIR_STRDUP(ev->details, details) < 0)
@@ -2031,6 +2051,7 @@ struct virDomainQemuMonitorEventData {
 typedef struct virDomainQemuMonitorEventData virDomainQemuMonitorEventData;
 
 
+// dispatcher for monitor event, for lifecycle it's different dispatcher
 static void
 virDomainQemuMonitorEventDispatchFunc(virConnectPtr conn,
                                       virObjectEventPtr event,
@@ -2123,6 +2144,8 @@ virDomainEventStateRegisterID(virConnectPtr conn,
 {
     char uuidstr[VIR_UUID_STRING_BUFLEN];
 
+    // this will be created event class for support domain event
+    // but it runs only once with pthread_once()
     if (virDomainEventsInitialize() < 0)
         return -1;
 
@@ -2362,6 +2385,7 @@ virDomainQemuMonitorEventStateRegisterID(virConnectPtr conn,
 
     if (dom)
         virUUIDFormat(dom->uuid, uuidstr);
+    // for qeum monitor events, eventID is always 0, no meaning for it.
     return virObjectEventStateRegisterID(conn, state, dom ? uuidstr : NULL,
                                          filter, data,
                                          virDomainQemuMonitorEventClass, 0,
