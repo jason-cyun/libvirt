@@ -3,20 +3,21 @@ if [ "$#" -eq 1 ] && [ "$1" = "-r" ]; then
   make clean
   clangdinit intercept-build
 else
-  make CC=clang -j $(nproc)
+  make CC=clang -j "$(nproc)"
 fi
 
 if [ $? -eq 0 ]; then
   make install
+  {
+    echo "log_level = 1"
+    echo 'log_outputs="1:file:/var/log/libvirt/libvirtd.log"'
+    echo 'keepalive_interval=60'
+    echo 'admin_keepalive_interval=60'
 
-  echo "log_level = 1" >> /etc/libvirt/libvirtd.conf
-  echo 'log_outputs="1:file:/var/log/libvirt/libvirtd.log"' >> /etc/libvirt/libvirtd.conf
-  echo 'keepalive_interval=60' >> /etc/libvirt/libvirtd.conf
-  echo 'admin_keepalive_interval=60' >> /etc/libvirt/libvirtd.conf
-
-  echo 'listen_tls = 0' >> /etc/libvirt/libvirtd.conf
-  echo 'listen_tcp = 1' >> /etc/libvirt/libvirtd.conf
-  echo 'auth_tcp = "none"' >> /etc/libvirt/libvirtd.conf
+    echo 'listen_tls = 0'
+    echo 'listen_tcp = 1'
+    echo 'auth_tcp = "none"'
+  } >> /etc/libvirt/libvirtd.conf
 
   echo 'LIBVIRTD_ARGS="--listen"' >> /etc/sysconfig/libvirtd
 
