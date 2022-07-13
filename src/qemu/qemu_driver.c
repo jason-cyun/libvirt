@@ -1857,10 +1857,10 @@ static int qemuDomainSuspend(virDomainPtr dom)
     if (virDomainObjCheckActive(vm) < 0)
         goto endjob;
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_OUT) {
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_OUT) {
         reason = VIR_DOMAIN_PAUSED_MIGRATION;
         eventDetail = VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED;
-    } else if (priv->job.asyncJob == QEMU_ASYNC_JOB_SNAPSHOT) {
+    } else if (priv->job.asyncActive == QEMU_ASYNC_JOB_SNAPSHOT) {
         reason = VIR_DOMAIN_PAUSED_SNAPSHOT;
         eventDetail = -1; /* don't create lifecycle events when doing snapshot */
     } else {
@@ -1976,6 +1976,7 @@ static int qemuDomainShutdownFlags(virDomainPtr dom, unsigned int flags)
     virCheckFlags(VIR_DOMAIN_SHUTDOWN_ACPI_POWER_BTN |
                   VIR_DOMAIN_SHUTDOWN_GUEST_AGENT, -1);
 
+    // vm is locked
     if (!(vm = qemuDomObjFromDomain(dom)))
         goto cleanup;
 
@@ -2047,8 +2048,10 @@ static int qemuDomainShutdownFlags(virDomainPtr dom, unsigned int flags)
         // so qemu process is still there, we just reset it, to start it again
         //
         qemuDomainSetFakeReboot(driver, vm, isReboot);
+        // monitor is lock, vm is unlocked
         qemuDomainObjEnterMonitor(driver, vm);
         ret = qemuMonitorSystemPowerdown(priv->mon);
+        // get vm lock again and free monitor lock
         if (qemuDomainObjExitMonitor(driver, vm) < 0)
             ret = -1;
     }
@@ -2187,8 +2190,10 @@ qemuDomainReset(virDomainPtr dom, unsigned int flags)
         goto endjob;
 
     priv = vm->privateData;
+    // vm is unlocked, mon is locked
     qemuDomainObjEnterMonitor(driver, vm);
     ret = qemuMonitorSystemReset(priv->mon);
+    // mon is unlocked, vm is locked again.
     if (qemuDomainObjExitMonitor(driver, vm) < 0)
         ret = -1;
 
@@ -2274,7 +2279,7 @@ qemuDomainDestroyFlags(virDomainPtr dom,
 
     qemuDomainSetFakeReboot(driver, vm, false);
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_IN)
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_IN)
         stopFlags |= VIR_QEMU_PROCESS_STOP_MIGRATED;
 
     qemuProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED,
@@ -4861,7 +4866,7 @@ processMonitorEOFEvent(virQEMUDriverPtr driver,
         auditReason = "failed";
     }
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_IN) {
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_IN) {
         stopFlags |= VIR_QEMU_PROCESS_STOP_MIGRATED;
         qemuMigrationDstErrorSave(driver, vm->def->name,
                                   qemuMonitorLastError(priv->mon));
@@ -13728,7 +13733,7 @@ qemuDomainGetJobStatsInternal(virQEMUDriverPtr driver,
         return 0;
     }
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_IN) {
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_IN) {
         virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
                _("migration statistics are available only on "
                  "the source host"));
@@ -13872,27 +13877,27 @@ static int qemuDomainAbortJob(virDomainPtr dom)
 
     priv = vm->privateData;
 
-    if (!priv->job.asyncJob) {
+    if (!priv->job.asyncActive) {
         virReportError(VIR_ERR_OPERATION_INVALID,
                        "%s", _("no job is active on the domain"));
         goto endjob;
     }
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_IN) {
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_IN) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("cannot abort incoming migration;"
                          " use virDomainDestroy instead"));
         goto endjob;
     }
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_DUMP &&
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_DUMP &&
         priv->job.apiFlags & VIR_DUMP_MEMORY_ONLY) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("cannot abort memory-only dump"));
         goto endjob;
     }
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_OUT &&
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_OUT &&
         (priv->job.current->status == QEMU_DOMAIN_JOB_STATUS_POSTCOPY ||
          (virDomainObjGetState(vm, &reason) == VIR_DOMAIN_PAUSED &&
           reason == VIR_DOMAIN_PAUSED_POSTCOPY))) {
@@ -14217,7 +14222,7 @@ qemuDomainMigrateStartPostCopy(virDomainPtr dom,
 
     priv = vm->privateData;
 
-    if (priv->job.asyncJob != QEMU_ASYNC_JOB_MIGRATION_OUT) {
+    if (priv->job.asyncActive != QEMU_ASYNC_JOB_MIGRATION_OUT) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("post-copy can only be started while "
                          "outgoing migration is in progress"));

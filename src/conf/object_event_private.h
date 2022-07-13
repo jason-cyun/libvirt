@@ -47,7 +47,7 @@ typedef void
 
 /* event dynamically created when it happens.
  * eventID: type
- * meta: like dom ID, namme, uuid etc
+ * meta: like dom ID, name, uuid etc
  * dispatch: dispatch func
  */
 struct _virObjectEvent {

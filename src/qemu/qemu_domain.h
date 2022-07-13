@@ -168,21 +168,25 @@ typedef qemuDomainJobObj *qemuDomainJobObjPtr;
 struct _qemuDomainJobObj {
     virCond cond;                       /* Use to coordinate jobs */
 
-    /* The following members are for QEMU_JOB_* */
+    /* The following members are for QEMU_JOB_* QMP command */
     qemuDomainJob active;               /* Currently running job */
     unsigned long long owner;           /* Thread id which set current job */
     const char *ownerAPI;               /* The API which owns the job */
     unsigned long long started;         /* When the current job started */
 
-    /* The following members are for QEMU_AGENT_JOB_* */
+    /* The following members are for QEMU_AGENT_JOB_* Agent command */
     qemuDomainAgentJob agentActive;     /* Currently running agent job */
     unsigned long long agentOwner;      /* Thread id which set current agent job */
     const char *agentOwnerAPI;          /* The API which owns the agent job */
     unsigned long long agentStarted;    /* When the current agent job started */
 
     /* The following members are for QEMU_ASYNC_JOB_* */
+    /* Asynchronous job condition is used for long running jobs (such as migration)
+     * that consist of several monitor commands and it is desirable to allow calling a limited set of other monitor commands while such job is running.
+     * This allows clients to, e.g., query statistical data, cancel the job, or change parameters of the job
+     */
     virCond asyncCond;                  /* Use to coordinate with async jobs */
-    qemuDomainAsyncJob asyncJob;        /* Currently active async job */
+    qemuDomainAsyncJob asyncActive;        /* Currently active async job */
     unsigned long long asyncOwner;      /* Thread which set current async job */
     const char *asyncOwnerAPI;          /* The API which owns the async job */
     unsigned long long asyncStarted;    /* When the current async job started */

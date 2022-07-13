@@ -991,7 +991,7 @@ qemuMigrationSrcNBDStorageCopy(virQEMUDriverPtr driver,
         if (priv->job.abortJob) {
             priv->job.current->status = QEMU_DOMAIN_JOB_STATUS_CANCELED;
             virReportError(VIR_ERR_OPERATION_ABORTED, _("%s: %s"),
-                           qemuDomainAsyncJobTypeToString(priv->job.asyncJob),
+                           qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
                            _("canceled by client"));
             goto cleanup;
         }
@@ -1382,7 +1382,7 @@ qemuMigrationJobName(virDomainObjPtr vm)
 {
     qemuDomainObjPrivatePtr priv = vm->privateData;
 
-    switch (priv->job.asyncJob) {
+    switch (priv->job.asyncActive) {
     case QEMU_ASYNC_JOB_MIGRATION_OUT:
         return _("migration out job");
     case QEMU_ASYNC_JOB_SAVE:
@@ -1872,8 +1872,8 @@ qemuMigrationSrcCleanup(virDomainObjPtr vm,
 
     VIR_DEBUG("vm=%s, conn=%p, asyncJob=%s, phase=%s",
               vm->def->name, conn,
-              qemuDomainAsyncJobTypeToString(priv->job.asyncJob),
-              qemuDomainAsyncJobPhaseToString(priv->job.asyncJob,
+              qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
+              qemuDomainAsyncJobPhaseToString(priv->job.asyncActive,
                                               priv->job.phase));
 
     if (!qemuMigrationJobIsActive(vm, QEMU_ASYNC_JOB_MIGRATION_OUT))
@@ -1951,7 +1951,7 @@ qemuMigrationSrcBeginPhase(virQEMUDriverPtr driver,
      * Otherwise we will start the async job later in the perform phase losing
      * change protection.
      */
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_OUT)
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_OUT)
         qemuMigrationJobSetPhase(driver, vm, QEMU_MIGRATION_PHASE_BEGIN3);
 
     if (!qemuMigrationSrcIsAllowed(driver, vm, true, flags))
@@ -2177,7 +2177,7 @@ qemuMigrationDstPrepareCleanup(virQEMUDriverPtr driver,
               driver,
               vm->def->name,
               qemuDomainJobTypeToString(priv->job.active),
-              qemuDomainAsyncJobTypeToString(priv->job.asyncJob));
+              qemuDomainAsyncJobTypeToString(priv->job.asyncActive));
 
     virPortAllocatorRelease(priv->migrationPort);
     priv->migrationPort = 0;
@@ -3513,7 +3513,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
          * priv->job.abortJob will not change */
         priv->job.current->status = QEMU_DOMAIN_JOB_STATUS_CANCELED;
         virReportError(VIR_ERR_OPERATION_ABORTED, _("%s: %s"),
-                       qemuDomainAsyncJobTypeToString(priv->job.asyncJob),
+                       qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
                        _("canceled by client"));
         goto exit_monitor;
     }
@@ -5483,7 +5483,7 @@ qemuMigrationJobIsActive(virDomainObjPtr vm,
 {
     qemuDomainObjPrivatePtr priv = vm->privateData;
 
-    if (priv->job.asyncJob != job) {
+    if (priv->job.asyncActive != job) {
         const char *msg;
 
         if (job == QEMU_ASYNC_JOB_MIGRATION_IN)

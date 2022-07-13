@@ -682,7 +682,7 @@ qemuMonitorIO(int watch, int fd, int events, void *opaque)
 
     virObjectRef(mon);
 
-    /* lock access to the monitor and protect fd */
+    /* lock access to the monitor and protect fd when reading or sending by monitor fd */
     virObjectLock(mon);
 #if DEBUG_IO
     VIR_DEBUG("Monitor %p I/O on watch %d fd %d events %d", mon, watch, fd, events);
@@ -1139,6 +1139,8 @@ qemuMonitorSend(qemuMonitorPtr mon,
     while (!mon->msg->finished) {
         // block here, until get reply/error in event thread
         // when event thread got reply/error from qemu, it will wake me up
+        // monitor is unlock when free and get lock again when it's waken
+        // block until, someone wake me up when got error or reply from qemu fd
         if (virCondWait(&mon->notify, &mon->parent.lock) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Unable to wait on monitor condition"));
@@ -1788,6 +1790,7 @@ qemuMonitorGetStatus(qemuMonitorPtr mon,
 int
 qemuMonitorSystemPowerdown(qemuMonitorPtr mon)
 {
+    // monitor is locked
     QEMU_CHECK_MONITOR(mon);
 
     return qemuMonitorJSONSystemPowerdown(mon);

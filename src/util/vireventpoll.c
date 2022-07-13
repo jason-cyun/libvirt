@@ -51,7 +51,7 @@ static int virEventPollInterruptLocked(void);
 
 /* State for a single file handle being monitored */
 struct virEventPollHandle {
-    /* watch: identifier, watch 1<--->1 fds
+    /* watch: identifier, watch 1<--->1 fd
      * fd: monitored socket
      * events: poll EVENT of this fd that will be monitored
      * cb if event happens
@@ -69,8 +69,9 @@ struct virEventPollHandle {
 
 /* State for a single timer being generated */
 struct virEventPollTimeout {
-    /* timer: id for this timeout
-     * expiresAt: when expires
+    /* timer: identifier for this timeout
+     * frequency: relative time for timer say 3s or -1 never timerout
+     * expiresAt: when expires = (now + frequency)
      * cb: called when it expires
      * ff: called when it's deleted
      * opaque: any data related to this timeout
@@ -366,13 +367,15 @@ static int virEventPollCalculateTimeout(int *timeout)
     for (i = 0; i < eventLoop.timeoutsCount; i++) {
         if (eventLoop.timeouts[i].deleted)
             continue;
-        if (eventLoop.timeouts[i].frequency < 0)
+        if (eventLoop.timeouts[i].frequency < 0) //never timerout
             continue;
 
         EVENT_DEBUG("Got a timeout scheduled for %llu", eventLoop.timeouts[i].expiresAt);
         if (then == 0 ||
             eventLoop.timeouts[i].expiresAt < then)
-            // got the minimum timeout of all fds
+            // got a more earlier timeout
+            // As you can see timer is tracked by list, so here we have to loop each one to get the smallest
+            // you can use smallest stack struct for quick finding.
             then = eventLoop.timeouts[i].expiresAt;
     }
 
@@ -385,14 +388,16 @@ static int virEventPollCalculateTimeout(int *timeout)
 
         EVENT_DEBUG("Schedule timeout then=%llu now=%llu", then, now);
         if (then <= now)
-            *timeout = 0;
+            *timeout = 0; // time is passed, set poll() timeout 0, poll will return immediately
         else
             *timeout = ((then - now) > INT_MAX) ? INT_MAX : (then - now);
     } else {
+        // no timer or all timer set with never expire!!!
         *timeout = -1;
     }
 
     if (*timeout > -1)
+        // then is absoluate time, while timeout is relative time.
         EVENT_DEBUG("Timeout at %llu due in %d ms", then, *timeout);
     else
         EVENT_DEBUG("%s", "No timeout is pending");
@@ -465,6 +470,7 @@ static int virEventPollDispatchTimeouts(void)
         return -1;
 
     for (i = 0; i < ntimeouts; i++) {
+        // check all timer to see if it expires or not
         if (eventLoop.timeouts[i].deleted || eventLoop.timeouts[i].frequency < 0)
             continue;
 
@@ -506,6 +512,7 @@ static int virEventPollDispatchTimeouts(void)
  */
 static int virEventPollDispatchHandles(int nfds, struct pollfd *fds)
 {
+    // NOTE: fds is like a copy of last eventLoop, the index is same as it.
     size_t i, n;
     VIR_DEBUG("Dispatch %d", nfds);
 
@@ -522,6 +529,7 @@ static int virEventPollDispatchHandles(int nfds, struct pollfd *fds)
         if (i == eventLoop.handlesCount)
             break;
 
+        // find the tracked handle which has events registered
         // find the fd(watch) that has event, if it's marked as deleted, skip the event
         VIR_DEBUG("i=%zu w=%d", i, eventLoop.handles[i].watch);
         if (eventLoop.handles[i].deleted) {
@@ -579,6 +587,7 @@ static void virEventPollCleanupTimeouts(void)
             virMutexLock(&eventLoop.lock);
         }
 
+        // move  other timeout
         if ((i+1) < eventLoop.timeoutsCount) {
             memmove(eventLoop.timeouts+i,
                     eventLoop.timeouts+i+1,
@@ -588,7 +597,9 @@ static void virEventPollCleanupTimeouts(void)
         eventLoop.timeoutsCount--;
     }
 
-    /* Release some memory if we've got a big chunk free */
+    /* Release some memory if we've got a big chunk free
+     * Relase all if no timer or gap(unused part) if gap > 10 elements
+     */
     gap = eventLoop.timeoutsAlloc - eventLoop.timeoutsCount;
     if (eventLoop.timeoutsCount == 0 ||
         (gap > eventLoop.timeoutsCount && gap > EVENT_ALLOC_EXTENT)) {
@@ -667,6 +678,7 @@ int virEventPollRunOnce(void)
     virEventPollCleanupTimeouts();
     virEventPollCleanupHandles();
 
+    // think fds as a copy of current tracking fds.
     if (!(fds = virEventPollMakePollFDs(&nfds)) ||
         /* calculate minimum timeout of all */
         virEventPollCalculateTimeout(&timeout) < 0)
@@ -678,7 +690,9 @@ int virEventPollRunOnce(void)
     PROBE(EVENT_POLL_RUN,
           "nhandles=%d timeout=%d",
           nfds, timeout);
-    /* poll returns due to event or timeout */
+    /* poll returns due to event or timeout
+     * you need to check all to see which one has event happened!!!
+     */
     ret = poll(fds, nfds, timeout);
     if (ret < 0) {
         EVENT_DEBUG("Poll got error event %d", errno);

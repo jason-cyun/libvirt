@@ -97,7 +97,7 @@ typedef virObjectEventQueue *virObjectEventQueuePtr;
 
 struct _virObjectEventState {
     virObjectLockable parent;
-    /* The list of domain event callbacks */
+    /* The list of event callbacks */
     virObjectEventCallbackListPtr callbacks;
     /* The queue of object events get from server
      * then dispatch these events to callbacks
@@ -951,7 +951,7 @@ virObjectEventStateFlush(virObjectEventStatePtr state)
     state->queue->events = NULL;
     if (state->timer != -1)
         /* as each time, we process all events
-         * hence we reset timer with never expire
+         * hence we reset timer with never expire, we will process all events
          * if later on other thread adds event, it resets timer with 0 again
          */
         virEventUpdateTimeout(state->timer, -1);

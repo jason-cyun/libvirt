@@ -1715,6 +1715,7 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
              * should not see internal struct.
              */
             lifecycleEvent = (virDomainEventLifecyclePtr)event;
+            // as cb is generic we need to convert it to spcific type
             ((virConnectDomainEventCallback)cb)(conn, dom,
                                                 lifecycleEvent->type,
                                                 lifecycleEvent->detail,

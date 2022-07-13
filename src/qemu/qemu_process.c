@@ -678,7 +678,7 @@ qemuProcessHandleStop(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
             goto unlock;
         }
 
-        if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_OUT) {
+        if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_OUT) {
             if (priv->job.current->status ==
                         QEMU_DOMAIN_JOB_STATUS_POSTCOPY) {
                 reason = VIR_DOMAIN_PAUSED_POSTCOPY;
@@ -1551,7 +1551,7 @@ qemuProcessHandleSpiceMigrated(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
               vm, vm->def->name);
 
     priv = vm->privateData;
-    if (priv->job.asyncJob != QEMU_ASYNC_JOB_MIGRATION_OUT) {
+    if (priv->job.asyncActive != QEMU_ASYNC_JOB_MIGRATION_OUT) {
         VIR_DEBUG("got SPICE_MIGRATE_COMPLETED event without a migration job");
         goto cleanup;
     }
@@ -1580,7 +1580,7 @@ qemuProcessHandleMigrationStatus(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
               qemuMonitorMigrationStatusTypeToString(status));
 
     priv = vm->privateData;
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_NONE) {
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_NONE) {
         VIR_DEBUG("got MIGRATION event without a migration job");
         goto cleanup;
     }
@@ -1609,7 +1609,7 @@ qemuProcessHandleMigrationPass(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
               vm, vm->def->name, pass);
 
     priv = vm->privateData;
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_NONE) {
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_NONE) {
         VIR_DEBUG("got MIGRATION_PASS event without a migration job");
         goto cleanup;
     }
@@ -1639,7 +1639,7 @@ qemuProcessHandleDumpCompleted(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
               vm, vm->def->name, stats, NULLSTR(error));
 
     priv = vm->privateData;
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_NONE) {
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_NONE) {
         VIR_DEBUG("got DUMP_COMPLETED event without a dump_completed job");
         goto cleanup;
     }
@@ -3331,7 +3331,7 @@ qemuProcessRecoverJob(virQEMUDriverPtr driver,
 
     state = virDomainObjGetState(vm, &reason);
 
-    switch (job->asyncJob) {
+    switch (job->asyncActive) {
     case QEMU_ASYNC_JOB_MIGRATION_OUT:
         if (qemuProcessRecoverMigrationOut(driver, vm, job,
                                            state, reason, stopFlags) < 0)
@@ -3356,11 +3356,11 @@ qemuProcessRecoverJob(virQEMUDriverPtr driver,
          * recovering an async job, this function is run at startup
          * and must resume things using sync monitor connections.  */
          if (state == VIR_DOMAIN_PAUSED &&
-             ((job->asyncJob == QEMU_ASYNC_JOB_DUMP &&
+             ((job->asyncActive == QEMU_ASYNC_JOB_DUMP &&
                reason == VIR_DOMAIN_PAUSED_DUMP) ||
-              (job->asyncJob == QEMU_ASYNC_JOB_SAVE &&
+              (job->asyncActive == QEMU_ASYNC_JOB_SAVE &&
                reason == VIR_DOMAIN_PAUSED_SAVE) ||
-              (job->asyncJob == QEMU_ASYNC_JOB_SNAPSHOT &&
+              (job->asyncActive == QEMU_ASYNC_JOB_SNAPSHOT &&
                (reason == VIR_DOMAIN_PAUSED_SNAPSHOT ||
                 reason == VIR_DOMAIN_PAUSED_MIGRATION)) ||
               reason == VIR_DOMAIN_PAUSED_UNKNOWN)) {
@@ -7000,7 +7000,7 @@ void qemuProcessStop(virQEMUDriverPtr driver,
     if (asyncJob != QEMU_ASYNC_JOB_NONE) {
         if (qemuDomainObjBeginNestedJob(driver, vm, asyncJob) < 0)
             goto cleanup;
-    } else if (priv->job.asyncJob != QEMU_ASYNC_JOB_NONE &&
+    } else if (priv->job.asyncActive != QEMU_ASYNC_JOB_NONE &&
                priv->job.asyncOwner == virThreadSelfID() &&
                priv->job.active != QEMU_JOB_ASYNC_NESTED) {
         VIR_WARN("qemuProcessStop called without a nested job (async=%s)",
@@ -7540,10 +7540,10 @@ qemuProcessAutoDestroy(virDomainObjPtr dom,
 
     VIR_DEBUG("vm=%s, conn=%p", dom->def->name, conn);
 
-    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_IN)
+    if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_IN)
         stopFlags |= VIR_QEMU_PROCESS_STOP_MIGRATED;
 
-    if (priv->job.asyncJob) {
+    if (priv->job.asyncActive) {
         VIR_DEBUG("vm=%s has long-term job active, cancelling",
                   dom->def->name);
         qemuDomainObjDiscardAsyncJob(driver, dom);
@@ -7753,7 +7753,7 @@ qemuProcessReconnect(void *opaque)
     VIR_FREE(data);
 
     qemuDomainObjRestoreJob(obj, &oldjob);
-    if (oldjob.asyncJob == QEMU_ASYNC_JOB_MIGRATION_IN)
+    if (oldjob.asyncActive == QEMU_ASYNC_JOB_MIGRATION_IN)
         stopFlags |= VIR_QEMU_PROCESS_STOP_MIGRATED;
 
     cfg = virQEMUDriverGetConfig(driver);
