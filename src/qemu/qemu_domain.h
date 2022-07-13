@@ -178,7 +178,6 @@ struct _qemuDomainJobObj {
     const char *ownerAPI;               /* The API(function name which is set thread local when that api is called) which owns the job */
     unsigned long long started;         /* When the current job started */
 
-
     /* The following members are for QEMU_AGENT_JOB_* Agent command */
     qemuDomainAgentJob agentActive;     /* Currently running agent job */
     unsigned long long agentOwner;      /* Thread id which set current agent job */
