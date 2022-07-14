@@ -8,6 +8,9 @@ fi
 
 if [ $? -eq 0 ]; then
   make install
+
+  # echo "log_level = 3"
+  # echo 'log_filters="1:qemu.qemu_domain"'
   {
     echo "log_level = 1"
     echo 'log_outputs="1:file:/var/log/libvirt/libvirtd.log"'
