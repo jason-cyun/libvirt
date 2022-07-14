@@ -336,6 +336,8 @@ qemuDomainObjResetAsyncJob(qemuDomainObjPrivatePtr priv)
     job->asyncOwnerAPI = NULL;
     job->asyncStarted = 0;
     job->phase = 0;
+    // default mask for async job, if this is not what you expect
+    // you can set mask by qemuDomainObjSetAsyncJobMask() to what you want
     job->mask = QEMU_JOB_DEFAULT_MASK;
     job->abortJob = false;
     job->spiceMigration = false;
@@ -6353,6 +6355,7 @@ qemuDomainObjSetJobPhase(virQEMUDriverPtr driver,
     qemuDomainObjSaveJob(driver, obj);
 }
 
+// set what kind of normal job can be run when async is running
 void
 qemuDomainObjSetAsyncJobMask(virDomainObjPtr obj,
                              unsigned long long allowedJobs)
@@ -6362,9 +6365,11 @@ qemuDomainObjSetAsyncJobMask(virDomainObjPtr obj,
     if (!priv->job.asyncActive)
         return;
 
+    // as you can see DESTROY can not be masked!!!
     priv->job.mask = allowedJobs | JOB_MASK(QEMU_JOB_DESTROY);
 }
 
+// reset nested job and async job
 void
 qemuDomainObjDiscardAsyncJob(virQEMUDriverPtr driver, virDomainObjPtr obj)
 {
@@ -6392,9 +6397,21 @@ qemuDomainObjReleaseAsyncJob(virDomainObjPtr obj)
     priv->job.asyncOwner = 0;
 }
 
+/*
+ * When Async job is running, you can NOT start another async job
+ * When Async job is running, you can NOT start agent job
+ * When Async job is running, you can start one normal job(limit job)
+ * priv->job.mask inidcates what other normal jobs can run if async job running
+ * priv->job.mask is only for async job.
+ */
 static bool
 qemuDomainNestedJobAllowed(qemuDomainObjPrivatePtr priv, qemuDomainJob job)
 {
+    /*
+     * reutn true if
+     * 1. no async job
+     * 2. async job is running, allowedJobs can be true(default is QUERY,DESTROY, ABORT)
+     */
     return !priv->job.asyncActive|| (priv->job.mask & JOB_MASK(job)) != 0;
 }
 
@@ -6404,20 +6421,29 @@ qemuDomainJobAllowed(qemuDomainObjPrivatePtr priv, qemuDomainJob job)
     return !priv->job.active && qemuDomainNestedJobAllowed(priv, job);
 }
 
+
+/* Rules to obey!!!
+ * At a time, there is only one normal job running, you can not start another normal job if one is running.
+ * At a time, there is only one agent job running, you can not start another agent job is one is running
+ * When Async job is running, you can start another normal job(limit job)
+ * When Async job is running, you can start another agent job(unlmitted)
+ * when Async job is running and wants to talk the monitor, it needs to acquire QEMU_JOB_ASYNC_NESTED
+*/
 static bool
 qemuDomainObjCanSetJob(qemuDomainObjPrivatePtr priv,
                        qemuDomainJob job,
                        qemuDomainAgentJob agentJob)
 {
     /* only allow one sync qemu job for monitor fd
-     * only allow sync agent jobr for agent fd
+     * only allow sync agent job for agent fd
      * say if one qemu job is running, we can start agent job as well!!!
      *
-     * priv hold the previous job, job/agentJob is the one plan to run
+     * priv.job hold the previous job, job/agentJob is the one plan to run
      *
      * job == QEMU_JOB_NONE or agentJob == QEMU_AGENT_JOB_NONE means this time no need to send QMP or QGA command to agent!!!
      * priv->job.active == QEMU_JOB_NONE or priv->job.agentActive == QEMU_AGENT_JOB_NONE means there is no pending qemu job or agent job!!!
      *
+     * normal job  and agent job is exlusive!!!
      * cases:  previous job              current job
      *         QEMU_JOB_NONE             no matter what:       can run
      *         not QEMU_JOB_NONE         QEMU_JOB_NONE         can run
@@ -6497,30 +6523,44 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
         return -1;
     }
 
+    // queued job which is waiting.
     priv->jobs_queued++;
+    // 30s for other job finish
     then = now + QEMU_JOB_WAIT_TIME;
 
  retry:
     if ((!async && job != QEMU_JOB_DESTROY) &&
+        // DESTROY JOB not obey the rule
         cfg->maxQueuedJobs &&
         priv->jobs_queued > cfg->maxQueuedJobs) {
         goto error;
     }
 
-    // priv is protected by vm obj lock!!!
+    // here vm is locked
+    //
+    // nested means async job is running and we want to talk with monitor
+    // job is QEMU_JOB_ASYNC_NESTED, nested job, no need to wait async job finish
+    //
+    // for agent, job is set with QEMU_JOB_NONE, so it's not allowed!!!!
     while (!nested && !qemuDomainNestedJobAllowed(priv, job)) {
+        // not nested job, check if async is running, if so check if job is allowed to run
+        // go here means async is running and job is not allowed to run.
         if (nowait)
             goto cleanup;
 
         VIR_DEBUG("Waiting for async job (vm=%p name=%s)", obj, obj->def->name);
+        // waiting async finish with timeout, unlock vm
         if (virCondWaitUntil(&priv->job.asyncCond, &obj->parent.lock, then) < 0)
             goto error;
     }
 
+    // check if there is another normal or agnetJob running
+    // as there two jobs are exclusive its type.
     while (!qemuDomainObjCanSetJob(priv, job, agentJob)) {
         if (nowait)
             goto cleanup;
 
+        // there is already one running, wait for finish with 30s, unlock vm
         VIR_DEBUG("Waiting for job (vm=%p name=%s)", obj, obj->def->name);
         if (virCondWaitUntil(&priv->job.cond, &obj->parent.lock, then) < 0)
             goto error;
@@ -6533,8 +6573,10 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
 
     ignore_value(virTimeMillisNow(&now));
 
+    // for async job
+    // job== QEMU_JOB_ASYNC and asyncJob is the specific one.
     if (job) {
-        /* qemu job, qmp command, discard previous job saved */
+        // reset normal job
         qemuDomainObjResetJob(priv);
 
         if (job != QEMU_JOB_ASYNC) {
@@ -6544,20 +6586,20 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
                       qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
                       obj, obj->def->name);
             // save the pending job(which not done yet) to privateData
-            // later on another sync job try to start, it will block above
+            // later on another sync job(normal job) try to start, it will block above
             // there should be one only for sync qemu job
             priv->job.active = job;
             priv->job.owner = virThreadSelfID();
             priv->job.ownerAPI = virThreadJobGet();
             priv->job.started = now;
-        } else {
-            /* async qemu job, what does it mean */
+        } else { // job is QEMU_JOB_ASYNC, asyncJob indicate what async job it is
             VIR_DEBUG("Started async job: %s (vm=%p name=%s)",
                       qemuDomainAsyncJobTypeToString(asyncJob),
                       obj, obj->def->name);
             qemuDomainObjResetAsyncJob(priv);
             if (VIR_ALLOC(priv->job.current) < 0)
                 goto cleanup;
+            // set async job status with ACTIVE, it will be updated when job finished
             priv->job.current->status = QEMU_DOMAIN_JOB_STATUS_ACTIVE;
             priv->job.asyncActive = asyncJob;
             priv->job.asyncOwner = virThreadSelfID();
@@ -6590,6 +6632,7 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
     return 0;
 
  error:
+    // duration is the running time for each job
     ignore_value(virTimeMillisNow(&now));
     if (priv->job.active && priv->job.started)
         duration = now - priv->job.started;
@@ -6617,8 +6660,10 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
 
     if (job) {
         if (nested || qemuDomainNestedJobAllowed(priv, job))
+            // no async or async allow to run, blocked due to normal job
             blocker = priv->job.ownerAPI;
         else
+            // blocked due to async job
             blocker = priv->job.asyncOwnerAPI;
     }
 
@@ -6689,6 +6734,13 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
  * in any way, or anything that will use the QEMU monitor.
  *
  * Successful calls must be followed by EndJob eventually
+ *
+ *
+ * try to start normal job if it's allowed or blocked
+ * allowed if
+ * 1. no async or async allowed this normal job
+ * AND
+ * 2. no other normal job is running
  */
 int qemuDomainObjBeginJob(virQEMUDriverPtr driver,
                           virDomainObjPtr obj,
@@ -6708,6 +6760,12 @@ int qemuDomainObjBeginJob(virQEMUDriverPtr driver,
  * Grabs agent type of job. Use if caller talks to guest agent only.
  *
  * To end job call qemuDomainObjEndAgentJob.
+ *
+ * try to start agent job if it's allowed or blocked
+ * allowed if
+ * 1. no async job is running
+ * AND
+ * 2. no other agent job is running
  */
 int
 qemuDomainObjBeginAgentJob(virQEMUDriverPtr driver,
@@ -6739,6 +6797,11 @@ qemuDomainObjBeginJobWithAgent(virQEMUDriverPtr driver,
                                          QEMU_ASYNC_JOB_NONE, false);
 }
 
+/*
+ * try to start async job if it's allowed or blocked
+ * allowed if
+ * 1. no async job is running
+ */
 int qemuDomainObjBeginAsyncJob(virQEMUDriverPtr driver,
                                virDomainObjPtr obj,
                                qemuDomainAsyncJob asyncJob,
@@ -6758,6 +6821,12 @@ int qemuDomainObjBeginAsyncJob(virQEMUDriverPtr driver,
     return 0;
 }
 
+/*
+ * try to start NESTED job if it's allowed or blocked
+ * allowed if
+ * 1. async job is running
+ * 2. caller is the same thread who starts async job
+ */
 int
 qemuDomainObjBeginNestedJob(virQEMUDriverPtr driver,
                             virDomainObjPtr obj,
@@ -6765,6 +6834,30 @@ qemuDomainObjBeginNestedJob(virQEMUDriverPtr driver,
 {
     qemuDomainObjPrivatePtr priv = obj->privateData;
 
+    // As you can see when call qemuDomainObjBeginNestedJob
+    // the caller must know the running async job!!!
+    // if passed async job dost not matched the running type, return error
+    // and the nested job must runs in the same thread as the async job
+    /*
+     * timeline      thread A
+     *
+     *    |          enter async job
+     *
+     *    |          got reply.
+     *
+     *    |          enter nested job
+     *    |          get reply
+     *    |          exited nested job
+     *
+     *    |          enter nested job
+     *    |          get reply
+     *    |          exited nested job
+     *    |
+     *    |          ...
+     *    |
+     *    |          exited async job
+     *
+     */
     if (asyncJob != priv->job.asyncActive) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("unexpected async job %d type expected %d"),
@@ -6772,11 +6865,14 @@ qemuDomainObjBeginNestedJob(virQEMUDriverPtr driver,
         return -1;
     }
 
+    // async and nested job must in the same thread.
     if (priv->job.asyncOwner != virThreadSelfID()) {
         VIR_WARN("This thread doesn't seem to be the async job owner: %llu",
                  priv->job.asyncOwner);
     }
 
+    // nested job is a normal job that runs inside async job(before end async job)
+    // but as it's normal job, obey normal job rule(if another normal job is running, it blocks)
     return qemuDomainObjBeginJobInternal(driver, obj,
                                          QEMU_JOB_ASYNC_NESTED,
                                          QEMU_AGENT_JOB_NONE,
@@ -6796,6 +6892,8 @@ qemuDomainObjBeginNestedJob(virQEMUDriverPtr driver,
  * immediately without any error reported.
  *
  * Returns: see qemuDomainObjBeginJobInternal
+ *
+ * There is only one API called no wait: qemuConnectGetAllDomainStats
  */
 int
 qemuDomainObjBeginJobNowait(virQEMUDriverPtr driver,
@@ -6903,7 +7001,8 @@ qemuDomainObjAbortAsyncJob(virDomainObjPtr obj)
     VIR_DEBUG("Requesting abort of async job: %s (vm=%p name=%s)",
               qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
               obj, obj->def->name);
-
+    // wake up thread that's waiting for async job to finish
+    // wake up due to cancel by setting with job.abortJob with true
     priv->job.abortJob = true;
     virDomainObjBroadcast(obj);
 }
@@ -6917,6 +7016,18 @@ qemuDomainObjAbortAsyncJob(virDomainObjPtr obj)
  * still active; may not be used for nested async jobs.
  *
  * To be followed with qemuDomainObjExitMonitor() once complete
+ *
+ * qemuDomainObjEnterMonitorInternal is lower level API if wants to talk with monitor fd
+ * called by these two higher level APIs
+ *
+ * qemuDomainObjEnterMonitor == qemuDomainObjEnterMonitorAsync(QEMU_ASYNC_JOB_NONE)
+ * qemuDomainObjEnterMonitorAsync
+ *
+ * ===============================================================================
+ * EnterMonitor or EnterMonitorAsync(if nested will begin nested job as well)
+ * must be called after
+ * qemuDomainObjBeginJob() qemuDomainObjBeginAsyncJob
+ * ===============================================================================
  */
 static int
 qemuDomainObjEnterMonitorInternal(virQEMUDriverPtr driver,
@@ -6926,6 +7037,7 @@ qemuDomainObjEnterMonitorInternal(virQEMUDriverPtr driver,
     qemuDomainObjPrivatePtr priv = obj->privateData;
 
     if (asyncJob != QEMU_ASYNC_JOB_NONE) {
+        // passed with asyncJob, that means caller know asyncJob is running now.
         int ret;
         if ((ret = qemuDomainObjBeginNestedJob(driver, obj, asyncJob)) < 0)
             return ret;
@@ -6936,6 +7048,9 @@ qemuDomainObjEnterMonitorInternal(virQEMUDriverPtr driver,
             return -1;
         }
     } else if (priv->job.asyncOwner == virThreadSelfID()) {
+        // here means we start normal job inside the thread who starts async job
+        // As it's not nested job, other thread may start another normal job
+        // if this normal job release monitor lock!!! make sure you know what you're doing
         VIR_WARN("This thread seems to be the async job owner; entering"
                  " monitor without asking for a nested job is dangerous");
     }
@@ -6948,6 +7063,7 @@ qemuDomainObjEnterMonitorInternal(virQEMUDriverPtr driver,
 
     // if we entered into monitor, that means we get the lock of it
     // later on processing will only touch monitor, so we unlock vmObj!!!
+    // mon->parent is the first field of monitor, so virObjectLock gets parent!!!
     virObjectLock(priv->mon);
     virObjectRef(priv->mon);
     // monStart indicates the timestamp of command runs
@@ -7028,6 +7144,9 @@ int qemuDomainObjExitMonitor(virQEMUDriverPtr driver,
  * qemuDomainObjExitMonitor(); -2 if waiting for the nested job times out;
  * or -1 if the job could not be started (probably because the vm exited
  * in the meantime).
+ *
+ * any QMP command(API that does QMP command) that may be called inside async
+ * should call qemuDomainObjEnterMonitorAsync to gain monitor lock instead of qemuDomainObjEnterMonitor
  */
 int
 qemuDomainObjEnterMonitorAsync(virQEMUDriverPtr driver,

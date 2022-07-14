@@ -7598,6 +7598,12 @@ bool qemuProcessAutoDestroyActive(virQEMUDriverPtr driver,
 }
 
 
+/*
+ * parameter qemuDomainAsyncJob means this API may be called by thread who runs asyncJob
+ * so that it passes qemuDomainAsyncJob here(the caller know what asyncJob is running)
+ * As the basic rule if asyncJob is running, it only allows limited normal jobs
+ */
+
 int
 qemuProcessRefreshDisks(virQEMUDriverPtr driver,
                         virDomainObjPtr vm,
@@ -7608,6 +7614,31 @@ qemuProcessRefreshDisks(virQEMUDriverPtr driver,
     int ret = -1;
     size_t i;
 
+    // as qemuProcessRefreshDisks may be called inside async
+    // if call qemuDomainObjEnterMonitor() instead of qemuDomainObjEnterMonitorAsync() what happends?
+    //
+    // =======================================qemuDomainObjEnterMonitor called==================
+    // let's take an example:
+    // Thread A:
+    // 1. qemuProcessRefreshDisks is called inside async (priv.job.asyncActive is set)
+    // 2. qemuDomainObjEnterMonitor() is called and  priv.job.Active is NONE
+    // 3. get monitor lock, send command, wait for reply(monitor lock is released)
+    //
+    // Thread B:
+    // 4. it calls qemuDomainObjBeginJob() as priv.job.Active is NONE, it does NOT block(if job is allowed by this async)
+    // 5. it calls qemuDomainObjEnterMonitor(), get monitor lock!!!!
+    // that means there are two QMP command is running!!!!
+    //
+    // =======================================qemuDomainObjEnterMonitorAsync called==================
+    // Thread A:
+    // 1. qemuProcessRefreshDisks is called inside async (priv.job.asyncActive is set)
+    // 2. qemuDomainObjEnterMonitorAsync() is called and  priv.job.Active is set with JOB_NESTED!!!!!!!
+    // 3. get monitor lock, send command, wait for reply(monitor lock is released)
+    //
+    // Thread B:
+    // 4. it calls qemuDomainObjBeginJob() as priv.job.Active is JOB_NESTED, it blocks(JOB_NESTED is normal job as well)
+    // only one QMP is running before its reply
+    //
     if (qemuDomainObjEnterMonitorAsync(driver, vm, asyncJob) == 0) {
         table = qemuMonitorGetBlockInfo(priv->mon);
         if (qemuDomainObjExitMonitor(driver, vm) < 0)

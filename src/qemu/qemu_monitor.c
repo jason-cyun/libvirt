@@ -1137,10 +1137,26 @@ qemuMonitorSend(qemuMonitorPtr mon,
           mon, mon->msg->txBuffer, mon->msg->txFD);
 
     while (!mon->msg->finished) {
-        // block here, until get reply/error in event thread
-        // when event thread got reply/error from qemu, it will wake me up
+        // block here, until get reply/error in event thread who will wake me up
         // monitor is unlock when free and get lock again when it's waken
-        // block until, someone wake me up when got error or reply from qemu fd
+        //
+        //============================================================================================
+        //NOTE: vm lock is released before when entering monitor and only allow on QMP command is running
+        // ----------Why not hold monitor lock until get reply, let's say mon->notify condition uses separate lock, no need monitor job condition?------------------------------------------------
+        // If so, let's see what happens
+        // now we only hold monitor lock
+        // if another QMP API say(qemuDomainBlockCommit), get VM lock, prepare something(update vm field), then call qemuDomainObjEnterMonitor where it blocks on monitor lock and vm lock is held
+        // Two issues here:
+        // 1. Prepare something(may update vm field) which is not allowed as some fields may be related to last QMP command
+        // 2. As it holds vm lock, any other API that needs VM lock will be blocked as well.
+        //
+        // At last before QMP reply, any API that needs VM lock may be blocked...
+        //
+        // ----------with monitor job condition-------------------------------------------------------
+        // In such case, before reply comes, we released vm lock and monitor lock.
+        // If another QMP API is called, it checks one QMP is running, it will be blocked and releases vm lock(qemuDomainObjEnterMonitor is never called at all).
+        // So any other API that needs vm lock can run immediately!!!
+        //============================================================================================
         if (virCondWait(&mon->notify, &mon->parent.lock) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Unable to wait on monitor condition"));

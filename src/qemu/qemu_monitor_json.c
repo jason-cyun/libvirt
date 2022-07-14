@@ -113,7 +113,16 @@ static qemuEventHandler eventHandlers[] = {
     { "DEVICE_TRAY_MOVED", qemuMonitorJSONHandleTrayChange, },
     { "DUMP_COMPLETED", qemuMonitorJSONHandleDumpCompleted, },
     { "GUEST_PANICKED", qemuMonitorJSONHandleGuestPanic, },
+    /*
+     * {"timestamp": {"seconds": 1432121972, "microseconds": 744001}, "event": "MIGRATION", "data": {"status": "completed"}}
+     * possible status value: [ 'none', 'setup', 'cancelling', 'cancelled', 'active', 'postcopy-active', 'postcopy-paused','postcopy-recover', 'completed', 'failed', 'colo','pre-switchover', 'device', 'wait-unplug' ]
+     */
     { "MIGRATION", qemuMonitorJSONHandleMigrationStatus, },
+    /*
+     *  Emitted from the source side of a migration at the start of each pass (when it syncs the dirty bitmap)
+     *  @pass: An incrementing count (starting at 1 on the first pass)
+     * { "timestamp": {"seconds": 1449669631, "microseconds": 239225}, "event": "MIGRATION_PASS", "data": {"pass": 2} }
+     */
     { "MIGRATION_PASS", qemuMonitorJSONHandleMigrationPass, },
     { "NIC_RX_FILTER_CHANGED", qemuMonitorJSONHandleNicRxFilterChanged, },
     { "POWERDOWN", qemuMonitorJSONHandlePowerdown, },

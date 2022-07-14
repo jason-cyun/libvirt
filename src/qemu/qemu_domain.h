@@ -68,14 +68,17 @@
 typedef enum {
     QEMU_JOB_NONE = 0,  /* Always set to 0 for easy if (jobActive) conditions */
     QEMU_JOB_QUERY,         /* Doesn't change any state */
+    // ABORT is normal job, it also needs to wait other normal job finish before it runs
     QEMU_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
     QEMU_JOB_SUSPEND,       /* Suspends (stops vCPUs) the domain */
     QEMU_JOB_MODIFY,        /* May change state */
+    // ABORT is normal job, it also needs to wait other normal job finish before it runs
     QEMU_JOB_ABORT,         /* Abort current async job */
     QEMU_JOB_MIGRATION_OP,  /* Operation influencing outgoing migration */
 
     /* The following two items must always be the last items before JOB_LAST */
-    QEMU_JOB_ASYNC,         /* Asynchronous job */
+    QEMU_JOB_ASYNC,         /* Asynchronous job which is never saved at priv.job.active
+    it's used for parameter passing*/
     QEMU_JOB_ASYNC_NESTED,  /* Normal job within an async job */
 
     QEMU_JOB_LAST
@@ -138,6 +141,7 @@ struct _qemuDomainMirrorStats {
 typedef struct _qemuDomainJobInfo qemuDomainJobInfo;
 typedef qemuDomainJobInfo *qemuDomainJobInfoPtr;
 struct _qemuDomainJobInfo {
+    // Job Info tracks the extra info of job used for display and debugging
     qemuDomainJobStatus status;
     virDomainJobOperation operation;
     unsigned long long started; /* When the async job started */
@@ -171,14 +175,16 @@ struct _qemuDomainJobObj {
     /* The following members are for QEMU_JOB_* QMP command */
     qemuDomainJob active;               /* Currently running job */
     unsigned long long owner;           /* Thread id which set current job */
-    const char *ownerAPI;               /* The API which owns the job */
+    const char *ownerAPI;               /* The API(function name which is set thread local when that api is called) which owns the job */
     unsigned long long started;         /* When the current job started */
+
 
     /* The following members are for QEMU_AGENT_JOB_* Agent command */
     qemuDomainAgentJob agentActive;     /* Currently running agent job */
     unsigned long long agentOwner;      /* Thread id which set current agent job */
     const char *agentOwnerAPI;          /* The API which owns the agent job */
     unsigned long long agentStarted;    /* When the current agent job started */
+
 
     /* The following members are for QEMU_ASYNC_JOB_* */
     /* Asynchronous job condition is used for long running jobs (such as migration)
@@ -191,6 +197,8 @@ struct _qemuDomainJobObj {
     const char *asyncOwnerAPI;          /* The API which owns the async job */
     unsigned long long asyncStarted;    /* When the current async job started */
     int phase;                          /* Job phase (mainly for migrations) */
+    // QEMU_JOB_DESTROY is always allowed
+    // default mask is QEMU_JOB_QUERY, QEMU_JOB_ABORT, QEMU_JOB_DESTROY
     unsigned long long mask;            /* Jobs allowed during async job */
     qemuDomainJobInfoPtr current;       /* async job progress data */
     qemuDomainJobInfoPtr completed;     /* statistics data of a recently completed job */

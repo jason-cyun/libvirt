@@ -7436,6 +7436,12 @@ qemuDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
     if (virDomainCreateWithFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
+    // qemuProcessBeginJob starts a async job(QEMU_ASYNC_JOB_START)
+    // mask out all other normal jobs except DESTROY
+    // so that any other job(agent, normal, async) from other thread would be blocked.
+    // but in this thread, we also need to talk with monitor
+    // for these normal jobs that will be talk with monitor, we use NESTED_JOB!!!
+    // so that even QEMU_ASYNC_JOB_START is running, we still can talk with monitor!!!
     if (qemuProcessBeginJob(driver, vm, VIR_DOMAIN_JOB_OPERATION_START,
                             flags) < 0)
         goto cleanup;
@@ -7455,6 +7461,7 @@ qemuDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
     ret = 0;
 
  endjob:
+    // end async job
     qemuProcessEndJob(driver, vm);
 
  cleanup:
@@ -13877,6 +13884,8 @@ static int qemuDomainAbortJob(virDomainPtr dom)
 
     priv = vm->privateData;
 
+    // abort only async job, but NOT all async job can be aborted
+    // like cannot abort incoming migration, cannot abort memory-only dump etc
     if (!priv->job.asyncActive) {
         virReportError(VIR_ERR_OPERATION_INVALID,
                        "%s", _("no job is active on the domain"));
@@ -13909,6 +13918,8 @@ static int qemuDomainAbortJob(virDomainPtr dom)
     VIR_DEBUG("Cancelling job at client request");
     qemuDomainObjAbortAsyncJob(vm);
     qemuDomainObjEnterMonitor(driver, vm);
+    // send migrate_cancel command to abort it
+    // then we should get MIGRATION event from qemu.
     ret = qemuMonitorMigrateCancel(priv->mon);
     if (qemuDomainObjExitMonitor(driver, vm) < 0)
         ret = -1;
