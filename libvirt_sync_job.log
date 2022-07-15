@@ -1,0 +1,133 @@
+virsh start vm100 &          ----> async job
+virsh snapshot-create vm100 &----> async job
+virsh domtime vm100 &        ----> agent job
+virsh domblkstat vm100 &     ----> normal job
+
+2022-07-15 16:56:46.926000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=none agentJob=none asyncJob=start (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=none) ---->async job(START)
+2022-07-15 16:56:46.926000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6594 : Started async job: start (vm=0x7f09f41500f0 name=vm100)------>START(mask NONE): async job runs, it will block any job(agent job, normal job, other async job to run)
+2022-07-15 16:56:46.929000+08:00: 21640: debug : qemuDomainAssignVirtioSerialAddresses:139 : Finished reserving existing ports
+2022-07-15 16:56:46.929000+08:00: 21640: debug : qemuDomainAssignVirtioSerialAddresses:139 : Finished reserving existing ports
+2022-07-15 16:56:46.930000+08:00: 21640: debug : qemuDomainUSBAddressAddHubs:2805 : Found 1 USB devices and 2 provided USB ports; adding 0 hubs
+2022-07-15 16:56:46.930000+08:00: 21640: debug : qemuDomainAssignUSBAddresses:2951 : Existing USB addresses have been reserved
+2022-07-15 16:56:46.930000+08:00: 21640: debug : qemuDomainAssignUSBAddresses:2961 : Finished assigning USB ports
+2022-07-15 16:56:46.931000+08:00: 21640: debug : qemuDomainLogContextNew:7612 : Context new 0x7f09d8011f20 stdioLogD=1
+2022-07-15 16:57:06.950000+08:00: 21640: warning : qemuDomainObjTaint:7469 : Domain id=1 name='vm100' uuid=8fb1ca79-4bab-4ae8-916f-322e39ab4c79 is tainted: high-privileges
+2022-07-15 16:57:07.016000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)--->allow nested normal job in the same thread run
+2022-07-15 16:57:07.016000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.016000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.017000+08:00: 21639: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=none agentJob=query asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=async nested agentJob=none async=start)-->another thread(agnet job ) blocks on async condition
+2022-07-15 16:57:07.017000+08:00: 21639: debug : qemuDomainObjBeginJobInternal:6547 : Waiting for async job (vm=0x7f09f41500f0 name=vm100) -----> wait for async job
+2022-07-15 16:57:07.017000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=none agentJob=none asyncJob=snapshot (vm=0x7f09f41500f0 name=vm100, current job=async nested agentJob=none async=start)--->another thread(async job) blocks on async condition
+2022-07-15 16:57:07.017000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6547 : Waiting for async job (vm=0x7f09f41500f0 name=vm100) -----> wait for async job
+2022-07-15 16:57:07.017000+08:00: 21641: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=query agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=async nested agentJob=none async=start)------>another thread(normal job) blokcs on async condition
+2022-07-15 16:57:07.017000+08:00: 21641: debug : qemuDomainObjBeginJobInternal:6547 : Waiting for async job (vm=0x7f09f41500f0 name=vm100)------> wait for async job, three jobs is waiting for async job to be finished
+2022-07-15 16:57:07.201000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.201000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100) ----> nested job done but not wait up normal job as it's blocked on async condition!!!
+2022-07-15 16:57:07.201000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)--->another nested job
+2022-07-15 16:57:07.201000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.201000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.203000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.203000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)--->nested job done but not wait up normal job as it's blocked on async condition!!!
+2022-07-15 16:57:07.203000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.203000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.203000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.205000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.205000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.205000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.205000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.205000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.206000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.206000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.206000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.206000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.206000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.216000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.216000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.216000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.216000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.216000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.218000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.218000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.218000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.218000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.218000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.219000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.219000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.222000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.222000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.222000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.225000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.227000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.227000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.227000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.227000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.227000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.228000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.228000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.228000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.228000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.228000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.229000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.229000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.230000+08:00: 21640: debug : qemuDomainLogContextDispose:158 : ctxt=0x7f09d8011f20
+2022-07-15 16:57:07.230000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.230000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.230000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.232000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.232000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.232000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.232000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.232000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.236000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.236000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.236000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=start)
+2022-07-15 16:57:07.236000+08:00: 21640: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.236000+08:00: 21640: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.237000+08:00: 21640: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.237000+08:00: 21640: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=start vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.238000+08:00: 21640: debug : qemuDomainObjEndAsyncJob:6934 : Stopping async job: start (vm=0x7f09f41500f0 name=vm100) -----------> async is done, wake up tree waiters(broadcast), but only one got vm lock
+2022-07-15 16:57:07.238000+08:00: 21639: debug : qemuDomainObjBeginJobInternal:6616 : Started agent job: query (vm=0x7f09f41500f0 name=vm100 job=none async=none) -----> agent job(who got vm lock) is running
+2022-07-15 16:57:07.238000+08:00: 21639: error : qemuDomainAgentAvailable:9096 : Guest agent is not responding: QEMU guest agent is not connected
+2022-07-15 16:57:07.238000+08:00: 21639: debug : qemuDomainObjEndAgentJob:6891 : Stopping agent job: query (async=none vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.239000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6594 : Started async job: snapshot (vm=0x7f09f41500f0 name=vm100) ------------> snapshot job is running after agent release vm lock(as above after wakup, it blocks on vm lock) as no other async is running
+2022-07-15 16:57:07.701000+08:00: 21642: debug : qemuDomainAssignVirtioSerialAddresses:139 : Finished reserving existing ports
+2022-07-15 16:57:07.701000+08:00: 21642: debug : qemuDomainUSBAddressAddHubs:2805 : Found 1 USB devices and 2 provided USB ports; adding 0 hubs
+2022-07-15 16:57:07.701000+08:00: 21642: debug : qemuDomainAssignUSBAddresses:2951 : Existing USB addresses have been reserved
+2022-07-15 16:57:07.701000+08:00: 21642: debug : qemuDomainAssignUSBAddresses:2961 : Finished assigning USB ports
+2022-07-15 16:57:07.702000+08:00: 21642: debug : qemuDomainDefFormatBufInternal:7266 : Removing default USB controller from domain 'vm100' for migration compatibility
+2022-07-15 16:57:07.702000+08:00: 21642: debug : qemuDomainDefFormatBufInternal:7289 : Removing default pci-root from domain 'vm100' for migration compatibility
+2022-07-15 16:57:07.703000+08:00: 21642: debug : qemuDomainAssignVirtioSerialAddresses:139 : Finished reserving existing ports
+2022-07-15 16:57:07.704000+08:00: 21642: debug : qemuDomainUSBAddressAddHubs:2805 : Found 1 USB devices and 2 provided USB ports; adding 0 hubs
+2022-07-15 16:57:07.704000+08:00: 21642: debug : qemuDomainAssignUSBAddresses:2951 : Existing USB addresses have been reserved
+2022-07-15 16:57:07.704000+08:00: 21642: debug : qemuDomainAssignUSBAddresses:2961 : Finished assigning USB ports
+2022-07-15 16:57:07.708000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=snapshot)--->nested job inside snapshot
+2022-07-15 16:57:07.708000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=snapshot vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.708000+08:00: 21642: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)--->vm lock is freed
+2022-07-15 16:57:07.708000+08:00: 21641: debug : qemuDomainObjBeginJobInternal:6547 : Waiting for async job (vm=0x7f09f41500f0 name=vm100) --->as before domblkstat waked up after START job, but blocks on vm lock(as all are waked up), while when nested job runs, it will free vm lock for a while when waiting for QMP reply, so domblkstat should get vm lock and check again and blocks again for async job(snapshot).
+2022-07-15 16:57:07.710000+08:00: 21642: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.710000+08:00: 21642: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=snapshot vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.710000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=snapshot)
+2022-07-15 16:57:07.710000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=snapshot vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:07.710000+08:00: 21642: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.552000+08:00: 21642: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.552000+08:00: 21642: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=snapshot vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.552000+08:00: 21642: debug : qemuDomainSaveCookieNew:12659 : Save cookie 0x7f09d0017270, cpu=(nil)
+2022-07-15 16:57:08.552000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6517 : Starting job: job=async nested agentJob=none asyncJob=none (vm=0x7f09f41500f0 name=vm100, current job=none agentJob=none async=snapshot)
+2022-07-15 16:57:08.552000+08:00: 21642: debug : qemuDomainObjBeginJobInternal:6583 : Started job: async nested (async=snapshot vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.552000+08:00: 21642: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.587000+08:00: 21642: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.587000+08:00: 21642: debug : qemuDomainObjEndJob:6870 : Stopping job: async nested (async=snapshot vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.591000+08:00: 21642: debug : qemuDomainObjEndAsyncJob:6934 : Stopping async job: snapshot (vm=0x7f09f41500f0 name=vm100)--------------------->async snapshot job is done
+2022-07-15 16:57:08.592000+08:00: 21641: debug : qemuDomainObjBeginJobInternal:6583 : Started job: query (async=none vm=0x7f09f41500f0 name=vm100)--------------->wake job waiting for async condition(virsh domblkstat)
+2022-07-15 16:57:08.592000+08:00: 21641: debug : qemuDomainObjEnterMonitorInternal:6987 : Entering monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.594000+08:00: 21641: debug : qemuDomainObjExitMonitorInternal:7022 : Exited monitor (mon=0x7f09d8018b90 vm=0x7f09f41500f0 name=vm100)
+2022-07-15 16:57:08.594000+08:00: 21641: debug : qemuDomainObjEndJob:6870 : Stopping job: query (async=none vm=0x7f09f41500f0 name=vm100)
