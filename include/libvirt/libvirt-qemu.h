@@ -46,9 +46,9 @@ virDomainPtr virDomainQemuAttach(virConnectPtr domain,
 
 typedef enum {
     VIR_DOMAIN_QEMU_AGENT_COMMAND_MIN = -2,
-    VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK = -2,       // no timeout
+    VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK = -2,       // no timeout, block for ever if no reply
     VIR_DOMAIN_QEMU_AGENT_COMMAND_DEFAULT = -1,     // 5s timeout
-    VIR_DOMAIN_QEMU_AGENT_COMMAND_NOWAIT = 0,       // same aas no timeout as timeout set now
+    VIR_DOMAIN_QEMU_AGENT_COMMAND_NOWAIT = 0,       // return right now, no wait/block
     VIR_DOMAIN_QEMU_AGENT_COMMAND_SHUTDOWN = 60,    // 60s for shutdown
 } virDomainQemuAgentCommandTimeoutValues;
 

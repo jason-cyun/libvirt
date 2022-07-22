@@ -77,50 +77,73 @@ typedef struct _qemuAgentMessage qemuAgentMessage;
 typedef qemuAgentMessage *qemuAgentMessagePtr;
 
 struct _qemuAgentMessage {
+    // sent msg
+    // txOffset: already sent bytes
+    // txLength: totoal bytes
     char *txBuffer;
     int txOffset;
     int txLength;
 
     /* Used by the JSON monitor to hold reply / error */
+
+    /* NOTE: rxBuffer and rxLength are not used at all
+     *
+     * we use rxObject which is json object parsed from json string
+     */
     char *rxBuffer;
     int rxLength;
-    void *rxObject;
+    void *rxObject; // parsed json object from _qemuAgent->buffer
 
-    /* True if rxBuffer / rxObject are ready, or a
-     * fatal error occurred on the monitor channel
+    /* True
+     * if rxBuffer is ready
+     * Or rxObject is ready,
+     * or a fatal error occurred on the monitor channel for reading
+     * or when close a monitor which as msg sent.
      */
     bool finished;
+
     /* true for sync command */
     bool sync;
-    /* id of the issued sync comand */
+    /* id of the issued sync command, only for sync command */
     unsigned long long id;
+    /* as if sync timedout, we have retry, first means the first time sync sent */
     bool first;
 };
 
 
 struct _qemuAgent {
+    // mutex of agent same thing like qmp monitor
     virObjectLockable parent;
 
     virCond notify;
 
-    int fd;
-    int watch;
+    int fd; // fd of host side unix file
+    int watch; // watch id of this fd
 
+    /*  true when we opened monitor
+     * false when closing monitor
+     */
     bool running;
 
     virDomainObjPtr vm;
 
+    // agent callbacks for (destroy, eof, error)
     qemuAgentCallbacksPtr cb;
 
-    /* If there's a command being processed this will be
-     * non-NULL */
+    /* If there's a command being processed this will be non-NULL
+     * msg sent to guest pending for reply
+     * msg also holds the json object(reply)!!!
+     */
     qemuAgentMessagePtr msg;
 
     /* Buffer incoming data ready for Agent monitor
-     * code to process & find message boundaries */
+     * code to process & find message boundaries
+     * bufferLength: total buffer len
+     * bufferOffset: received bytes
+     */
     size_t bufferOffset;
     size_t bufferLength;
-    char *buffer;
+    char *buffer; // if several reads, each read data is separated by \0 !!!
 
     /* If anything went wrong, this will be fed back
      * the next monitor msg */
@@ -128,7 +151,9 @@ struct _qemuAgent {
 
     /* Some guest agent commands don't return anything
      * but fire up an event on qemu monitor instead.
-     * Take that as indication of successful completion */
+     * Take that as indication of successful completion
+     * SHUTDOWN, RESET, SUSPEND
+     */
     qemuAgentEvent await_event;
 };
 
@@ -169,6 +194,7 @@ qemuAgentEscapeNonPrintable(const char *text)
 
 static void qemuAgentDispose(void *obj)
 {
+    // when free agent, free its fields as well.
     qemuAgentPtr mon = obj;
     VIR_DEBUG("mon=%p", mon);
     if (mon->cb && mon->cb->destroy)
@@ -185,6 +211,8 @@ qemuAgentOpenUnix(const char *monitor)
     int monfd;
     int ret = -1;
 
+    // it's stream, so that reply for one command can be sent as two parts or more by server
+    // and client gets reply may call several read() api, we should buffer them and process them when we get a whole reply
     if ((monfd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         virReportSystemError(errno,
                              "%s", _("failed to create socket"));
@@ -192,7 +220,7 @@ qemuAgentOpenUnix(const char *monitor)
     }
 
     // non block, connect return immediately if server is not ready.
-    // no timeout in kernel for connect(), no block
+    // server is created by qemu process not guest agent who runs inside VM
     if (virSetNonBlock(monfd) < 0) {
         virReportSystemError(errno, "%s",
                              _("Unable to put monitor "
@@ -254,6 +282,10 @@ qemuAgentOpenPty(const char *monitor)
 }
 
 
+/*
+ * As you can see we did not process event from qga at all
+ * actually, there is no event sent by QGA.
+ */
 static int
 qemuAgentIOProcessEvent(qemuAgentPtr mon,
                         virJSONValuePtr obj)
@@ -282,6 +314,7 @@ qemuAgentIOProcessEvent(qemuAgentPtr mon,
     return 0;
 }
 
+// line here is just json string from QGA stored at monitor->buffer
 static int
 qemuAgentIOProcessLine(qemuAgentPtr mon,
                        const char *line,
@@ -292,6 +325,7 @@ qemuAgentIOProcessLine(qemuAgentPtr mon,
 
     VIR_DEBUG("Line [%s]", line);
 
+    // empty line or not json format can be treated as error
     if (!(obj = virJSONValueFromString(line))) {
         /* receiving garbage on first sync is regular situation */
         if (msg && msg->sync && msg->first) {
@@ -315,11 +349,13 @@ qemuAgentIOProcessLine(qemuAgentPtr mon,
         ret = qemuAgentIOProcessEvent(mon, obj);
     } else if (virJSONValueObjectHasKey(obj, "error") == 1 ||
                virJSONValueObjectHasKey(obj, "return") == 1) {
+        // most of time we reach here
         if (msg) {
             if (msg->sync) {
                 unsigned long long id;
 
                 if (virJSONValueObjectGetNumberUlong(obj, "return", &id) < 0) {
+                    // no id means it could be reply for previous cmd which timed out, but for this sync command.
                     VIR_DEBUG("Ignoring delayed reply on sync");
                     ret = 0;
                     goto cleanup;
@@ -328,21 +364,30 @@ qemuAgentIOProcessLine(qemuAgentPtr mon,
                 VIR_DEBUG("Guest returned ID: %llu", id);
 
                 if (msg->id != id) {
+                    // reply for current sync command, no wake up the command issuer, return ok
                     VIR_DEBUG("Guest agent returned ID: %llu instead of %llu",
                               id, msg->id);
                     ret = 0;
                     goto cleanup;
                 }
             }
+            // save parsed json object, mark msg finished, wake up command issuer!!!!
             msg->rxObject = obj;
             msg->finished = 1;
             obj = NULL;
         } else {
-            /* we are out of sync */
+            /*
+             * there is no msg but got reply(delayed reply)
+             * as msg is finished by some reason before we get reply
+             * we are out of sync
+             */
             VIR_DEBUG("Ignoring delayed reply");
         }
+
         ret = 0;
     } else {
+        // json without supported keyword!!! error
+        // for error, we wake up command issuer
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Unknown JSON reply '%s'"), line);
     }
@@ -376,6 +421,7 @@ static int qemuAgentIOProcessData(qemuAgentPtr mon,
             int got = nl - (data + used);
             for (i = 0; i < strlen(LINE_ENDING); i++)
                 data[used + got + i] = '\0';
+            // < 0 happens for empty line or line with wrong json format
             if (qemuAgentIOProcessLine(mon, data + used, msg) < 0)
                 return -1;
             used += got + strlen(LINE_ENDING);
@@ -395,13 +441,16 @@ static int qemuAgentIOProcessData(qemuAgentPtr mon,
 static int
 qemuAgentIOProcess(qemuAgentPtr mon)
 {
+    // processing received bytes in mon->buffer!!!
     int len;
     qemuAgentMessagePtr msg = NULL;
 
     /* See if there's a message ready for reply; that is,
      * one that has completed writing all its data.
+     *
      */
     if (mon->msg && mon->msg->txOffset == mon->msg->txLength)
+        // if we sent all to agent
         msg = mon->msg;
 
 #if DEBUG_IO
@@ -417,6 +466,8 @@ qemuAgentIOProcess(qemuAgentPtr mon)
 # endif
 #endif
 
+    // len parsed bytes of mon->buffer
+    // msg is NULL if we does NOT send all bytes of the command
     len = qemuAgentIOProcessData(mon,
                                  mon->buffer, mon->bufferOffset,
                                  msg);
@@ -425,15 +476,19 @@ qemuAgentIOProcess(qemuAgentPtr mon)
         return -1;
 
     if (len < mon->bufferOffset) {
+        // move mon->buffer forward by len as the first len bytes is used!!!
         memmove(mon->buffer, mon->buffer + len, mon->bufferOffset - len);
         mon->bufferOffset -= len;
     } else {
+        // here means mon->buffer is a full reply and parsed, saved at mon->msg.rxObject!!!
+        // we can free the reply(raw bytes)
         VIR_FREE(mon->buffer);
         mon->bufferOffset = mon->bufferLength = 0;
     }
 #if DEBUG_IO
     VIR_DEBUG("Process done %zu used %d", mon->bufferOffset, len);
 #endif
+    // after received reply(finished=1), wake up waiter(who sent qga command)
     if (msg && msg->finished)
         virCondBroadcast(&mon->notify);
     return len;
@@ -449,10 +504,13 @@ qemuAgentIOWrite(qemuAgentPtr mon)
 {
     int done;
 
-    /* If no active message, or fully transmitted, then no-op */
+    /* If no active message, or fully transmitted(all are sent), then no-op */
     if (!mon->msg || mon->msg->txOffset == mon->msg->txLength)
         return 0;
 
+    /* sending the unsent part
+     * if error happens, we should wake up command issuer as well
+     */
     done = safewrite(mon->fd,
                      mon->msg->txBuffer + mon->msg->txOffset,
                      mon->msg->txLength - mon->msg->txOffset);
@@ -465,6 +523,7 @@ qemuAgentIOWrite(qemuAgentPtr mon)
                              _("Unable to write to monitor"));
         return -1;
     }
+    // move offset for sent bytes
     mon->msg->txOffset += done;
     return done;
 }
@@ -488,6 +547,7 @@ qemuAgentIORead(qemuAgentPtr mon)
                                  QEMU_AGENT_MAX_RESPONSE);
             return -1;
         }
+        // allocate buffer for reading
         if (VIR_REALLOC_N(mon->buffer,
                           mon->bufferLength + 1024) < 0)
             return -1;
@@ -499,9 +559,10 @@ qemuAgentIORead(qemuAgentPtr mon)
        until we block on EAGAIN, or hit EOF */
     while (avail > 1) {
         int got;
+        // read in non-block mode
         got = read(mon->fd,
                    mon->buffer + mon->bufferOffset,
-                   avail - 1);
+                   avail - 1); // on byte used for \0
         if (got < 0) {
             if (errno == EAGAIN)
                 break;
@@ -513,9 +574,14 @@ qemuAgentIORead(qemuAgentPtr mon)
         if (got == 0)
             break;
 
+        /* ret: total received bytes of this loop
+         * got: received bytes of this read
+         * avail: left space to hold the bytes
+         */
         ret += got;
         avail -= got;
         mon->bufferOffset += got;
+        // as you can see for each read, we insert '\0' as separator
         mon->buffer[mon->bufferOffset] = '\0';
     }
 
@@ -527,6 +593,10 @@ qemuAgentIORead(qemuAgentPtr mon)
 }
 
 
+// reset event for this agent fd
+// when process event on this fd / put msg to send / got reply with below rules.
+// 1. Always add read event
+// 2. Add write event if not send all.
 static void qemuAgentUpdateWatch(qemuAgentPtr mon)
 {
     int events =
@@ -544,6 +614,7 @@ static void qemuAgentUpdateWatch(qemuAgentPtr mon)
 }
 
 
+// handler for event happened at agent fd
 static void
 qemuAgentIO(int watch, int fd, int events, void *opaque)
 {
@@ -564,23 +635,29 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("event from unexpected fd %d!=%d / watch %d!=%d"),
                        mon->fd, fd, mon->watch, watch);
+        // error from kernel
         error = true;
     } else if (mon->lastError.code != VIR_ERR_OK) {
         if (events & (VIR_EVENT_HANDLE_HANGUP | VIR_EVENT_HANDLE_ERROR))
             eof = true;
         error = true;
     } else {
+        // events reported by kernel of agent fd
         if (events & VIR_EVENT_HANDLE_WRITABLE) {
+            // write event is monitor only when we put msg to send
             if (qemuAgentIOWrite(mon) < 0)
+                // error when process writing
                 error = true;
             events &= ~VIR_EVENT_HANDLE_WRITABLE;
         }
 
+        // no error and readable
         if (!error &&
             events & VIR_EVENT_HANDLE_READABLE) {
             int got = qemuAgentIORead(mon);
             events &= ~VIR_EVENT_HANDLE_READABLE;
             if (got < 0) {
+                // error when process reading
                 error = true;
             } else if (got == 0) {
                 eof = true;
@@ -590,10 +667,14 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
                 events = 0;
 
                 if (qemuAgentIOProcess(mon) < 0)
+                    // process reply like not json format, json without keyword, it's error
+                    // we should wake up command issuer.
+                    // error when process reply message
                     error = true;
             }
         }
 
+        // no error and handup event
         if (!error &&
             events & VIR_EVENT_HANDLE_HANGUP) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -602,6 +683,7 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
             events &= ~VIR_EVENT_HANDLE_HANGUP;
         }
 
+        // no error, no eof, error from kernel
         if (!error && !eof &&
             events & VIR_EVENT_HANDLE_ERROR) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -609,6 +691,8 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
             eof = true;
             events &= ~VIR_EVENT_HANDLE_ERROR;
         }
+
+        // no error, other event we does not processed
         if (!error && events) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
                            _("Unhandled event %d for monitor fd %d"),
@@ -618,6 +702,7 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
     }
 
     if (error || eof) {
+        // error when processing event(error report by kernel, or libvirt)
         if (mon->lastError.code != VIR_ERR_OK) {
             /* Already have an error, so clear any new error */
             virResetLastError();
@@ -625,13 +710,23 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
             if (virGetLastErrorCode() == VIR_ERR_OK)
                 virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                                _("Error while processing monitor IO"));
+            /*
+             * ==========================error transferring=========================================
+             * copy error to monitor->lastError from thread local error
+             * reset thread local error
+             * thread local error is set during process read/write event with helper: virReportError/virReportSystemError
+             * ==========================error transferring=========================================
+             */
             virCopyLastError(&mon->lastError);
             virResetLastError();
         }
 
         VIR_DEBUG("Error on monitor %s", NULLSTR(mon->lastError.message));
         /* If IO process resulted in an error & we have a message,
-         * then wakeup that waiter */
+         * then wakeup that waiter
+         *
+         * error can be sent error or reply error happens when processing
+         */
         if (mon->msg && !mon->msg->finished) {
             mon->msg->finished = 1;
             virCondSignal(&mon->notify);
@@ -649,9 +744,11 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
         virDomainObjPtr vm = mon->vm;
 
         /* Make sure anyone waiting wakes up now */
+        // TODO: should we do it as above we already did it???
         virCondSignal(&mon->notify);
         virObjectUnlock(mon);
         virObjectUnref(mon);
+
         VIR_DEBUG("Triggering EOF callback");
         (eofNotify)(mon, vm);
     } else if (error) {
@@ -663,6 +760,7 @@ qemuAgentIO(int watch, int fd, int events, void *opaque)
         virCondSignal(&mon->notify);
         virObjectUnlock(mon);
         virObjectUnref(mon);
+
         VIR_DEBUG("Triggering error callback");
         (errorNotify)(mon, vm);
     } else {
@@ -725,6 +823,7 @@ qemuAgentOpen(virDomainObjPtr vm,
 
     virObjectRef(mon);
     // add agent fd to event loop thread
+    // this is the initial event monitored, it's reset when processing agent fd
     if ((mon->watch = virEventAddHandle(mon->fd,
                                         VIR_EVENT_HANDLE_HANGUP |
                                         VIR_EVENT_HANDLE_ERROR |
@@ -762,7 +861,7 @@ qemuAgentNotifyCloseLocked(qemuAgentPtr mon)
     if (mon) {
         mon->running = false;
 
-        /* If there is somebody waiting for a message
+        /* If there is somebody waiting for reply
          * wake him up. No message will arrive anyway. */
         if (mon->msg && !mon->msg->finished) {
             mon->msg->finished = 1;
@@ -797,6 +896,7 @@ void qemuAgentClose(qemuAgentPtr mon)
 
     if (mon->fd >= 0) {
         if (mon->watch)
+            // remove fd from event loop(poll())
             virEventRemoveHandle(mon->watch);
         VIR_FORCE_CLOSE(mon->fd);
     }
@@ -853,6 +953,9 @@ static int qemuAgentSend(qemuAgentPtr mon,
         then = now + seconds * 1000ull;
     }
 
+    // send just put msg at mon->msg, then update agent fd by monitor with writable event, wake up event thread(poll()) if it's blocked on poll()
+    // then event thread will send mon->msg.txBuffer to agent fd
+    // then I wait until event thread gets reply and processes it, then notify me by mon->notify condition.
     mon->msg = msg;
     qemuAgentUpdateWatch(mon);
 
@@ -873,7 +976,9 @@ static int qemuAgentSend(qemuAgentPtr mon,
         }
     }
 
+    // while lastError is set by event thread when it processed event on agent fd.
     if (mon->lastError.code != VIR_ERR_OK) {
+        // command is finished caused by error
         VIR_DEBUG("Send command resulted in error %s",
                   NULLSTR(mon->lastError.message));
         virSetError(&mon->lastError);
@@ -900,6 +1005,13 @@ static int qemuAgentSend(qemuAgentPtr mon,
  *
  * Returns: 0 on success,
  *          -1 otherwise
+ *
+ * ┌────────┐      ┌────────┐        ┌─────────┐         ┌───────┐      ┌───┐
+ * │ client │◄────►│server  │ ◄─────►│ virt io │  ◄────► │serial │ ◄───►│QGA│
+ * └────────┘      └────────┘        └─────────┘         └───────┘      └───┘
+ *
+ * As we can NOT detect if QGA is running or not
+ * So for each qga command, we should sync to see if it's alive
  */
 static int
 qemuAgentGuestSync(qemuAgentPtr mon)
@@ -914,6 +1026,7 @@ qemuAgentGuestSync(qemuAgentPtr mon)
     sync_msg.first = true;
 
  retry:
+    // for second sync(retried), first is false
     if (virTimeMillisNow(&id) < 0)
         return -1;
 
@@ -928,21 +1041,25 @@ qemuAgentGuestSync(qemuAgentPtr mon)
 
     VIR_DEBUG("Sending guest-sync command with ID: %llu", id);
 
-    /* for sync command with timeout */
+    /* for sync command with timeout 5s */
     send_ret = qemuAgentSend(mon, &sync_msg,
                              VIR_DOMAIN_QEMU_AGENT_COMMAND_DEFAULT);
 
     VIR_DEBUG("qemuAgentSend returned: %d", send_ret);
 
     if (send_ret < 0)
+        // error happens
         goto cleanup;
 
     if (!sync_msg.rxObject) {
+        // sync needs reply, if no rxObject, retry one time
         if (sync_msg.first) {
             VIR_FREE(sync_msg.txBuffer);
+            // reset first to false
             memset(&sync_msg, 0, sizeof(sync_msg));
             goto retry;
         } else {
+            // only retry once, if still no response, return error
             if (mon->running)
                 virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                                _("Missing monitor reply object"));
@@ -953,6 +1070,7 @@ qemuAgentGuestSync(qemuAgentPtr mon)
         }
     }
 
+    // got sync reply, but we do NOT use the reply data at all.
     ret = 0;
 
  cleanup:
@@ -1032,6 +1150,7 @@ qemuAgentCheckError(virJSONValuePtr cmd,
                     virJSONValuePtr reply)
 {
     if (virJSONValueObjectHasKey(reply, "error")) {
+        // error set by QGA, check details
         virJSONValuePtr error = virJSONValueObjectGet(reply, "error");
         char *cmdstr = virJSONValueToString(cmd, false);
         char *replystr = virJSONValueToString(reply, false);
@@ -1055,6 +1174,7 @@ qemuAgentCheckError(virJSONValuePtr cmd,
         VIR_FREE(replystr);
         return -1;
     } else if (!virJSONValueObjectHasKey(reply, "return")) {
+        // reply must have error or return!!!
         char *cmdstr = virJSONValueToString(cmd, false);
         char *replystr = virJSONValueToString(reply, false);
 
@@ -1077,6 +1197,17 @@ qemuAgentCommand(qemuAgentPtr mon,
                  bool needReply,
                  int seconds)
 {
+
+    /*
+     * seconds: timeout for qga command, its value is
+     * typedef enum {
+     *     VIR_DOMAIN_QEMU_AGENT_COMMAND_MIN = -2,
+     *     VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK = -2,       // no timeout, block for ever if no reply
+     *     VIR_DOMAIN_QEMU_AGENT_COMMAND_DEFAULT = -1,     // 5s timeout
+     *     VIR_DOMAIN_QEMU_AGENT_COMMAND_NOWAIT = 0,       // return right now, no wait/block
+     *     VIR_DOMAIN_QEMU_AGENT_COMMAND_SHUTDOWN = 60,    // 60s for shutdown
+     * } virDomainQemuAgentCommandTimeoutValues;
+     */
     int ret = -1;
     qemuAgentMessage msg;
     char *cmdstr = NULL;
@@ -1090,8 +1221,8 @@ qemuAgentCommand(qemuAgentPtr mon,
         return -1;
     }
 
-    /* before send qemu agent command, we send sync to make sure
-     * this is reply from agent, for this command timeout is 5s
+    /* before send qemu agent command, we send sync to make sure, qga is alive
+     * For this command timeout is 5s
      */
     if (qemuAgentGuestSync(mon) < 0)
         return -1;
@@ -1112,10 +1243,13 @@ qemuAgentCommand(qemuAgentPtr mon,
               ret, msg.rxObject);
 
     if (ret == 0) {
-        /* If we haven't obtained any reply but we wait for an
-         * event, then don't report this as error */
-        if (!msg.rxObject) {
+        if (!msg.rxObject) { // no reply from QGA
             if (await_event && !needReply) {
+            /* If we haven't obtained any reply but we wait for an
+             * event, then don't report this as error
+             * for example: agent shutdown, reboot. suspend
+             * for these agent command, await_event is set and needReply is false
+             */
                 VIR_DEBUG("Woken up by event %d", await_event);
             } else {
                 if (mon->running)
@@ -1127,6 +1261,7 @@ qemuAgentCommand(qemuAgentPtr mon,
                 ret = -1;
             }
         } else {
+            // check parsed reply(json object)
             *reply = msg.rxObject;
             ret = qemuAgentCheckError(cmd, *reply);
         }
@@ -1134,6 +1269,7 @@ qemuAgentCommand(qemuAgentPtr mon,
 
  cleanup:
     VIR_FREE(cmdstr);
+    // free sent buffer when finished(error/timeout/got reply)
     VIR_FREE(msg.txBuffer);
 
     return ret;
@@ -1199,8 +1335,11 @@ qemuAgentMakeStringsArray(const char **strings, unsigned int len)
     return NULL;
 }
 
-// this is caled by event thread when it processed
-// shutdown, reset, suspend event from qemu.
+/*
+ * This is called by event thread when it processed shutdown, reset, suspend event from qemu.
+ * As other thread who triggered agent shutdown, reset, suspend, waiting for qemu event!!!
+ * we should notify them.
+ */
 void qemuAgentNotifyEvent(qemuAgentPtr mon,
                           qemuAgentEvent event)
 {
@@ -1209,9 +1348,10 @@ void qemuAgentNotifyEvent(qemuAgentPtr mon,
     VIR_DEBUG("mon=%p event=%d await_event=%d", mon, event, mon->await_event);
     if (mon->await_event == event) {
         mon->await_event = QEMU_AGENT_EVENT_NONE;
-        /* somebody waiting for this event, wake him up. */
+        /* thread who triggers agent command is waiting for this event, wake him up.
+         * to tell him, it's done!!!
+         */
         if (mon->msg && !mon->msg->finished) {
-            // make agent waiting message as down and wake thread who is blocking on this msg
             mon->msg->finished = 1;
             virCondSignal(&mon->notify);
         }
@@ -1233,16 +1373,27 @@ int qemuAgentShutdown(qemuAgentPtr mon,
     virJSONValuePtr cmd;
     virJSONValuePtr reply = NULL;
 
+   // make command in json object
     cmd = qemuAgentMakeCommand("guest-shutdown",
                                "s:mode", qemuAgentShutdownModeTypeToString(mode),
                                NULL);
     if (!cmd)
         return -1;
 
+    // ================================================================
+    // guest-shutdown will never return reply, hence it blocks with 60s
+    // but it waits on qemu event RESET or SHUTDOWN
+    // ================================================================
+    //
+    // so qemuAgentCommand returns in three cases here:
+    // 1. qemu RESET event happens
+    // 2. qemu SHUTDOWN event happens
+    // 3. timed out for 60s!!!
     if (mode == QEMU_AGENT_SHUTDOWN_REBOOT)
         mon->await_event = QEMU_AGENT_EVENT_RESET;
     else
         mon->await_event = QEMU_AGENT_EVENT_SHUTDOWN;
+    // convert cmd to json string
     ret = qemuAgentCommand(mon, cmd, &reply, false,
                            VIR_DOMAIN_QEMU_AGENT_COMMAND_SHUTDOWN);
 
@@ -1286,6 +1437,8 @@ int qemuAgentFSFreeze(qemuAgentPtr mon, const char **mountpoints,
     if (!cmd)
         goto cleanup;
 
+    // parsed json object from json string replied by QGA
+    // true: means we need the reply(and there is an reply from QGA)
     if (qemuAgentCommand(mon, cmd, &reply, true,
                          VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK) < 0)
         goto cleanup;
@@ -1375,7 +1528,9 @@ qemuAgentArbitraryCommand(qemuAgentPtr mon,
                           char **result,
                           int timeout)
 {
-    /* for arbitrary qemu agent command, the timeout is set by user !!! */
+    /* for arbitrary qemu agent command, the timeout is set by user !!!
+     * virsh qemu-agent-command --timeout 10 $qga_command
+     */
     int ret = -1;
     virJSONValuePtr cmd = NULL;
     virJSONValuePtr reply = NULL;
@@ -1389,6 +1544,7 @@ qemuAgentArbitraryCommand(qemuAgentPtr mon,
         goto cleanup;
     }
 
+    // cmd from user must be json string as well with fixed format supported by QGA
     if (!(cmd = virJSONValueFromString(cmd_str)))
         goto cleanup;
 
@@ -1561,6 +1717,7 @@ qemuAgentSetVCPUsCommand(qemuAgentPtr mon,
                          VIR_DOMAIN_QEMU_AGENT_COMMAND_BLOCK) < 0)
         goto cleanup;
 
+    // BUG: why we check it again as we already checked in qemuAgentCommand()???
     if (qemuAgentCheckError(cmd, reply) < 0)
         goto cleanup;
 
@@ -2176,6 +2333,7 @@ qemuAgentSetUserPassword(qemuAgentPtr mon,
     virJSONValuePtr reply = NULL;
     char *password64 = NULL;
 
+    // password must be base64
     if (!(password64 = virStringEncodeBase64((unsigned char *)password,
                                              strlen(password))))
         goto cleanup;
