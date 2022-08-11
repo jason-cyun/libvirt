@@ -71,6 +71,7 @@ qemuInterfaceStartDevice(virDomainNetDefPtr net)
              * add an fdb entry ourselves, using the MAC address from
              * the interface config.
              */
+            // create tap device on host, libvirt does this for you!!!
             if (virNetDevBridgeFDBAdd(&net->mac, net->ifname,
                                       VIR_NETDEVBRIDGE_FDB_FLAG_MASTER |
                                       VIR_NETDEVBRIDGE_FDB_FLAG_TEMP) < 0)

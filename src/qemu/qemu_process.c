@@ -6323,9 +6323,10 @@ qemuProcessLaunch(virConnectPtr conn,
     if (!(logCtxt = qemuDomainLogContextNew(driver, vm,
                                             QEMU_DOMAIN_LOG_CONTEXT_MODE_START)))
         goto cleanup;
-    // log file(fd) of qemu process
-    // this fd can be opened by libvirtd directly
-    // OR opened by virtlogd, then passed back to libvirtd by rpc reply
+    // this fd can be opened by libvirtd directly with open($domain.log)
+    // OR opened by virtlogd used by virtlogd, but virtlogd returns a write side of pipe here
+    // logfile = fd(libvirtd opens $domain.log)
+    // logfile = write side of pipe(pipe is opened by virtlogd, return to libvirtd with rpc)
     logfile = qemuDomainLogContextGetWriteFD(logCtxt);
 
     // vmgenid https://github.com/qemu/qemu/blob/master/docs/specs/vmgenid.txt
@@ -6410,7 +6411,8 @@ qemuProcessLaunch(virConnectPtr conn,
         goto cleanup;
 
     // set stderr and stdout of forked process(qemu-process)
-    // to /var/log/libvirt/qemu/$domain.log!!!
+    // to /var/log/libvirt/qemu/$domain.log if it's opened by libvirtd
+    // to pipe write side if it's opened by virtlogd
     virCommandSetOutputFD(cmd, &logfile);
     virCommandSetErrorFD(cmd, &logfile);
     //NO STDIN for start!

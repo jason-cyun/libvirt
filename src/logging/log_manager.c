@@ -125,6 +125,7 @@ virLogManagerNew(bool privileged)
     if (VIR_ALLOC(mgr) < 0)
         goto error;
 
+    // connect with virtlogd(log manager)
     if (!(mgr->client = virLogManagerConnect(privileged, &mgr->program)))
         goto error;
 

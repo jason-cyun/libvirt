@@ -7392,7 +7392,7 @@ qemuBuildSmpCommandLine(virCommandPtr cmd,
 
     virCommandAddArg(cmd, "-smp");
 
-    virBufferAsprintf(&buf, "%u", nvcpus); // set current vcpus
+    virBufferAsprintf(&buf, "%u", nvcpus); // set current vcpus(online) at boot
 
     if (nvcpus != maxvcpus)
         virBufferAsprintf(&buf, ",maxcpus=%u", maxvcpus); // set maxvcpus if has hotpluggable cpu

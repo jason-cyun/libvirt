@@ -619,6 +619,7 @@ daemonSetupLogging(struct daemonConfig *config,
     ignore_value(virLogSetOutputs(config->log_outputs));
 
     /* If there are some environment variables defined, use those instead */
+    // as you can see env has high priority than libvirtd.conf!!!
     virLogSetFromEnv();
 
     /*
@@ -637,6 +638,7 @@ daemonSetupLogging(struct daemonConfig *config,
 
     // if no user output set in conf file, use default output which use log level as priority */
     if (virLogGetNbOutputs() == 0)
+        // default output is used only when no user output is set!!!
         virLogSetOutputs(virLogGetDefaultOutput());
 
     return 0;

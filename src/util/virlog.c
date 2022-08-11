@@ -92,6 +92,7 @@ struct _virLogFilter {
 };
 
 static int virLogFiltersSerial = 1;
+// parsed filters from libvirtd.conf, it's an array
 static virLogFilterPtr *virLogFilters;
 static size_t virLogNbFilters;
 
@@ -104,6 +105,10 @@ struct _virLogOutput {
     void *data;
     virLogOutputFunc f;
     virLogCloseFunc c;
+    // priority for this output, its value comes from below(3 has high priority)
+    // 1. no user set, it VIRT_LOG_DEFAULT
+    // 2. log_level from libvirtd.conf if not
+    // 3. level number from libvirtd.conf if set with log_outputs="1:file:/tmp/libvirtd.log"
     virLogPriority priority;
     virLogDestination dest;
     char *name;
@@ -111,11 +116,12 @@ struct _virLogOutput {
 
 /* this is only one default output */
 static char *virLogDefaultOutput;
+// global outputs set from user in libvirtd.conf
 static virLogOutputPtr *virLogOutputs;
 static size_t virLogNbOutputs;
 
 /*
- * Default priorities
+ * Default priorities for virLogDefaultPriority if not set from user in libvirtd.conf: log_level
  */
 static virLogPriority virLogDefaultPriority = VIR_LOG_DEFAULT;
 
@@ -186,6 +192,8 @@ virLogSetDefaultOutputToFile(const char *filename, bool privileged)
     mode_t old_umask;
 
     if (privileged) {
+        // uset default log level for output, can be reet by user from libvirtd.conf:
+        // log_outputs = "1:file:/var/log/libvirt/libvirtd.log"
         if (virAsprintf(&virLogDefaultOutput,
                         "%d:file:%s/log/libvirt/%s", virLogDefaultPriority,
                         LOCALSTATEDIR, filename) < 0)
@@ -229,12 +237,15 @@ virLogSetDefaultOutputToFile(const char *filename, bool privileged)
 int
 virLogSetDefaultOutput(const char *filename, bool godaemon, bool privileged)
 {
+    // not a daemon, default output is stderr
     if (!godaemon)
         return virLogSetDefaultOutputToStderr();
 
+    // if journal is available, default output is journal
     if (access("/run/systemd/journal/socket", W_OK) >= 0)
         return virLogSetDefaultOutputToJournald();
 
+    // th last choice for default output is file
     return virLogSetDefaultOutputToFile(filename, privileged);
 }
 
@@ -315,7 +326,8 @@ virLogReset(void)
         return -1;
 
     virLogLock();
-    // reset filters inherited from parent
+    // reset filters inherited and logoutputs from parent
+    // seems there is no filter and ouput defined
     virLogResetFilters();
     // reset logout inherited from parent as libvirtd may set this
     // qemue process forked by libvirtd reset it to avoid writing log to libvirtd.log!!!
@@ -347,7 +359,7 @@ virLogSetDefaultPriority(virLogPriority priority)
     if (virLogInitialize() < 0)
         return -1;
 
-    /* set default log priority from conf file
+    /* set default log priority from conf file: log_level
      * no set in conf file, default: VIRT_LOG_WARN
      */
     virLogDefaultPriority = priority;
@@ -514,7 +526,7 @@ virLogSourceUpdate(virLogSourcePtr source)
 {
     virLogLock();
     /* if no user filter defined, virLogFiltersSerial is 1
-     * source->serial default is zero
+     * source->serial default is zero, virLogSourceUpdate is called when first VIRT_XXX() is called!!!
      */
     if (source->serial < virLogFiltersSerial) {
         /* log_level set at config file is set as virLogDefaultPriority
@@ -526,16 +538,18 @@ virLogSourceUpdate(virLogSourcePtr source)
 
         for (i = 0; i < virLogNbFilters; i++) {
             if (fnmatch(virLogFilters[i]->match, source->name, 0) == 0) {
-                /* use the first matched filter */
+                /* use the first matched filter, file pattern */
                 priority = virLogFilters[i]->priority;
                 flags = virLogFilters[i]->flags;
                 break;
             }
         }
 
-        /* update priority of the source to filter priority or default VIR_LOG_WARN
+        /* update priority of the source to filter priority or default virLogDefaultPriority
+         * virLogDefaultPriority is VIR_LOG_WARN or value from libvirtd.conf log_level!!!
+         *
          * source can be seen as of source file with VIR_LOG_INIT, default priority ERROR
-         * but here we update source priority to WARN!!!
+         * but here we update source priority to virLogDefaultPriority or filter value
          */
         source->priority = priority;
         source->flags = flags;
@@ -630,8 +644,9 @@ virLogVMessage(virLogSourcePtr source,
         virLogSourceUpdate(source);
 
     /* priority is different for differnt log function
-     * like VIR_LOG_INFO() VIR_LOG_DEBUG
-     * filter is the first gate whether to pass or not
+     * like VIR_LOG_INFO() VIR_LOG_DEBUG()
+     * source->priority comes from libvirtd.conf log_level if no filter matched!!!
+     * filter is the first gate whether to pass or not!!!
      */
     if (priority < source->priority)
         goto cleanup;
@@ -643,10 +658,12 @@ virLogVMessage(virLogSourcePtr source,
     if (virVasprintfQuiet(&str, fmt, vargs) < 0)
         goto cleanup;
 
+    // add extra info to log like threadid, log level, function name, line number etc
     ret = virLogFormatString(&msg, linenr, funcname, priority, str);
     if (ret < 0)
         goto cleanup;
 
+    // add timestamp(gettimeofday()) to log later on
     if (virTimeStringNowRaw(timestamp) < 0)
         timestamp[0] = '\0';
 
@@ -666,8 +683,15 @@ virLogVMessage(virLogSourcePtr source,
     // }
     // all outputs defined by user
     for (i = 0; i < virLogNbOutputs; i++) {
+        // check priority against output level
+        // DEBUG 1
+        // INFO 2
+        //
+        // say: if output is set with debug
+        //      VIR_INFO can log message
         if (priority >= virLogOutputs[i]->priority) {
             if (virLogOutputs[i]->logInitMessage) {
+                // init message only write once
                 const char *rawinitmsg;
                 char *hoststr = NULL;
                 char *initmsg = NULL;
@@ -694,6 +718,8 @@ virLogVMessage(virLogSourcePtr source,
         }
     }
     if (virLogNbOutputs == 0) {
+        // never comes here for libvirtd as we add a default output if user does not set one
+        // go here for qemu-process before exec() as in child process virLog is reset.
         if (logInitMessageStderr) {
             const char *rawinitmsg;
             char *hoststr = NULL;
@@ -713,7 +739,10 @@ virLogVMessage(virLogSourcePtr source,
             VIR_FREE(initmsg);
             logInitMessageStderr = false;
         }
-        // if this runs in qemu-process, as STDERR_FILENO is set with /var/log/libvirt/qemu/$domain.log
+        // if this runs in qemu-process before exec()
+        // FD here is STDERR_FILENO
+        // STDERR_FILENO is set fd of /var/log/libvirt/qemu/$domain.log if no virtlogd enable
+        // when virtlogd enabled, STDERR_FILENO is set with write side of pipe() which is opened by virtlogd
         virLogOutputToFd(source, priority,
                          filename, linenr, funcname,
                          timestamp, metadata, filterflags,
@@ -748,6 +777,7 @@ virLogStackTraceToFd(int fd)
 #undef STRIP_DEPTH
 }
 
+// writer for fd output
 static void
 virLogOutputToFd(virLogSourcePtr source ATTRIBUTE_UNUSED,
                  virLogPriority priority ATTRIBUTE_UNUSED,
@@ -802,6 +832,7 @@ virLogNewOutputToFile(virLogPriority priority,
     int fd;
     virLogOutputPtr ret = NULL;
 
+    // for file output, we open the file and save the fd to virLogOutputPtr->data
     fd = open(file, O_CREAT | O_APPEND | O_WRONLY, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         virReportSystemError(errno, _("failed to open %s"), file);
@@ -853,6 +884,7 @@ virLogPrioritySyslog(virLogPriority priority)
 #endif /* HAVE_SYSLOG_H || USE_JOURNALD */
 
 
+// writer for syslog
 #if HAVE_SYSLOG_H
 static void
 virLogOutputToSyslog(virLogSourcePtr source ATTRIBUTE_UNUSED,
@@ -1002,6 +1034,7 @@ journalAddInt(struct journalState *state, const char *field, int value)
     state->iov += 4;
 }
 
+// writer for journald
 static void
 virLogOutputToJournald(virLogSourcePtr source,
                        virLogPriority priority,
@@ -1334,6 +1367,17 @@ virLogParseDefaultPriority(const char *priority)
  *
  * Sets virLogDefaultPriority, virLogFilters and virLogOutputs based on
  * environment variables.
+ *
+ * The frequently used way is to use libvirtd.conf
+ * log_level=1
+ * log_outputs=""
+ * log_filters=""
+ *
+ *
+ * These must be set before libvirtd starts
+ * LIBVIRT_DEBUG="debug"
+ * LIBVIRT_LOG_FILTERS=""
+ * LIBVIRT_LOG_OUTPUTS=""
  */
 void
 virLogSetFromEnv(void)
@@ -1415,6 +1459,7 @@ virLogOutputNew(virLogOutputFunc f,
     }
 
     ret->logInitMessage = true;
+    // write log function, dest predefined dst like VIR_LOG_TO_FILE VIR_LOG_TO_SYSLOG etc
     ret->f = f;
     ret->c = c;
     ret->data = data;
@@ -1465,10 +1510,13 @@ virLogFilterNew(const char *match,
     if (VIR_ALLOC_N_QUIET(mdup, mlen + 3) < 0)
         return NULL;
 
+    // you can see see, match uses file pattern, wildcard by default
+    // if use sets 1:qemu, actually we save match string with *qemu*!!!
     mdup[0] = '*';
     memcpy(mdup + 1, match, mlen);
     mdup[mlen + 1] = '*';
 
+    // create a filter object
     if (VIR_ALLOC_QUIET(ret) < 0) {
         VIR_FREE(mdup);
         return NULL;
@@ -1629,6 +1677,9 @@ virLogParseOutput(const char *src)
 
     /* split our format prio:destination:additional_data to tokens and parse
      * them individually
+     *
+     * each outputs must have three tokens or two token
+     * log_outputs = "1:stderr 1:file:/tmp/libvirtd.log 1:syslog:2"
      */
     if (!(tokens = virStringSplitCount(src, ":", 0, &count)) || count < 2) {
         virReportError(VIR_ERR_INVALID_ARG,
@@ -1738,6 +1789,7 @@ virLogParseFilter(const char *src)
 
     VIR_DEBUG("filter=%s", src);
 
+    // each filter must have two tokens
     /* split our format prio:match_str to tokens and parse them individually */
     if (!(tokens = virStringSplitCount(src, ":", 0, &count)) || count != 2) {
         virReportError(VIR_ERR_INVALID_ARG,
@@ -1745,6 +1797,7 @@ virLogParseFilter(const char *src)
         goto cleanup;
     }
 
+    // get priority of filter
     if (virStrToLong_uip(tokens[0], NULL, 10, &prio) < 0 ||
         (prio < VIR_LOG_DEBUG) || (prio > VIR_LOG_ERROR)) {
         virReportError(VIR_ERR_INVALID_ARG,
@@ -1753,8 +1806,10 @@ virLogParseFilter(const char *src)
         goto cleanup;
     }
 
+    // log_filters = "1:+qemu 2:daemon"
     match = tokens[1];
     if (match[0] == '+') {
+        // enable stack trace for this filter
         flags |= VIR_LOG_STACK_TRACE;
         match++;
     }
@@ -1799,6 +1854,7 @@ virLogParseOutputs(const char *src, virLogOutputPtr **outputs)
 
     VIR_DEBUG("outputs=%s", src);
 
+    // outputs are separated by ""
     if (!(strings = virStringSplitCount(src, " ", 0, &count)))
         goto cleanup;
 
@@ -1860,6 +1916,7 @@ virLogParseFilters(const char *src, virLogFilterPtr **filters)
 
     VIR_DEBUG("filters=%s", src);
 
+    // filters are separated by " "!!
     if (!(strings = virStringSplitCount(src, " ", 0, &count)))
         goto cleanup;
 
@@ -1871,6 +1928,7 @@ virLogParseFilters(const char *src, virLogFilterPtr **filters)
         if (!(filter = virLogParseFilter(strings[i])))
             goto cleanup;
 
+        // append new filter to array
         if (VIR_APPEND_ELEMENT(list, nfilters, filter)) {
             virLogFilterFree(filter);
             goto cleanup;
@@ -1917,9 +1975,11 @@ virLogSetOutputs(const char *src)
     if (!outputstr)
         return 0;
 
+    // parse output from libvirtd.conf
     if ((noutputs = virLogParseOutputs(outputstr, &outputs)) < 0)
         goto cleanup;
 
+    // set global outputs to above
     if (virLogDefineOutputs(outputs, noutputs) < 0)
         goto cleanup;
 
@@ -1949,9 +2009,11 @@ virLogSetFilters(const char *src)
     if (virLogInitialize() < 0)
         return -1;
 
+    // parse filters string from libvirtd.conf
     if (src && (nfilters = virLogParseFilters(src, &filters)) < 0)
         goto cleanup;
 
+    // set global filters with filters pared above
     if (virLogDefineFilters(filters, nfilters) < 0)
         goto cleanup;
 

@@ -7712,7 +7712,7 @@ qemuDomainLogContextPtr qemuDomainLogContextNew(virQEMUDriverPtr driver,
         if (ctxt->writefd < 0)
             goto error;
     } else {
-        // open log file used by qemu process by libvirtd
+        // open log file used by qemu process by libvirtd if virtlogd is not enabled
         if ((ctxt->writefd = open(ctxt->path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)) < 0) {
             virReportSystemError(errno, _("failed to create logfile %s"),
                                  ctxt->path);
@@ -7884,9 +7884,13 @@ qemuDomainLogAppendMessage(virQEMUDriverPtr driver,
     if (cfg->stdioLogD) { // default value
         // send qemu log to virtlogd who writes log to qemu log file
         // call rpc for sending to virtlogd, this is only for shutdown, panic, migrate message
+        //
+        // as you can see for each message, we connect with virtlogd first and then write message
+        // we does not keep the rpc connection!!!
         if (!(manager = virLogManagerNew(virQEMUDriverIsPrivileged(driver))))
             goto cleanup;
 
+        // path used to search the opened fd of such path in virtlogd
         if (virLogManagerDomainAppendMessage(manager, "qemu", vm->def->uuid,
                                              vm->def->name, path, message, 0) < 0)
             goto cleanup;
@@ -7906,8 +7910,9 @@ qemuDomainLogAppendMessage(virQEMUDriverPtr driver,
  cleanup:
     va_end(ap);
     VIR_FREE(message);
-    // close fd after each write, not open for ever
+    // close the local write fd, note writefd may be -1 if virtlogd is used
     VIR_FORCE_CLOSE(writefd);
+    // close manager(rpc connection) after each write
     virLogManagerFree(manager);
     virObjectUnref(cfg);
     VIR_FREE(path);

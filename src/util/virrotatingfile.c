@@ -45,13 +45,16 @@ typedef struct virRotatingFileReaderEntry virRotatingFileReaderEntry;
 typedef virRotatingFileReaderEntry *virRotatingFileReaderEntryPtr;
 
 struct virRotatingFileWriterEntry {
+    // fd of opened file
     int fd;
     off_t inode;
+    // pos the current writer, pos = end of file
     off_t pos;
-    off_t len;
+    off_t len; // size of file in bytes
 };
 
 struct virRotatingFileWriter {
+    // path of file
     char *basepath;
     virRotatingFileWriterEntryPtr entry;
     size_t maxbackup;
@@ -114,6 +117,7 @@ virRotatingFileWriterEntryNew(const char *path,
         goto error;
     }
 
+    // the end of file when open it
     entry->pos = lseek(entry->fd, 0, SEEK_END);
     if (entry->pos == (off_t)-1) {
         virReportSystemError(errno,
@@ -477,6 +481,7 @@ virRotatingFileWriterAppend(virRotatingFileWriterPtr file,
             len -= towrite;
             buf += towrite;
             ret += towrite;
+            // update pos in memory after write message to file
             file->entry->pos += towrite;
             file->entry->len += towrite;
         }

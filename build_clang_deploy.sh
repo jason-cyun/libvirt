@@ -19,12 +19,13 @@ if [ $? -eq 0 ]; then
 
     echo 'listen_tls = 0'
     echo 'listen_tcp = 1'
+    echo 'tcp_port= "16508"'
     echo 'auth_tcp = "none"'
   } >> /etc/libvirt/libvirtd.conf
 
   echo 'LIBVIRTD_ARGS="--listen"' >> /etc/sysconfig/libvirtd
 
-  #echo 'uri_default = "qemu+tcp://127.0.0.1:16509/system"' >>/etc/libvirt/libvirt.conf
+  #echo 'uri_default = "qemu+tcp://127.0.0.1:16508/system"' >>/etc/libvirt/libvirt.conf
   systemctl daemon-reload
   service libvirtd restart
 else

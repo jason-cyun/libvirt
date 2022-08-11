@@ -19163,7 +19163,9 @@ virDomainCachetuneDefParseCache(xmlXPathContextPtr ctxt,
     int ret = -1;
 
     ctxt->node = node;
-    // <cache id='0' level='3' type='both' size='3' unit='MiB'/>
+    // <cachetune>
+    //   <cache id='0' level='3' type='both' size='3' unit='MiB'/>
+    // </cachetune>
     // cache must have id, level, type, size, unit
     tmp = virXMLPropString(node, "id");
     if (!tmp) {

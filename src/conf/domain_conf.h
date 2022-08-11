@@ -1005,7 +1005,7 @@ struct _virDomainActualNetDef {
     int type; /* enum virDomainNetType */
     union {
         struct {
-            char *brname;
+            char *brname; // bridge name of interface for interface type(network and bridge) not used by vhostuser and others
             int macTableManager; /* enum virNetworkBridgeMACTableManagerType */
         } bridge;
         struct {

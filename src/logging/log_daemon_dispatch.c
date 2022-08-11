@@ -162,6 +162,7 @@ virLogManagerProtocolDispatchDomainAppendLogFile(virNetServerPtr server ATTRIBUT
 {
     int rv;
 
+    // rpc stub at virtlogd side
     if ((rv = virLogHandlerDomainAppendLogFile(virLogDaemonGetHandler(logDaemon),
                                                args->driver,
                                                (unsigned char *)args->dom.uuid,

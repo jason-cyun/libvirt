@@ -49,8 +49,11 @@ typedef virLogHandlerLogFile *virLogHandlerLogFilePtr;
 struct _virLogHandlerLogFile {
     virRotatingFileWriterPtr file;
     int watch;
+    // read side of pipe, used for reading message, then write to $domain.log by virRotatingFileWriterPtr
+    // write side is transfered to libvirtd and qemu-process inheritted it
     int pipefd; /* Read from QEMU via this */
 
+    // args got from libvirtd when call OpenLog rpc
     char *driver;
     unsigned char domuuid[VIR_UUID_BUFLEN];
     char *domname;
@@ -63,6 +66,7 @@ struct _virLogHandler {
     size_t max_size;
     size_t max_backups;
 
+    // all opened $domain.log fds
     virLogHandlerLogFilePtr *files;
     size_t nfiles;
 
@@ -414,6 +418,7 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
         goto error;
 
     // open domain log file and save meta in virLogHandlerLogFilePtr
+    // save the writer globally
     if ((file->file = virRotatingFileWriterNew(path,
                                                handler->max_size,
                                                handler->max_backups,
@@ -438,7 +443,7 @@ virLogHandlerDomainOpenLogFile(virLogHandlerPtr handler,
     *offset = virRotatingFileWriterGetOffset(file->file);
 
     virObjectUnlock(handler);
-    // return pipe write side
+    // return pipe write side to libvirtd
     return pipefd[1];
 
  error:
@@ -555,13 +560,16 @@ virLogHandlerDomainAppendLogFile(virLogHandlerPtr handler,
     virObjectLock(handler);
 
     for (i = 0; i < handler->nfiles; i++) {
+        // check the existing writer for the given path
         if (STREQ(virRotatingFileWriterGetPath(handler->files[i]->file), path)) {
+            // if virtlogd restart, no writer at all
             writer = handler->files[i]->file;
             break;
         }
     }
 
     if (!writer) {
+        // create new writer(open the path), close it after this write
         if (!(newwriter = virRotatingFileWriterNew(path,
                                                    handler->max_size,
                                                    handler->max_backups,
@@ -578,6 +586,9 @@ virLogHandlerDomainAppendLogFile(virLogHandlerPtr handler,
     ret = 0;
 
  cleanup:
+    // as you can see we only close the newwriter, not the writer
+    // that means if writer is opened by OpenLog RPC, it's not closed for each AppendLog RPC
+    // otherwise there is no writer due to virtlogd restarts, newwriter is temporary.
     virRotatingFileWriterFree(newwriter);
     virObjectUnlock(handler);
     return ret;

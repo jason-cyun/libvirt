@@ -63,6 +63,7 @@ struct _virLogDaemon {
     virLogHandlerPtr handler;
 };
 
+// global log damon object
 virLogDaemonPtr logDaemon = NULL;
 
 static bool execRestart;

@@ -61,10 +61,16 @@ typedef enum {
 typedef struct _virLogSource virLogSource;
 typedef virLogSource *virLogSourcePtr;
 
+// each source file has its own _virLogSource
 struct _virLogSource {
     const char *name;
-    unsigned int priority;
+    unsigned int priority; // priority for this source
+    // as we suport source filters
+    // one change to filter will increase global filter serial,
+    // if serial saved here is less than global filter serial, we should update source priority
+    // to the value that set by filter from user!!!
     unsigned int serial;
+    // flag for enable stack trace '+' from user filter indicating enabled
     unsigned int flags;
 };
 

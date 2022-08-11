@@ -114,7 +114,7 @@ struct _qemuMonitor {
     virJSONValuePtr options;
 
     /* If found, path to the virtio memballoon driver */
-    char *balloonpath;
+    char *balloonpath; // reported by qemu(dom tree) /machine/peripheral/balloon0
     bool ballooninit;
 
     /* Log file context of the qemu process to dig for usable info */

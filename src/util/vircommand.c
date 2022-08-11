@@ -356,8 +356,8 @@ virFork(void)
         /* Make sure any hook logging is sent to stderr, since child
          * process may close the logfile FDs */
         logprio = virLogGetDefaultPriority();
-        // as you can see, in child process, virtLog is reset
-        // that means no output and filter is set!!!
+        // as you can see, in child process, virtLog is reset that means no output and filter are set!!!
+        // hence virLogMessage() will write log to STDERR_FILENO which is set with $domain.log or pipe write side got from virtlogd
         virLogReset();
         virLogSetDefaultPriority(logprio);
 
@@ -412,6 +412,7 @@ prepareStdFd(int fd, int std)
 {
     if (fd == std)
         return virSetInherit(fd, true);
+    // Duplicate fd to sfd, closing fd and making it open on the same file
     if (dup2(fd, std) != std)
         return -1;
     return 0;
@@ -589,6 +590,7 @@ virExec(virCommandPtr cmd)
             goto cleanup;
         childerr = null;
     }
+    // calculate childerr based on above condition
 
     if ((ngroups = virGetGroupList(cmd->uid, cmd->gid, &groups)) < 0)
         goto cleanup;
@@ -618,9 +620,9 @@ virExec(virCommandPtr cmd)
         return 0;
     }
 
-    /* child */
+    /* child process run below */
     // From now on, Log printed will be stdout and stderr of qemu-process
-    // write to /var/log/libvirt/qemu/$domain.log!!!
+    // write to /var/log/libvirt/qemu/$domain.log
 
     if (cmd->mask)
         //sets the calling process's file mode creation mask(umask) to mask
@@ -636,6 +638,7 @@ virExec(virCommandPtr cmd)
         if (fd == childin || fd == childout || fd == childerr)
             continue;
         if (!virCommandFDIsSet(cmd, fd)) {
+            // close fd which is not needed anymore
             tmpfd = fd;
             VIR_MASS_CLOSE(tmpfd);
         } else if (virSetInherit(fd, true) < 0) {
@@ -644,18 +647,19 @@ virExec(virCommandPtr cmd)
         }
     }
 
+    // here redirect STDIN_FILENO to childin
     if (prepareStdFd(childin, STDIN_FILENO) < 0) {
         virReportSystemError(errno,
                              "%s", _("failed to setup stdin file handle"));
         goto fork_error;
     }
-    // redirect STDOUT to childerr which is fd of opened log file /var/log/libvirt/qemu/$domain.log
+    // redirect STDOUT to childout which is fd of opened log file /var/log/libvirt/qemu/$domain.log or write side of pipe()
     if (childout > 0 && prepareStdFd(childout, STDOUT_FILENO) < 0) {
         virReportSystemError(errno,
                              "%s", _("failed to setup stdout file handle"));
         goto fork_error;
     }
-    // redirect STDERR to childerr which is fd of opened log file /var/log/libvirt/qemu/$domain.log
+    // redirect STDERR to childerr which is fd of opened log file /var/log/libvirt/qemu/$domain.log or write side of pipe()
     if (childerr > 0 && prepareStdFd(childerr, STDERR_FILENO) < 0) {
         virReportSystemError(errno,
                              "%s", _("failed to setup stderr file handle"));
@@ -799,6 +803,7 @@ virExec(virCommandPtr cmd)
     }
 
     /* Close logging again to ensure no FDs leak to child */
+    // inside qemu-process, no output and filters now!!!
     virLogReset();
 
     // run qemu-kvm command in forked child, exec!!!
