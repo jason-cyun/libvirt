@@ -169,17 +169,19 @@ virHookInitialize(void)
 
     virHooksFound = 0;
     for (i = 0; i < VIR_HOOK_DRIVER_LAST; i++) {
-        // check hooks(scripts like bash, python) for each type, daemon, qemu, lxc
-        // /etc/libvirt/hooks/daemon/
-        // /etc/libvirt/hooks/qemu/
-        // /etc/libvirt/hooks/lxc/
-        // /etc/libvirt/hooks/network/
+        // check hook files (scripts like bash, python) for each type, daemon, qemu, lxc
+        // /etc/libvirt/hooks/daemon  (must be named like this)
+        // /etc/libvirt/hooks/qemu
+        // /etc/libvirt/hooks/lxc
+        // /etc/libvirt/hooks/network
         // check if any script present for that type
         res = virHookCheck(i, virHookDriverTypeToString(i));
         if (res < 0)
             return -1;
 
         if (res == 1) {
+            // if found hook for that driver and it's executable, mark it as found
+            // this is called only when daemon starts, hence if you add hook when libvirt is running, it's not used at all!!!
             virHooksFound |= (1 << i);
             ret++;
         }
@@ -296,7 +298,7 @@ virHookCall(int driver,
     if (extra == NULL)
         extra = "-";
 
-    // only support one script for each type named(qemu script file): /etc/libvirt/hooks/qemu
+    // only support one script for each type named(hook driver)(qemu script file): /etc/libvirt/hooks/qemu
     // hooks/qemu is not dir, but a regular file
     // called with this format:
     //  /etc/libvirt/hooks/qemu guest_name prepare begin
@@ -314,6 +316,7 @@ virHookCall(int driver,
     VIR_DEBUG("Calling hook opstr=%s subopstr=%s extra=%s",
               opstr, subopstr, extra);
 
+    // four command line arguments(id, opstr, subopstr, extra)
     cmd = virCommandNewArgList(path, id, opstr, subopstr, extra, NULL);
 
     virCommandAddEnvPassCommon(cmd);
