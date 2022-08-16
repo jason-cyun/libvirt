@@ -3270,6 +3270,9 @@ qemuDomainDefAddDefaultDevices(virDomainDefPtr def,
         break;
     }
 
+    /* There is only one PCI root, it is either pci-root or pcie-root with index 0 */
+
+    /* default usb controller is index 0 */
     if (addDefaultUSB &&
         virDomainControllerFind(def, VIR_DOMAIN_CONTROLLER_TYPE_USB, 0) < 0 &&
         virDomainDefAddUSBController(def, 0, usbModel) < 0)
@@ -3318,6 +3321,7 @@ qemuDomainDefAddDefaultDevices(virDomainDefPtr def,
                                virDomainControllerModelPCITypeToString(def->controllers[pciRoot]->model));
                 goto cleanup;
             }
+        /* pci and pcie are same controller type PCI with different model!!! */
         } else if (!virDomainDefAddController(def, VIR_DOMAIN_CONTROLLER_TYPE_PCI, 0,
                                              VIR_DOMAIN_CONTROLLER_MODEL_PCIE_ROOT)) {
             goto cleanup;
@@ -3748,7 +3752,29 @@ qemuDomainDefPostParse(virDomainDefPtr def,
         goto cleanup;
 
     // get canon machine supported by qemu, user may use alias for that
-    // convert it
+    // short name for machine pc for pc-i440fx-rhel7.6.0, q35 for pc-q35-rhel7.6.0
+    /*
+     * pc                   RHEL 7.6.0 PC (i440FX + PIIX, 1996) (alias of pc-i440fx-rhel7.6.0)
+     * pc-i440fx-rhel7.6.0  RHEL 7.6.0 PC (i440FX + PIIX, 1996) (default)
+     * pc-i440fx-rhel7.5.0  RHEL 7.5.0 PC (i440FX + PIIX, 1996)
+     * pc-i440fx-rhel7.4.0  RHEL 7.4.0 PC (i440FX + PIIX, 1996)
+     * pc-i440fx-rhel7.3.0  RHEL 7.3.0 PC (i440FX + PIIX, 1996)
+     * pc-i440fx-rhel7.2.0  RHEL 7.2.0 PC (i440FX + PIIX, 1996)
+     * pc-i440fx-rhel7.1.0  RHEL 7.1.0 PC (i440FX + PIIX, 1996)
+     * pc-i440fx-rhel7.0.0  RHEL 7.0.0 PC (i440FX + PIIX, 1996)
+     * rhel6.6.0            RHEL 6.6.0 PC
+     * rhel6.5.0            RHEL 6.5.0 PC
+     * rhel6.4.0            RHEL 6.4.0 PC
+     * rhel6.3.0            RHEL 6.3.0 PC
+     * rhel6.2.0            RHEL 6.2.0 PC
+     * rhel6.1.0            RHEL 6.1.0 PC
+     * rhel6.0.0            RHEL 6.0.0 PC
+     * q35                  RHEL-7.6.0 PC (Q35 + ICH9, 2009) (alias of pc-q35-rhel7.6.0)
+     * pc-q35-rhel7.6.0     RHEL-7.6.0 PC (Q35 + ICH9, 2009)
+     * pc-q35-rhel7.5.0     RHEL-7.5.0 PC (Q35 + ICH9, 2009)
+     * pc-q35-rhel7.4.0     RHEL-7.4.0 PC (Q35 + ICH9, 2009)
+     * pc-q35-rhel7.3.0     RHEL-7.3.0 PC (Q35 + ICH9, 2009)
+     */
     if (qemuCanonicalizeMachine(def, qemuCaps) < 0)
         goto cleanup;
 
