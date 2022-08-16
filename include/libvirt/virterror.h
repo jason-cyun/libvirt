@@ -164,6 +164,8 @@ struct _virError {
     char       *str1;   /* extra string information */
     char       *str2;   /* extra string information */
     char       *str3;   /* extra string information */
+    // for system error, int1 comes from errno
+    // -1 no meaning
     int         int1;   /* extra number information */
     int         int2;   /* extra number information */
     virNetworkPtr net VIR_DEPRECATED; /* network if available, deprecated

@@ -168,6 +168,10 @@ virLastErrFreeData(void *data)
 int
 virErrorInitialize(void)
 {
+    // this runs once, virLastErr inherited by threads
+    // virLastErr has the same key for threads
+    // but when setting value for the key with pthread_setspecific(key, value)
+    // the value is thread local!!!
     return virThreadLocalInit(&virLastErr, virLastErrFreeData);
 }
 
@@ -204,6 +208,7 @@ virCopyError(virErrorPtr from,
     to->code = from->code;
     to->domain = from->domain;
     to->level = from->level;
+    // copy means dup str(new memory is allocated)
     if (VIR_STRDUP_QUIET(to->message, from->message) < 0)
         ret = -1;
     if (VIR_STRDUP_QUIET(to->str1, from->str1) < 0)
@@ -244,6 +249,7 @@ virLastErrorObject(void)
     if (!err) {
         if (VIR_ALLOC_QUIET(err) < 0)
             return NULL;
+        // if virLastErr is not present, allocate a new one for it
         if (virThreadLocalSet(&virLastErr, err) < 0)
             VIR_FREE(err);
     }
@@ -265,6 +271,7 @@ virErrorPtr
 virGetLastError(void)
 {
     virErrorPtr err = virLastErrorObject();
+    // if code is OK, no error object returns
     if (!err || err->code == VIR_ERR_OK)
         return NULL;
     return err;
@@ -348,7 +355,9 @@ virSetError(virErrorPtr newerr)
     if (!err)
         goto cleanup;
 
+    // free str(memory) of err
     virResetError(err);
+    // dup error str from newerr
     ret = virCopyError(newerr, err);
  cleanup:
     errno = saved_errno;
@@ -376,8 +385,10 @@ virCopyLastError(virErrorPtr to)
     /* We can't guarantee caller has initialized it to zero */
     memset(to, 0, sizeof(*to));
     if (err)
+        // copy from last to `to`
         virCopyError(err, to);
     else
+        // if not last error, reset to, actually, it's not needed as above to is set to 0.
         virResetError(to);
     return to->code;
 }
@@ -401,6 +412,7 @@ virSaveLastError(void)
     if (VIR_ALLOC_QUIET(to) < 0)
         return NULL;
 
+    // copy from last error to new one and return it
     virCopyLastError(to);
     errno = saved_errno;
     return to;
@@ -445,6 +457,7 @@ virErrorRestore(virErrorPtr *savederr)
         return;
 
     virSetError(*savederr);
+    // after restore, the saved err is freed now
     virFreeError(*savederr);
     *savederr = NULL;
     errno = saved_errno;
@@ -567,6 +580,7 @@ virConnCopyLastError(virConnectPtr conn, virErrorPtr to)
     if (conn->err.code == VIR_ERR_OK)
         virResetError(to);
     else
+        // copy last error from connection error
         virCopyError(&conn->err, to);
     virObjectUnlock(conn);
     return to->code;
@@ -704,6 +718,7 @@ virDispatchError(virConnectPtr conn)
     /* Copy the global error to per-connection error if needed */
     if (conn) {
         virObjectLock(conn);
+        // copy last erro to connection error
         virCopyError(err, &conn->err);
 
         if (conn->handler != NULL) {
@@ -750,13 +765,14 @@ void virRaiseErrorLog(const char *filename,
      */
     if (virLogGetNbOutputs() > 0 ||
         virErrorLogPriorityFilter)
+        // write error message to log
         virLogMessage(&virLogSelf,
                       priority,
                       filename, linenr, funcname,
                       meta, "%s", err->message);
 }
 
-/**
+/*
  * virRaiseErrorFull:
  * @filename: filename where error was raised
  * @funcname: function name where error was raised
@@ -811,6 +827,7 @@ virRaiseErrorFull(const char *filename,
     }
 
     // reset global error which could be error of last call who runs on this thread.
+    // we update thread local error with new value
     virResetError(to);
 
     if (code == VIR_ERR_OK) {
@@ -881,6 +898,10 @@ void virRaiseErrorObject(const char *filename,
                          size_t linenr,
                          virErrorPtr newerr)
 {
+/*
+ * This is like virRaiseErrorFull, except that it accepts the
+ * error information via a pre-filled virErrorPtr object
+ */
     int saved_errno = errno;
     virErrorPtr err;
     virLogMetadata meta[] = {
@@ -915,6 +936,7 @@ void virRaiseErrorObject(const char *filename,
 static const char *
 virErrorMsg(virErrorNumber error, const char *info)
 {
+    // info means the caller will format errmsg with extra data
     const char *errmsg = NULL;
 
     switch (error) {
@@ -1543,6 +1565,7 @@ void virReportErrorHelper(int domcode,
 
     if (fmt) {
         va_start(args, fmt);
+        // error message from user
         vsnprintf(errorMessage, sizeof(errorMessage)-1, fmt, args);
         va_end(args);
     } else {
@@ -1626,6 +1649,7 @@ void virReportSystemErrorFull(int domcode,
     if (!msgDetail)
         msgDetail = errnoDetail;
 
+    // for system error: code: VIR_ERR_SYSTEM_ERROR
     virRaiseErrorFull(filename, funcname, linenr,
                       domcode, VIR_ERR_SYSTEM_ERROR, VIR_ERR_ERROR,
                       msg, msgDetail, NULL, theerrno, -1, msg, msgDetail);

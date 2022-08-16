@@ -502,7 +502,7 @@ struct _virConnect {
      */
 
     /* Per-connection error. */
-    virError err;           /* the last error */
+    virError err;           /* the last error per connection */
     virErrorFunc handler;   /* associated handler */
     void *userData;         /* the user data */
 };

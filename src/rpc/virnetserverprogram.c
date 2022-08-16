@@ -453,6 +453,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
     // same thing happens for ret as well specific api result type--->void*---->char*
     //
     // ret is already created above!!!
+    // rerr got from last error of this thread
     rv = (dispatcher->func)(server, client, msg, &rerr, arg, ret);
 
     if (virIdentitySetCurrent(NULL) < 0)
@@ -476,7 +477,7 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
 
     xdr_free(dispatcher->arg_filter, arg);
 
-    // if error happend, error info is saved at rerr by stub, send that
+    // if error happend, error info is saved at rerr by stub, send rpc error to client by
     if (rv < 0)
         goto error;
 
@@ -522,6 +523,8 @@ virNetServerProgramDispatchCall(virNetServerProgramPtr prog,
     /* Bad stuff (de-)serializing message, but we have an
      * RPC error message we can send back to the client
      * send error to client, ret is not used at all.
+     *
+     * send RPC error message
      */
     rv = virNetServerProgramSendReplyError(prog, client, msg, &rerr, &msg->header);
 
