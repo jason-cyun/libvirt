@@ -4099,6 +4099,8 @@ virDomainDefAddConsoleCompat(virDomainDefPtr def)
     size_t i;
 
     /*
+     * Compatibility
+     *
      * Some really crazy backcompat stuff for consoles
      *
      * Historically the first (and only) '<console>' element in an HVM guest

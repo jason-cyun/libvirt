@@ -9354,6 +9354,10 @@ qemuBuildConsoleCommandLine(virLogManagerPtr logManager,
                 return -1;
             break;
 
+        /* if console is serial, we should already add chardev at buildSerialCommandline
+         * As due to historical reason, there is a corresponding serial device with serial console
+         * refer to virDomainDefAddConsoleCompat
+         */
         case VIR_DOMAIN_CHR_CONSOLE_TARGET_TYPE_SERIAL:
             break;
 
