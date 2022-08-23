@@ -6551,7 +6551,7 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
 
     // queued job which is waiting.
     priv->jobs_queued++;
-    // 30s for other job finish
+    // 30s for waiting other job finish.
     then = now + QEMU_JOB_WAIT_TIME;
 
  retry:
@@ -6586,7 +6586,8 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
         if (nowait)
             goto cleanup;
 
-        // there is already one running, wait for finish with 30s, unlock vm
+        // there is already job running, wait for 30s, unlock vm
+        // after timeout, if that job is still running, I'm failed
         VIR_DEBUG("Waiting for job (vm=%p name=%s)", obj, obj->def->name);
         if (virCondWaitUntil(&priv->job.cond, &obj->parent.lock, then) < 0)
             goto error;

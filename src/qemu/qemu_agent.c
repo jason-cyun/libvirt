@@ -962,6 +962,9 @@ static int qemuAgentSend(qemuAgentPtr mon,
 
     while (!mon->msg->finished) {
         // wait condtion or timeout if not reponse for longer time
+        // as for some command, wait time is for ever, for these kind of command
+        // if qemu agent suspend or stop after sync, no response
+        // these command will blocked for ever!!! also prevent other qga command to run
         if ((then && virCondWaitUntil(&mon->notify, &mon->parent.lock, then) < 0) ||
             (!then && virCondWait(&mon->notify, &mon->parent.lock) < 0)) {
             if (errno == ETIMEDOUT) {
@@ -1223,7 +1226,9 @@ qemuAgentCommand(qemuAgentPtr mon,
     }
 
     /* before send qemu agent command, we send sync to make sure, qga is alive
-     * For this command timeout is 5s
+     * For sync command timeout is 5s.
+     * if we do not sync before sending qga command
+     * as some qga command blocks for ever if qga is not responding!!!
      */
     if (qemuAgentGuestSync(mon) < 0)
         return -1;
