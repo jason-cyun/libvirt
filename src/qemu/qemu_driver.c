@@ -20489,6 +20489,7 @@ qemuDomainGetStatsPerf(virQEMUDriverPtr driver ATTRIBUTE_UNUSED,
         if (!virPerfEventIsEnabled(priv->perf, i))
              continue;
 
+        // get stats for enabled perf events
         if (qemuDomainGetStatsPerfOneEvent(priv->perf, i,
                                            record, maxparams) < 0)
             goto cleanup;

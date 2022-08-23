@@ -28,6 +28,7 @@
  * Technology) features to monitor or control shared resource based on
  * the perf framework in the linux kernel. */
 typedef enum {
+    // supported perf events
     VIR_PERF_EVENT_CMT,    /* Cache Monitoring Technology */
     VIR_PERF_EVENT_MBMT,   /* Memory Bandwidth Monitoring Total */
     VIR_PERF_EVENT_MBML,   /* Memory Bandwidth Monitor Limit for controller */

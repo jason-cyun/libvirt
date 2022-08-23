@@ -6469,6 +6469,7 @@ qemuProcessLaunch(virConnectPtr conn,
     if (qemuSetupCgroup(vm, nnicindexes, nicindexes) < 0)
         goto cleanup;
 
+    // create events slots for all supported perf event
     if (!(priv->perf = virPerfNew()))
         goto cleanup;
 

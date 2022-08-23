@@ -50,6 +50,7 @@ VIR_ENUM_IMPL(virPerfEvent, VIR_PERF_EVENT_LAST,
               "alignment_faults", "emulation_faults");
 
 struct virPerfEvent {
+    // event fd to get stats/enable it, disable it
     int fd;
     bool enabled;
     union {
@@ -62,6 +63,7 @@ struct virPerfEvent {
 typedef struct virPerfEvent *virPerfEventPtr;
 
 struct virPerf {
+    // each perf event has a slot with fd for operating it
     struct virPerfEvent events[VIR_PERF_EVENT_LAST];
 };
 
@@ -246,9 +248,13 @@ virPerfEventEnable(virPerfPtr perf,
     attr.inherit = 1;
     attr.disabled = 1;
     attr.enable_on_exec = 0;
-    attr.type = event_attr->attrType;
+    attr.type = event_attr->attrType; // type of perf event to be enabled
     attr.config = event_attr->attrConfig;
 
+    /* enable perf event of given process by syscall
+     * save the fd of this perf event in private data
+     * later on use it to read stats of such perf event
+     */
     event->fd = syscall(__NR_perf_event_open, &attr, pid, -1, -1, 0);
     if (event->fd < 0) {
         virReportSystemError(errno,
@@ -309,6 +315,7 @@ virPerfReadEvent(virPerfPtr perf,
     if (!event->enabled)
         return -1;
 
+    // read count from the event(perf event) fd
     if (saferead(event->fd, value, sizeof(uint64_t)) < 0) {
         virReportSystemError(errno, "%s",
                              _("Unable to read cache data"));
