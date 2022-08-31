@@ -122,13 +122,16 @@ typedef struct _virTPMBinaryInfo {
 
 static virTPMBinaryInfo swtpmBinaries[VIR_TPM_BINARY_LAST] = {
     [VIR_TPM_BINARY_SWTPM] = {
+        .path = NULL,
         .parm = "socket",
         .capsParse = virTPMSwtpmFeatureTypeFromString,
     },
     [VIR_TPM_BINARY_SWTPM_SETUP] = {
+        .path = NULL,
         .capsParse = virTPMSwtpmSetupFeatureTypeFromString,
     },
     [VIR_TPM_BINARY_SWTPM_IOCTL] = {
+        .path = NULL,
     },
 };
 
