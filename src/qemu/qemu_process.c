@@ -1585,6 +1585,7 @@ qemuProcessHandleMigrationStatus(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         goto cleanup;
     }
 
+    // migration event handler update status reported by qemu
     priv->job.current->stats.mig.status = status;
     virDomainObjBroadcast(vm);
 
@@ -1614,6 +1615,8 @@ qemuProcessHandleMigrationPass(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         goto cleanup;
     }
 
+    // only report event to user if monitored
+    // libvirtd does NOT store any info about pass!!!
     virObjectEventStateQueue(driver->domainEventState,
                          virDomainEventMigrationIterationNewFromObj(vm, pass));
 

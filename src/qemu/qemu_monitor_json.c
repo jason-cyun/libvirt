@@ -3077,6 +3077,7 @@ qemuMonitorJSONGetMigrationStatsReply(virJSONValuePtr reply,
         return -1;
     }
 
+    // migration status event reported by qemu
     stats->status = qemuMonitorMigrationStatusTypeFromString(statusstr);
     if (stats->status < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,

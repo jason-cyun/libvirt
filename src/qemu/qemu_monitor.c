@@ -174,7 +174,36 @@ static int qemuMonitorOnceInit(void)
 VIR_ONCE_GLOBAL_INIT(qemuMonitor)
 
 
-// migration status reported by qemu event
+// -> { "execute": "query-migrate" }
+// <- {
+//       "return":{
+//          "status":"active",
+//          "total-time":12345,
+//          "setup-time":12345,
+//          "expected-downtime":12345,
+//          "ram":{
+//             "total":1057024,
+//             "remaining":1053304,
+//             "transferred":3720,
+//             "duplicate":123,
+//             "normal":123,
+//             "normal-bytes":123456,
+//             "dirty-sync-count":15
+//          },
+//          "disk":{
+//             "total":20971520,
+//             "remaining":20880384,
+//             "transferred":91136
+//          }
+//       }
+//    }
+//
+// both source and dst reported it
+// {"timestamp": {"seconds": 1432121972, "microseconds": 744001}, "event": "MIGRATION", "data": {"status": "completed"}}
+//
+// the source side of a migration at the start of each pass (when it syncs the dirty bitmap)
+// {"timestamp": {"seconds": 1449669631, "microseconds": 239225}, "event": "MIGRATION_PASS", "data": {"pass": 2}}
+// migration status reported by qemu event or query-migrate command
 VIR_ENUM_IMPL(qemuMonitorMigrationStatus,
               QEMU_MONITOR_MIGRATION_STATUS_LAST,
               "inactive", "setup",

@@ -12690,6 +12690,7 @@ qemuDomainMigrateBegin3Params(virDomainPtr domain,
 }
 
 
+// runs at dst libivrtd called by source libvirtd!!!
 static int
 qemuDomainMigratePrepare3(virConnectPtr dconn,
                           const char *cookiein,
@@ -12725,6 +12726,7 @@ qemuDomainMigratePrepare3(virConnectPtr dconn,
                                                    QEMU_MIGRATION_DESTINATION)))
         goto cleanup;
 
+    // create new vm def from parameter which is passed by source libvirtd
     if (!(def = qemuMigrationAnyPrepareDef(driver, dom_xml, dname, &origname)))
         goto cleanup;
 
@@ -12798,6 +12800,7 @@ qemuDomainMigratePrepare3Params(virConnectPtr dconn,
     if (nmigrate_disks < 0)
         goto cleanup;
 
+    // get migParams set by source
     if (!(migParams = qemuMigrationParamsFromFlags(params, nparams, flags,
                                                    QEMU_MIGRATION_DESTINATION)))
         goto cleanup;
@@ -12968,9 +12971,11 @@ qemuDomainMigratePerform3(virDomainPtr dom,
                                                    QEMU_MIGRATION_SOURCE)))
         goto cleanup;
 
+    // get vm object searched by doam uuid or name
     if (!(vm = qemuDomObjFromDomain(dom)))
         goto cleanup;
 
+    // check a acl for migration operation
     if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
         virDomainObjEndAPI(&vm);
         goto cleanup;
@@ -13111,6 +13116,7 @@ qemuDomainMigrateFinish3(virConnectPtr dconn,
         return NULL;
     }
 
+    // source notify the migration is finished
     return qemuMigrationDstFinish(driver, dconn, vm,
                                   cookiein, cookieinlen,
                                   cookieout, cookieoutlen,

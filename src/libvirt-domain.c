@@ -3377,6 +3377,12 @@ virDomainMigrateUnmanagedProto3(virDomainPtr domain,
                                 int nparams,
                                 unsigned int flags)
 {
+    // parameter supported, remote migrate uri, new name of domain, xml, bandwitd
+    // but local storage is not supported which is supported by protocol v3 extension!!!
+
+    // miguri vs dconnuri
+    // miguri is the specific remote host uri used for migration, if not present, it's same as dconnuri
+    // conenction uri can be different with miguri, but most of time, we use same(dconnuri which is a must)
     const char *compatParams[] = { VIR_MIGRATE_PARAM_URI,
                                    VIR_MIGRATE_PARAM_DEST_NAME,
                                    VIR_MIGRATE_PARAM_DEST_XML,
@@ -3437,9 +3443,14 @@ virDomainMigrateUnmanagedParams(virDomainPtr domain,
     VIR_TYPED_PARAMS_DEBUG(params, nparams);
 
     if ((flags & VIR_MIGRATE_PEER2PEER) &&
+        // for p2p, the target libvirtd uri must not 'localhost'
         virDomainMigrateCheckNotLocal(dconnuri) < 0)
         return -1;
 
+    // check the driver way that supports with below order
+    // 1. v3 extension(cookie support)
+    // 2. v3 migration protocol
+    // 3. v2 migration protocol
     if ((flags & VIR_MIGRATE_PEER2PEER) &&
         VIR_DRV_SUPPORTS_FEATURE(domain->conn->driver, domain->conn,
                                  VIR_DRV_FEATURE_MIGRATION_PARAMS)) {
@@ -4253,6 +4264,7 @@ virDomainMigrateToURI3(virDomainPtr domain,
         goto error;
 
     if (flags & VIR_MIGRATE_PEER2PEER)
+        // target host libvirtd uri
         virCheckNonNullArgGoto(dconnuri, error);
     else
         dconnuri = NULL;

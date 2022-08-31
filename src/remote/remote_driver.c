@@ -6288,13 +6288,19 @@ remoteDomainMigratePerform3(virDomainPtr dom,
     memset(&args, 0, sizeof(args));
     memset(&ret, 0, sizeof(ret));
 
+    // dom that is migration
     make_nonnull_domain(&args.dom, dom);
 
+    // remote driver calls rpc with libvirtd, new xml for migrated domain at remote libvirtd
     args.xmlin = xmlin == NULL ? NULL : (char **) &xmlin;
+    // cookie to save the cookie from libvirtd
     args.cookie_in.cookie_in_val = (char *)cookiein;
     args.cookie_in.cookie_in_len = cookieinlen;
+    // flags like --unsafe, --protetc-change
     args.flags = flags;
+    // dname new domain name if migrated
     args.dname = dname == NULL ? NULL : (char **) &dname;
+    // miguri can be different with connuri
     args.uri = uri == NULL ? NULL : (char **) &uri;
     args.dconnuri = dconnuri == NULL ? NULL : (char **) &dconnuri;
     args.resource = resource;

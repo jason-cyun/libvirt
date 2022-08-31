@@ -10611,6 +10611,7 @@ virshMigrateTimeout(vshControl *ctl,
 {
     virshMigrateTimeoutAction action = *(virshMigrateTimeoutAction *) opaque;
 
+    // migration timeout detected by virsh, suspend vm to finish migration or start postcopy to finish migration
     switch (action) {
     case VIRSH_MIGRATE_TIMEOUT_DEFAULT: /* unreachable */
     case VIRSH_MIGRATE_TIMEOUT_SUSPEND:
@@ -10637,6 +10638,7 @@ virshMigrateIteration(virConnectPtr conn ATTRIBUTE_UNUSED,
 {
     vshControl *ctl = opaque;
 
+    // iteration callback, switch to postcopy after first-copy
     if (iteration == 2) {
         vshDebug(ctl, VSH_ERR_DEBUG,
                  "iteration %d finished; switching to post-copy\n",

@@ -6376,6 +6376,7 @@ qemuDomainObjSetJobPhase(virQEMUDriverPtr driver,
                  priv->job.asyncOwner);
     }
 
+    // set job phase and change job asyncOwner to me
     priv->job.phase = phase;
     priv->job.asyncOwner = me;
     qemuDomainObjSaveJob(driver, obj);
