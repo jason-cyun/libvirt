@@ -2411,6 +2411,7 @@ qemuDomainObjPrivateXMLFormat(virBufferPtr buf,
     if (priv->lockState)
         virBufferAsprintf(buf, "<lockstate>%s</lockstate>\n", priv->lockState);
 
+    // xml job info saved to disk
     if (qemuDomainObjPrivateXMLFormatJob(buf, vm, priv) < 0)
         return -1;
 
@@ -6345,6 +6346,8 @@ virDomainDefParserConfig virQEMUDriverDomainDefParserConfig = {
 static void
 qemuDomainObjSaveJob(virQEMUDriverPtr driver, virDomainObjPtr obj)
 {
+    // save job actully save domain runtime status to disk
+    // as runtiem status has job info which should change
     virQEMUDriverConfigPtr cfg = virQEMUDriverGetConfig(driver);
 
     if (virDomainObjIsActive(obj)) {
@@ -6371,6 +6374,7 @@ qemuDomainObjSetJobPhase(virQEMUDriverPtr driver,
               qemuDomainAsyncJobPhaseToString(priv->job.asyncActive, phase));
 
     if (priv->job.asyncOwner && me != priv->job.asyncOwner) {
+        // if owner present, job phase should be set by owner thread, if not warning
         VIR_WARN("'%s' async job is owned by thread %llu",
                  qemuDomainAsyncJobTypeToString(priv->job.asyncActive),
                  priv->job.asyncOwner);
@@ -6378,6 +6382,7 @@ qemuDomainObjSetJobPhase(virQEMUDriverPtr driver,
 
     // set job phase and change job asyncOwner to me
     priv->job.phase = phase;
+    // set async job owner to me
     priv->job.asyncOwner = me;
     qemuDomainObjSaveJob(driver, obj);
 }
@@ -6470,13 +6475,14 @@ qemuDomainObjCanSetJob(qemuDomainObjPrivatePtr priv,
      * job == QEMU_JOB_NONE or agentJob == QEMU_AGENT_JOB_NONE means this time no need to send QMP or QGA command to agent!!!
      * priv->job.active == QEMU_JOB_NONE or priv->job.agentActive == QEMU_AGENT_JOB_NONE means there is no pending qemu job or agent job!!!
      *
-     * normal job  and agent job is exlusive!!!
-     * cases:  previous job              current job
-     *         QEMU_JOB_NONE             no matter what:       can run
-     *         not QEMU_JOB_NONE         QEMU_JOB_NONE         can run
-     *         not QEMU_JOB_NONE         not QEMU_JOB_NONE     wait
+     * normal job and agent job are exlusive separately
      *
-     * cases:  previous agent job        current
+     * cases:  previous job              current job(normal,async)
+     *         QEMU_JOB_NONE             no matter what:                      can run
+     *         not QEMU_JOB_NONE         QEMU_JOB_NONE                        can run
+     *         not QEMU_JOB_NONE         not QEMU_JOB_NONE(async, normal)     wait
+     *
+     * cases:  previous agent job        current agent job
      *         QEMU_AGENT_JOB_NONE       no matter what:       can run
      *         not QEMU_AGENT_JOB_NONE   QEMU_AGENT_JOB_NONE   can run
      *         not QEMU_AGENT_JOB_NONE   not QEMU_JOB_NONE     wait
@@ -7020,6 +7026,7 @@ qemuDomainObjEndAsyncJob(virQEMUDriverPtr driver, virDomainObjPtr obj)
 
     qemuDomainObjResetAsyncJob(priv);
     qemuDomainObjSaveJob(driver, obj);
+    // wake up jobs who blocks on async condition
     virCondBroadcast(&priv->job.asyncCond);
 }
 
@@ -8277,9 +8284,11 @@ qemuDomainRemoveInactiveJob(virQEMUDriverPtr driver,
 
     haveJob = qemuDomainObjBeginJob(driver, vm, QEMU_JOB_MODIFY) >= 0;
 
+    // remove inactive vm from vm store
     qemuDomainRemoveInactive(driver, vm);
 
     if (haveJob)
+        // reset job to NONE and wake up anyone who blocks on me!!!
         qemuDomainObjEndJob(driver, vm);
 }
 

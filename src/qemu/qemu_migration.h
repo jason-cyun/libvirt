@@ -83,6 +83,7 @@
 
 
 typedef enum {
+    // only v2 or v3 phase is defined as v1 has no phase define
     QEMU_MIGRATION_PHASE_NONE = 0,
     QEMU_MIGRATION_PHASE_PERFORM2,
     QEMU_MIGRATION_PHASE_BEGIN3,

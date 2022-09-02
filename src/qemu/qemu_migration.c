@@ -140,6 +140,8 @@ qemuMigrationSrcRestoreDomainState(virQEMUDriverPtr driver, virDomainObjPtr vm)
         reason == VIR_DOMAIN_PAUSED_POSTCOPY_FAILED)
         goto cleanup;
 
+    // go here means state is PAUSED or reason == VIR_DOMAIN_PAUSED_POSTCOPY_FAILED
+    // we should resume vm if it's running before!!!
     if (priv->preMigrationState == VIR_DOMAIN_RUNNING) {
         /* This is basically the only restore possibility that's safe
          * and we should attempt to do */
@@ -408,21 +410,31 @@ qemuMigrationDstStartNBDServer(virQEMUDriverPtr driver,
             goto cleanup;
 
         if (port == 0) {
+            // start one nbd server at qemu by QMP command
             if (nbdPort)
                 port = nbdPort;
             else if (virPortAllocatorAcquire(driver->migrationPorts, &port) < 0)
                 goto exit_monitor;
 
+            /* qmp: nbd-server-start
+             * Start an NBD server listening on the given host and port.
+             * Block devices can then be exported using nbd-server-add
+             *
+             * qmp: nbd-server-add
+             * Export a block node to QEMU’s embedded NBD server.
+             */
             if (qemuMonitorNBDServerStart(priv->mon, listenAddr, port, tls_alias) < 0)
                 goto exit_monitor;
         }
 
+        // add each migrating disk to nbd server
         if (qemuMonitorNBDServerAdd(priv->mon, diskAlias, true) < 0)
             goto exit_monitor;
         if (qemuDomainObjExitMonitor(driver, vm) < 0)
             goto cleanup;
     }
 
+    // nbd server port that qemu listen on for non-shared disk migration
     priv->nbdPort = port;
     ret = 0;
 
@@ -734,6 +746,8 @@ qemuMigrationSrcNBDCopyCancel(virQEMUDriverPtr driver,
         if (failed && !err)
             err = virSaveLastError();
 
+        // if vm is destroyed, I should be waked up, next time if wait again
+        // it will report errro as vm is not active now
         if (virDomainObjWait(vm) < 0)
             goto cleanup;
     }
@@ -1099,6 +1113,13 @@ qemuMigrationSrcIsAllowed(virQEMUDriverPtr driver,
     }
 
     /* following checks don't make sense for offline migration */
+    /* live migration is not allowed if
+     * 1. domain is marked for auto destroy
+     * 2. domain has block job
+     * 3. domain has non-usb hostdev assigned
+     * 4. domain has shared memory
+     * 5. more
+     */
     if (!(flags & VIR_MIGRATE_OFFLINE)) {
         if (qemuProcessAutoDestroyActive(driver, vm)) {
             virReportError(VIR_ERR_OPERATION_INVALID,
@@ -1486,6 +1507,8 @@ qemuMigrationAnyCompleted(virQEMUDriverPtr driver,
     qemuDomainJobInfoPtr jobInfo = priv->job.current;
     int pauseReason;
 
+    // migration finished by check async job status which is set by event handler
+    // when get migration event.
     if (qemuMigrationJobCheckStatus(driver, vm, asyncJob) < 0)
         goto error;
 
@@ -1494,6 +1517,7 @@ qemuMigrationAnyCompleted(virQEMUDriverPtr driver,
         qemuMigrationSrcNBDStorageCopyReady(vm, asyncJob) < 0)
         goto error;
 
+    /* This flag should only be set when run on src host */
     if (flags & QEMU_MIGRATION_COMPLETED_ABORT_ON_ERROR &&
         virDomainObjGetState(vm, &pauseReason) == VIR_DOMAIN_PAUSED &&
         pauseReason == VIR_DOMAIN_PAUSED_IOERROR) {
@@ -1502,6 +1526,7 @@ qemuMigrationAnyCompleted(virQEMUDriverPtr driver,
         goto error;
     }
 
+    // only source check this
     if (dconn && virConnectIsAlive(dconn) <= 0) {
         virReportError(VIR_ERR_OPERATION_FAILED, "%s",
                        _("Lost connection to destination host"));
@@ -1511,6 +1536,7 @@ qemuMigrationAnyCompleted(virQEMUDriverPtr driver,
     /* Migration was paused before serializing device state, let's return to
      * the caller so that it can finish all block jobs, resume migration, and
      * wait again for the real end of the migration.
+     * source side
      */
     if (flags & QEMU_MIGRATION_COMPLETED_PRE_SWITCHOVER &&
         jobInfo->status == QEMU_DOMAIN_JOB_STATUS_PAUSED) {
@@ -1642,8 +1668,10 @@ qemuMigrationDstWaitForCompletion(virQEMUDriverPtr driver,
     if (postcopy)
         flags = QEMU_MIGRATION_COMPLETED_POSTCOPY;
 
+    // completed when status in post-copy or completed!!!
     while ((rv = qemuMigrationAnyCompleted(driver, vm, asyncJob,
                                            NULL, flags)) != 1) {
+        // block vm condition and free vm lock
         if (rv < 0 || virDomainObjWait(vm) < 0)
             return -1;
     }
@@ -1828,6 +1856,8 @@ qemuMigrationDstGetURI(const char *migrateFrom,
 }
 
 
+// for peer to peer(tunneled, native), dst libvirtd does not run this
+// this runs only for direct migration!!!
 int
 qemuMigrationDstRun(virQEMUDriverPtr driver,
                     virDomainObjPtr vm,
@@ -1843,6 +1873,7 @@ qemuMigrationDstRun(virQEMUDriverPtr driver,
     if (qemuDomainObjEnterMonitorAsync(driver, vm, asyncJob) < 0)
         return -1;
 
+    // set migration uri by QMP command not from command line
     rv = qemuMonitorMigrateIncoming(priv->mon, uri);
 
     if (qemuDomainObjExitMonitor(driver, vm) < 0 || rv < 0)
@@ -1960,12 +1991,14 @@ qemuMigrationSrcBeginPhase(virQEMUDriverPtr driver,
      * change protection.
      */
     if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_OUT)
-        // change migration phase to BEGIN3
+        // change migration phase to BEGIN3 for v3 migration(which set asyncActive == QEMU_ASYNC_JOB_MIGRATION_OUT)
         qemuMigrationJobSetPhase(driver, vm, QEMU_MIGRATION_PHASE_BEGIN3);
 
+    // for p2p case, we should check it before, but for non-p2p which calls qemuMigrationSrcBeginPhase as well but not check it before
     if (!qemuMigrationSrcIsAllowed(driver, vm, true, flags))
         goto cleanup;
 
+    // for p2p case, we should check it before, but for non-p2p which calls qemuMigrationSrcBeginPhase as well but not check it before
     if (!(flags & (VIR_MIGRATE_UNSAFE | VIR_MIGRATE_OFFLINE)) &&
         !qemuMigrationSrcIsSafe(vm->def, nmigrate_disks, migrate_disks, flags))
         goto cleanup;
@@ -1985,12 +2018,16 @@ qemuMigrationSrcBeginPhase(virQEMUDriverPtr driver,
         goto cleanup;
     }
 
+    // has non shared disk flag set with 'virsh migrate --copy-storage-all'
     if (flags & (VIR_MIGRATE_NON_SHARED_DISK | VIR_MIGRATE_NON_SHARED_INC)) {
         bool has_drive_mirror =  virQEMUCapsGet(priv->qemuCaps,
                                                 QEMU_CAPS_DRIVE_MIRROR);
 
         if (nmigrate_disks) {
+            // user set which disk we should migrate to remote
             if (has_drive_mirror) {
+                // driver must support drive-mirror command!!!
+                // otherwise migrate lock disk is not supported.
                 size_t i, j;
                 /* Check user requested only known disk targets. */
                 for (i = 0; i < nmigrate_disks; i++) {
@@ -2031,6 +2068,7 @@ qemuMigrationSrcBeginPhase(virQEMUDriverPtr driver,
         }
     }
 
+    // Define the domain as persistent on the destination host after successful migration
     if (virDomainDefHasMemoryHotplug(vm->def) ||
         ((flags & VIR_MIGRATE_PERSIST_DEST) &&
          vm->newDef && virDomainDefHasMemoryHotplug(vm->newDef)))
@@ -2039,6 +2077,7 @@ qemuMigrationSrcBeginPhase(virQEMUDriverPtr driver,
     if (!qemuDomainVcpuHotplugIsInOrder(vm->def) ||
         ((flags & VIR_MIGRATE_PERSIST_DEST) &&
          vm->newDef && !qemuDomainVcpuHotplugIsInOrder(vm->newDef)))
+        //TODO: cookieFlags used for what???
         cookieFlags |= QEMU_MIGRATION_COOKIE_CPU_HOTPLUG;
 
     if (priv->origCPU)
@@ -2053,6 +2092,31 @@ qemuMigrationSrcBeginPhase(virQEMUDriverPtr driver,
     if (!(mig = qemuMigrationEatCookie(driver, vm, NULL, 0, 0)))
         goto cleanup;
 
+    // generate cookie at source that includes several information saved at cookieout
+    /*
+     * </qemu-migration>
+     *   <name>vm100</name>
+     *   <uuid>e8b6545e-3fef-4a98-b222-18b2eed9f2f1</uuid>
+     *   <hostname>dev</hostname>
+     *   <hostuuid>e6bf2fb1-e252-48cc-8ee4-d79167a986ce</hostuuid>
+     *   <feature name='lockstate'/>
+     *   <feature name='memory-hotplug'/>
+     *   <nbd>
+     *     <disk target='vda' capacity='8589934592'/>
+     *     <disk target='vdc' capacity='358400'/>
+     *   </nbd>
+     *   <allowReboot value='yes'/>
+     *   <capabilities>
+     *     <cap name='xbzrle' auto='no'/>
+     *     <cap name='auto-converge' auto='no'/>
+     *     <cap name='rdma-pin-all' auto='no'/>
+     *     <cap name='postcopy-ram' auto='no'/>
+     *     <cap name='compress' auto='no'/>
+     *     <cap name='pause-before-switchover' auto='yes'/>
+     *     <cap name='late-block-activate' auto='no'/>
+     *   </capabilities>
+     * </qemu-migration>
+     */
     if (qemuMigrationBakeCookie(mig, driver, vm,
                                 QEMU_MIGRATION_SOURCE,
                                 cookieout, cookieoutlen,
@@ -2249,20 +2313,31 @@ qemuMigrationDstPrepare(virDomainObjPtr vm,
             listenAddress = "0.0.0.0";
         }
 
-        /* QEMU will be started with
+        /* QEMU will be started with from command line
          *   -incoming protocol:[<IPv6 addr>]:port,
          *   -incoming protocol:<IPv4 addr>:port, or
          *   -incoming protocol:<hostname>:port
+         *
+         *   -incoming tcp:[host]:port[,to=maxport][,ipv4=on|off][,ipv6=on|off]
+         *   -incoming rdma:host:port[,ipv4=on|off][,ipv6=on|off]
+         *   Prepare for incoming migration, listen on a given tcp port.
+         *
+         *   -incoming defer
+         *   Wait for the URI to be specified via migrate_incoming QMP command
          */
         if (encloseAddress)
             incFormat = "%s:[%s]:%d";
         else
             incFormat = "%s:%s:%d";
+        // listenAddress set by source, let dst to bind this address for migration
         if (virAsprintf(&migrateFrom, incFormat,
                         protocol, listenAddress, port) < 0)
             goto cleanup;
     }
 
+    // listenAddress(from source or 0.0.0.0 default) is used for:
+    // migration uri: tcp:listenAddress:port
+    // nbd server started by qemu as well for non-shared disk migration
     inc = qemuProcessIncomingDefNew(priv->qemuCaps, listenAddress,
                                     migrateFrom, fd, NULL);
 
@@ -2311,14 +2386,18 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
 
     virNWFilterReadLockFilterUpdates();
 
+    // flags sent by source with user flags and extra flags added by source libvirtd
     if (flags & VIR_MIGRATE_OFFLINE) {
         if (flags & (VIR_MIGRATE_NON_SHARED_DISK |
                      VIR_MIGRATE_NON_SHARED_INC)) {
+            // offline can not migrate local storage!!!
+            // local storage
             virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                            _("offline migration cannot handle "
                              "non-shared storage"));
             goto cleanup;
         }
+        // otherwise as it's offline, if no persistent, vm is gone after migration at dst side if libvirtd restart at dst
         if (!(flags & VIR_MIGRATE_PERSIST_DEST)) {
             virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                            _("offline migration must be specified with "
@@ -2340,6 +2419,7 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
     if (flags & VIR_MIGRATE_POSTCOPY &&
         (!(flags & VIR_MIGRATE_LIVE) ||
          flags & VIR_MIGRATE_PAUSED)) {
+        // post-copy is not valid ofr non-live, or vm is paused when migration happens.
         virReportError(VIR_ERR_ARGUMENT_UNSUPPORTED, "%s",
                        _("post-copy migration is not supported with non-live "
                          "or paused migration"));
@@ -2358,7 +2438,9 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
     if (!qemuMigrationSrcIsAllowedHostdev(*def))
         goto cleanup;
 
-    /* Let migration hook filter domain XML */
+    /* Let migration hook filter domain XML
+     * hook at: /etc/libvirt/hooks/qemu
+     * */
     if (virHookPresent(VIR_HOOK_DRIVER_QEMU)) {
         char *xml;
         int hookret;
@@ -2368,6 +2450,17 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
                                            VIR_DOMAIN_XML_MIGRATABLE)))
             goto cleanup;
 
+        // run migration hook from disk if present, pass xml to that hook as stdin
+        /* with domain XML sent to standard input of the script.
+         * In this case, the script acts as a filter and
+         * is supposed to modify the domain XML and
+         * print it out on its standard output.
+         * Empty output is identical to copying the input XML without changing it.
+         * In case the script returns failure or the output XML is not valid,
+         * incoming migration will be canceled.
+         * This hook may be used, e.g.,
+         * to change location of disk images for incoming domains.
+         */
         hookret = virHookCall(VIR_HOOK_DRIVER_QEMU, (*def)->name,
                               VIR_HOOK_QEMU_OP_MIGRATE, VIR_HOOK_SUBOP_BEGIN,
                               NULL, xml, &xmlout);
@@ -2382,6 +2475,7 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
             } else {
                 virDomainDefPtr newdef;
 
+                // use the filtered xml if return by qemu hook
                 VIR_DEBUG("Using hook-filtered domain XML: %s", xmlout);
                 newdef = virDomainDefParseString(xmlout, caps, driver->xmlopt, NULL,
                                                  VIR_DOMAIN_DEF_PARSE_INACTIVE |
@@ -2395,6 +2489,7 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
                 }
 
                 virDomainDefFree(*def);
+                // use the new xml
                 *def = newdef;
                 /* We should taint the domain here. However, @vm and therefore
                  * privateData too are still NULL, so just notice the fact and
@@ -2404,7 +2499,7 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
         }
     }
 
-    // add a new vm
+    // add a new vm so that user can see this vm later on
     if (!(vm = virDomainObjListAdd(driver->domains, *def,
                                    driver->xmlopt,
                                    VIR_DOMAIN_OBJ_LIST_ADD_LIVE |
@@ -2418,11 +2513,14 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
         goto cleanup;
 
     if (taint_hook) {
-        /* Domain XML has been altered by a hook script. */
+        /* Domain XML has been altered by a hook script.
+         * if hook runs without modify the xml, hookRun is false!!!
+         */
         priv->hookRun = true;
     }
 
-    // generate cookie at dst libvirtd
+    // eat cookie sent by source libvirtd to qemuMigrationCookiePtr
+    // later on we use this cookie
     if (!(mig = qemuMigrationEatCookie(driver, vm, cookiein, cookieinlen,
                                        QEMU_MIGRATION_COOKIE_LOCKSTATE |
                                        QEMU_MIGRATION_COOKIE_NBD |
@@ -2441,12 +2539,13 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
         goto cleanup;
     }
 
-    // prepare empty storage file as source will migrate local disk to remote
+    // create empty storage file as source will migrate local disk to me
     if (qemuMigrationDstPrecreateStorage(vm, mig->nbd,
                                          nmigrate_disks, migrate_disks,
                                          !!(flags & VIR_MIGRATE_NON_SHARED_INC)) < 0)
         goto cleanup;
 
+    // dst starts migration async job with mask NONE(so that no other job is allowed to run even abort, query, destroy)
     if (qemuMigrationJobStart(driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN,
                               flags) < 0)
         goto cleanup;
@@ -2471,13 +2570,17 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
 
     startFlags = VIR_QEMU_PROCESS_START_AUTODESTROY;
 
+    // now we plan to start qemu process without image as it's paused after starts
     if (qemuProcessInit(driver, vm, mig->cpu, QEMU_ASYNC_JOB_MIGRATION_IN,
                         true, startFlags) < 0)
         goto stopjob;
     stopProcess = true;
 
+    // use cookie infor for new create vm
     priv->allowReboot = mig->allowReboot;
 
+    // port is from migrationuri from source or auto generated by dst
+    // protocol from migrationuri or default 'tcp'
     if (!(incoming = qemuMigrationDstPrepare(vm, tunnel, protocol,
                                              listenAddress, port,
                                              dataFD[0])))
@@ -2489,8 +2592,8 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
     if (qemuProcessPrepareHost(driver, vm, startFlags) < 0)
         goto stopjob;
 
-    // for live migration, start qemu-process but with cpu pause
-    // as no image passed now, if run will cause error!!!
+    // for live migration, start qemu-process but with cpu paused
+    // as no image passed now, if runs, that will cause error!!!
     rv = qemuProcessLaunch(dconn, driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN,
                            incoming, NULL,
                            VIR_NETDEV_VPORT_PROFILE_OP_MIGRATE_IN_START,
@@ -2517,6 +2620,7 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
         goto stopjob;
     }
 
+    // check parameter if supported by vm(dst) here
     if (qemuMigrationParamsCheck(driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN,
                                  migParams, mig->caps->automatic) < 0)
         goto stopjob;
@@ -2534,8 +2638,8 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
             goto stopjob;
     }
 
-    // set migration parameter set by user at source host
     // set migration parameter at dst by QMP command!!!
+    // NOTE: we already save the orignal migration parameter at priv->job->migParams
     if (qemuMigrationParamsApply(driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN,
                                  migParams) < 0)
         goto stopjob;
@@ -2543,6 +2647,7 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
     if (mig->nbd &&
         flags & (VIR_MIGRATE_NON_SHARED_DISK | VIR_MIGRATE_NON_SHARED_INC) &&
         virQEMUCapsGet(priv->qemuCaps, QEMU_CAPS_NBD_SERVER)) {
+        // dst qemu support nbd server caps for non-shared storage migration
         const char *nbdTLSAlias = NULL;
 
         if (flags & VIR_MIGRATE_TLS) {
@@ -2555,6 +2660,8 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
             nbdTLSAlias = tlsAlias;
         }
 
+        // start nbd server if non-shared storage is required and dst qemu supports nbd server cap
+        // nbdPort can be set by user from source or 0 if not set
         if (qemuMigrationDstStartNBDServer(driver, vm, incoming->address,
                                            nmigrate_disks, migrate_disks,
                                            nbdPort, nbdTLSAlias) < 0) {
@@ -2572,16 +2679,21 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
         VIR_DEBUG("Received no lockstate");
     }
 
+    // set migration uri here by qmp: migrate-incoming this is mostly used for direct migration
+    // as we did not set migration uri from command line option.
     if (incoming->deferredURI &&
         qemuMigrationDstRun(driver, vm, incoming->deferredURI,
                             QEMU_ASYNC_JOB_MIGRATION_IN) < 0)
         goto stopjob;
 
+    // for migration, startcpu is false, so it's paused
     if (qemuProcessFinishStartup(driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN,
                                  false, VIR_DOMAIN_PAUSED_MIGRATION) < 0)
         goto stopjob;
 
  done:
+    // bake cookie and send it back to source for eating
+    // the cookie has information that dst using for migration
     if (qemuMigrationBakeCookie(mig, driver, vm,
                                 QEMU_MIGRATION_DESTINATION,
                                 cookieout, cookieoutlen, cookieFlags) < 0) {
@@ -2592,10 +2704,12 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
         VIR_WARN("Unable to encode migration cookie");
     }
 
+    // cleanup when vm is freed
     if (qemuDomainCleanupAdd(vm, qemuMigrationDstPrepareCleanup) < 0)
         goto stopjob;
 
     if (!(flags & VIR_MIGRATE_OFFLINE)) {
+        // if it's offline migration, it's done here at dst side
         virDomainAuditStart(vm, "migrated", true);
         event = virDomainEventLifecycleNewFromObj(vm,
                                          VIR_DOMAIN_EVENT_STARTED,
@@ -2605,11 +2719,20 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
     /* We keep the job active across API calls until the finish() call.
      * This prevents any other APIs being invoked while incoming
      * migration is taking place.
+     *
+     * here we release the owner of async migration job
+     * so that any thread that runs migration rpc can continue the migration process
+     * without warning!!!
+     *
+     * in source side migration runs in a single thread
+     * but in dst side migration job(rpc call) may run in different threads!!!
      */
     qemuMigrationJobContinue(vm);
 
     if (autoPort)
+        // save the migratin port if auto generated
         priv->migrationPort = port;
+
     /* in this case port is not auto selected and we don't need to manage it
      * anymore after cookie is baked
      */
@@ -2644,10 +2767,13 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
     return ret;
 
  stopjob:
+    // stop job when failure happens during migration prepare
+    // reset migration paraemter set this time(send QMP command)
     qemuMigrationParamsReset(driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN,
                              priv->job.migParams, priv->job.apiFlags);
 
     if (stopProcess) {
+        // kill vm in some cases
         unsigned int stopFlags = VIR_QEMU_PROCESS_STOP_MIGRATED;
         if (!relabel)
             stopFlags |= VIR_QEMU_PROCESS_STOP_NO_RELABEL;
@@ -2656,6 +2782,7 @@ qemuMigrationDstPrepareAny(virQEMUDriverPtr driver,
                         QEMU_ASYNC_JOB_MIGRATION_IN, stopFlags);
     }
 
+    // end async job of this vm, so that anyoneblocks async job can continue to run
     qemuMigrationJobFinish(driver, vm);
     goto cleanup;
 }
@@ -2775,16 +2902,25 @@ qemuMigrationDstPrepareDirect(virQEMUDriverPtr driver,
         bool encloseAddress = false;
         const char *incFormat;
 
+        // if no migration uri is set by source
+        // dst will build it by itself with configration automatically
+        //
+        // build these if not set by source: protocol:hostname:port
+        // port: driver->migrationPorts
+        // hostname: GetHostname()
+        // protocol: tcp
         if (virPortAllocatorAcquire(driver->migrationPorts, &port) < 0)
             goto cleanup;
 
         if (migrateHost != NULL) {
+            // migration host set by source, use it
             if (virSocketAddrNumericFamily(migrateHost) == AF_INET6)
                 encloseAddress = true;
 
             if (VIR_STRDUP(hostname, migrateHost) < 0)
                 goto cleanup;
         } else {
+            // get hostname with virGetHostname()
             if ((hostname = virGetHostname()) == NULL)
                 goto cleanup;
         }
@@ -2806,11 +2942,16 @@ qemuMigrationDstPrepareDirect(virQEMUDriverPtr driver,
         else
             incFormat = "%s:%s:%d";
 
+        // uri_out will sent to source with tcp:hostname:port
+        // source(qemu) must resolve hostname, then connect it for migration!!!
+        //
         if (virAsprintf(uri_out, incFormat, "tcp", hostname, port) < 0)
             goto cleanup;
     } else {
+        // source provides migration uri, parsse it, then return it back to source
         bool well_formed_uri;
 
+        // migration uri must have scheme:server, port is optional!!!
         if (!(uri = qemuMigrationAnyParseURI(uri_in, &well_formed_uri)))
             goto cleanup;
 
@@ -2849,14 +2990,18 @@ qemuMigrationDstPrepareDirect(virQEMUDriverPtr driver,
                     goto cleanup;
             }
         } else {
+            // if user set port autPort is false
             port = uri->port;
             autoPort = false;
         }
     }
 
+    // we will send migration uri_out to source
     if (*uri_out)
         VIR_DEBUG("Generated uri_out=%s", *uri_out);
 
+    // here port is set by source or auto generate based on conf.
+    // listenAddress for non-shared disk migration!!!
     ret = qemuMigrationDstPrepareAny(driver, dconn, cookiein, cookieinlen,
                                      cookieout, cookieoutlen, def, origname,
                                      NULL, uri ? uri->scheme : "tcp",
@@ -2940,29 +3085,34 @@ qemuMigrationSrcConfirmPhase(virQEMUDriverPtr driver,
 
     virCheckFlags(QEMU_MIGRATION_FLAGS, -1);
 
+    // retcode returned value of Finish3 operation
+    // retcode == 0, dst Finished ok, otherwise it's NOT ok.
     qemuMigrationJobSetPhase(driver, vm,
                              retcode == 0
                              ? QEMU_MIGRATION_PHASE_CONFIRM3
                              : QEMU_MIGRATION_PHASE_CONFIRM3_CANCELLED);
 
+    // parse cookies get from FINISH3
     if (!(mig = qemuMigrationEatCookie(driver, vm, cookiein, cookieinlen,
                                        QEMU_MIGRATION_COOKIE_STATS)))
         goto cleanup;
 
-    // retcode returned value of Finish operation
-    // retcode == 1, dst Finished failed, oterwise it's ok.
     if (retcode == 0)
         jobInfo = priv->job.completed;
     else
         VIR_FREE(priv->job.completed);
 
-    /* Update times with the values sent by the destination daemon */
+    /* Update times with the values sent by the destination daemon
+     * mig->jobInfo is the migration stats sent by remote libvirtd(dst)
+     */
     if (mig->jobInfo && jobInfo) {
         int reason;
 
         /* We need to refresh migration statistics after a completed post-copy
          * migration since priv->job.completed contains obsolete data from the
          * time we switched to post-copy mode.
+         *
+         * when source goes into post-copy(vcpu is stopped, stop event is reported by qemu), it's paused and dst vm runs!!!!
          */
         if (virDomainObjGetState(vm, &reason) == VIR_DOMAIN_PAUSED &&
             reason == VIR_DOMAIN_PAUSED_POSTCOPY &&
@@ -2971,7 +3121,7 @@ qemuMigrationSrcConfirmPhase(virQEMUDriverPtr driver,
             VIR_WARN("Could not refresh migration statistics");
 
         qemuDomainJobInfoUpdateTime(jobInfo);
-        // job stats sent by remote libvirtd(mig->jobInfo)
+        // update job stats base on stats sent by remote libvirtd(mig->jobInfo)
         jobInfo->timeDeltaSet = mig->jobInfo->timeDeltaSet;
         jobInfo->timeDelta = mig->jobInfo->timeDelta;
         jobInfo->stats.mig.downtime_set = mig->jobInfo->stats.mig.downtime_set;
@@ -2989,7 +3139,7 @@ qemuMigrationSrcConfirmPhase(virQEMUDriverPtr driver,
          * up domain shutdown until SPICE server transfers its data */
         qemuMigrationSrcWaitForSpice(vm);
 
-        // stop vm at source as migrated!!!
+        // stop vm(destroy vm, kill vm process, actually now vm is 'paused' after migrated) at source as migrated!!!
         qemuProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED,
                         QEMU_ASYNC_JOB_MIGRATION_OUT,
                         VIR_QEMU_PROCESS_STOP_MIGRATED);
@@ -3011,16 +3161,20 @@ qemuMigrationSrcConfirmPhase(virQEMUDriverPtr driver,
         virSetError(orig_err);
         virFreeError(orig_err);
 
+        // NOTE: post-copy can leave the source in pause state!!!
         if (virDomainObjGetState(vm, &reason) == VIR_DOMAIN_PAUSED &&
             reason == VIR_DOMAIN_PAUSED_POSTCOPY) {
             qemuMigrationAnyPostcopyFailed(driver, vm);
         } else if (qemuMigrationSrcRestoreDomainState(driver, vm)) {
+            // restart vm if it's previous stat is running after migration failed
             event = virDomainEventLifecycleNewFromObj(vm,
                                                       VIR_DOMAIN_EVENT_RESUMED,
                                                       VIR_DOMAIN_EVENT_RESUMED_MIGRATED);
             virObjectEventStateQueue(driver->domainEventState, event);
         }
 
+        // reset migration parameter after migration failed, as we restoring vm state, save it to disk
+        // NO need to reset migration parameter after migration ok, as if migration is ok, vm is destroy(kill) at source side!!!
         qemuMigrationParamsReset(driver, vm, QEMU_ASYNC_JOB_MIGRATION_OUT,
                                  priv->job.migParams, priv->job.apiFlags);
 
@@ -3084,27 +3238,38 @@ qemuMigrationSrcConfirm(virQEMUDriverPtr driver,
 
 
 enum qemuMigrationDestinationType {
+    // for tcp, qemu itself connect with remote bind address
     MIGRATION_DEST_HOST,
+    // for rdma, libvirtd connect with qemu bind address, then pass it to qemu
     MIGRATION_DEST_CONNECT_HOST,
+    // for tunneled case
     MIGRATION_DEST_FD,
 };
 
 enum qemuMigrationForwardType {
+    // native transport
     MIGRATION_FWD_DIRECT,
+    //tunneled
     MIGRATION_FWD_STREAM,
 };
 
 typedef struct _qemuMigrationSpec qemuMigrationSpec;
 typedef qemuMigrationSpec *qemuMigrationSpecPtr;
 struct _qemuMigrationSpec {
+    // rdma(MIGRATION_DEST_CONNECT_HOST),
+    // tcp(MIGRATION_DEST_HOST),
+    // pipe(MIGRATION_DEST_FD)
     enum qemuMigrationDestinationType destType;
     union {
+        // native transport
+        // migration uri which remote qemu binds to
         struct {
             const char *protocol;
             const char *name;
             int port;
         } host;
 
+        // tunneled, pipe fd
         struct {
             int qemu;
             int local;
@@ -3113,8 +3278,8 @@ struct _qemuMigrationSpec {
 
     enum qemuMigrationForwardType fwdType;
     union {
-        virStreamPtr stream;
-    } fwd;
+        virStreamPtr stream; // for tunneled type, stream is the underlying tcp used for data transfer
+    } fwd; // MIGRATION_FWD_DIRECT fwd is not used, as qemu takes care of the stream transfer!!!
 };
 
 #define TUNNEL_SEND_BUF_SIZE 65536
@@ -3428,7 +3593,9 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
               NULLSTR(graphicsuri), nmigrate_disks, migrate_disks);
 
     if (flags & VIR_MIGRATE_NON_SHARED_DISK) {
+        // migrate_flags tell source qemu what to migration(disk here) by QMP command
         migrate_flags |= QEMU_MONITOR_MIGRATE_NON_SHARED_DISK;
+        // cookie tell what cookie I will sent to peer.
         cookieFlags |= QEMU_MIGRATION_COOKIE_NBD;
     }
 
@@ -3450,6 +3617,8 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
         priv->signalIOError = abort_on_error;
 
     if (flags & VIR_MIGRATE_PERSIST_DEST) {
+        // if persistent on target, here we generate the persistentDef
+        // and send it by cookie when Finish3 phase !!!
         if (persist_xml) {
             if (!(persistDef = qemuMigrationAnyPrepareDef(driver, persist_xml,
                                                           NULL, NULL)))
@@ -3477,6 +3646,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
                                  migParams, mig->caps->automatic) < 0)
         goto error;
 
+    // set tls in migration parameter
     if (flags & VIR_MIGRATE_TLS) {
         const char *hostname = NULL;
 
@@ -3515,7 +3685,9 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
                 goto error;
             }
 
-            /* This will update migrate_flags on success */
+            /* This will update migrate_flags on success, prepare disk mirror
+             * for each disk to migration
+             */
             if (qemuMigrationSrcNBDStorageCopy(driver, vm, mig,
                                                spec->dest.host.name,
                                                migrate_speed,
@@ -3540,6 +3712,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
             goto error;
     }
 
+    // get monitor lock and free vm lock!!!
     if (qemuDomainObjEnterMonitorAsync(driver, vm,
                                        QEMU_ASYNC_JOB_MIGRATION_OUT) < 0)
         goto error;
@@ -3555,13 +3728,13 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
         goto exit_monitor;
     }
 
-    // set migration speed at source host
+    // set migration speed at source host by QMP even async migration job is there
+    // as it's mask allowing MIGRATION_OP!!!
     if (qemuMonitorSetMigrationSpeed(priv->mon, migrate_speed) < 0)
         goto exit_monitor;
 
-    /* connect to the destination qemu if needed */
+    /* rdma: connect to the destination qemu if needed */
     if (spec->destType == MIGRATION_DEST_CONNECT_HOST &&
-        // connect with remote libvirtd for non-tunnel
         qemuMigrationSrcConnect(driver, vm, spec) < 0) {
         goto exit_monitor;
     }
@@ -3574,25 +3747,30 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
 
     rc = -1;
     switch (spec->destType) {
+    // tcp:
     case MIGRATION_DEST_HOST:
         if (STREQ(spec->dest.host.protocol, "rdma") &&
             virProcessSetMaxMemLock(vm->pid, vm->def->mem.hard_limit << 10) < 0) {
             goto exit_monitor;
         }
-        // start migration with remote by send QMP command
-        // later on qemu will start protocol with remote qemu process
+        // start migration with remote by send QMP command to source qemu
+        // later on qemu will start conect with remote qemu process with protocol:host:port
         // and migration starts between two qemu-processed on different hosts
+        //
+        // here only trigger migrate QMP command
         rc = qemuMonitorMigrateToHost(priv->mon, migrate_flags,
                                       spec->dest.host.protocol,
                                       spec->dest.host.name,
                                       spec->dest.host.port);
         break;
 
+     // rdma:
     case MIGRATION_DEST_CONNECT_HOST:
         /* handled above and transformed into MIGRATION_DEST_FD */
         break;
 
     case MIGRATION_DEST_FD:
+        // for tunneled case
         if (spec->fwdType != MIGRATION_FWD_DIRECT) {
             fd = spec->dest.fd.local; // read side of pipe at source
             spec->dest.fd.local = -1;
@@ -3605,6 +3783,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
         break;
     }
 
+    // get vm lock(vm lock protects monitor as well) and free monitor lock which is small
     if (qemuDomainObjExitMonitor(driver, vm) < 0 || rc < 0)
         goto error;
 
@@ -3613,7 +3792,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
     cancel = true;
 
     if (spec->fwdType != MIGRATION_FWD_DIRECT) {
-        // iothread info based on stream and read pipe
+        // iothread info based on stream and read pipe(tunnel thread for data transfer)
         if (!(iothread = qemuMigrationSrcStartTunnel(spec->fwd.stream, fd)))
             goto error;
         /* If we've created a tunnel, then the 'fd' will be closed in the
@@ -3630,7 +3809,11 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
     if (flags & VIR_MIGRATE_POSTCOPY)
         waitFlags |= QEMU_MIGRATION_COMPLETED_POSTCOPY;
 
-    // wait for migration until finish block here at source side
+    // wait for migration until finish block here at source side.
+    // returns
+    // 1. error
+    // 2. postcopy
+    // 3. completed
     rc = qemuMigrationSrcWaitForCompletion(driver, vm,
                                            QEMU_ASYNC_JOB_MIGRATION_OUT,
                                            dconn, waitFlags);
@@ -3647,9 +3830,11 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
      * (for old QEMU which does not send events) to release the lock state.
      */
     if (priv->monJSON) {
+        // migration: post-copy or completed, a STOP event will be reported by qemu to libvirtd
         while (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_RUNNING) {
             // stop vm at source when migration finish
             priv->signalStop = true;
+            // block here, wake up due to STOP event
             rc = virDomainObjWait(vm);
             priv->signalStop = false;
             if (rc < 0)
@@ -3660,6 +3845,8 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
         goto error;
     }
 
+    // cancel drive mirror as we setup drive mirror for non-storage migration
+    // here we remove that mirror
     if (mig->nbd &&
         qemuMigrationSrcNBDCopyCancel(driver, vm, true,
                                       QEMU_ASYNC_JOB_MIGRATION_OUT,
@@ -3671,6 +3858,8 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
      * end of the migration.
      */
     if (priv->job.current->status == QEMU_DOMAIN_JOB_STATUS_PAUSED) {
+        // migration will be paused if block job runs for disk
+        // here we continue migration with QMP 'migrate-continue' if it's paused
         if (qemuMigrationSrcContinue(driver, vm,
                                      QEMU_MONITOR_MIGRATION_STATUS_PRE_SWITCHOVER,
                                      QEMU_ASYNC_JOB_MIGRATION_OUT) < 0)
@@ -3678,6 +3867,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
 
         waitFlags ^= QEMU_MIGRATION_COMPLETED_PRE_SWITCHOVER;
 
+        // wait migration completed after we resume migration.
         rc = qemuMigrationSrcWaitForCompletion(driver, vm,
                                                QEMU_ASYNC_JOB_MIGRATION_OUT,
                                                dconn, waitFlags);
@@ -3694,11 +3884,13 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
         qemuMigrationIOThreadPtr io;
 
         VIR_STEAL_PTR(io, iothread);
+        // stop iothread which sending data for tunneled case
         if (qemuMigrationSrcStopTunnel(io, false) < 0)
             goto error;
     }
 
     if (priv->job.completed) {
+        // update migration time at source side
         priv->job.completed->stopped = priv->job.current->stopped;
         qemuDomainJobInfoUpdateTime(priv->job.completed);
         qemuDomainJobInfoUpdateDowntime(priv->job.completed);
@@ -3708,6 +3900,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
     cookieFlags |= QEMU_MIGRATION_COOKIE_NETWORK |
                    QEMU_MIGRATION_COOKIE_STATS;
 
+    // add persistenDef to cookie that will be sent to dst at next phase FINISH3
     if (qemuMigrationCookieAddPersistent(mig, &persistDef) < 0 ||
         qemuMigrationBakeCookie(mig, driver, vm,
                                 QEMU_MIGRATION_SOURCE,
@@ -3741,6 +3934,7 @@ qemuMigrationSrcRun(virQEMUDriverPtr driver,
             priv->job.current->status != QEMU_DOMAIN_JOB_STATUS_QEMU_COMPLETED &&
             qemuDomainObjEnterMonitorAsync(driver, vm,
                                            QEMU_ASYNC_JOB_MIGRATION_OUT) == 0) {
+            //for error send QMP:  "migrate_cancel"
             qemuMonitorMigrateCancel(priv->mon);
             ignore_value(qemuDomainObjExitMonitor(driver, vm));
         }
@@ -3797,6 +3991,8 @@ qemuMigrationSrcPerformNative(virQEMUDriverPtr driver,
               cookieout, cookieoutlen, flags, resource,
               NULLSTR(graphicsuri), nmigrate_disks, migrate_disks);
 
+    // uri is the migration uri sent back by dst libvirtd
+    // parse uri from string
     if (!(uribits = qemuMigrationAnyParseURI(uri, NULL)))
         return -1;
 
@@ -3826,6 +4022,7 @@ qemuMigrationSrcPerformNative(virQEMUDriverPtr driver,
         spec.destType = MIGRATION_DEST_CONNECT_HOST;
     else
         spec.destType = MIGRATION_DEST_HOST;
+
     spec.dest.host.protocol = uribits->scheme;
     spec.dest.host.name = uribits->server;
     spec.dest.host.port = uribits->port;
@@ -4111,6 +4308,8 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
      * a single job.  */
 
     // generate migration cookie at source and dump xml of this vm(or use it from pased in xmlin)
+    // dom_xml used for new vm at remote libivrtd
+    // cookieout: migration information sent to remote libvirtd, onside bake cookie, the other side eat it
     dom_xml = qemuMigrationSrcBeginPhase(driver, vm, xmlin, dname,
                                          &cookieout, &cookieoutlen,
                                          nmigrate_disks, migrate_disks, flags);
@@ -4118,7 +4317,10 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
         goto cleanup;
 
     if (useParams) {
+        // build parameters from separate variables!!!
         // remote libvirtd supports migration parameter (v3 extenions)
+        // add dom_xml from user or vm->def to migration parameter that will be transferred to dst host
+        // use it to create a new vm
         if (virTypedParamsAddString(&params, &nparams, &maxparams,
                                     VIR_MIGRATE_PARAM_DEST_XML, dom_xml) < 0)
             goto cleanup;
@@ -4165,8 +4367,12 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
             goto cleanup;
     }
 
+    // if source is paused, we pass PAUSE to dst as well, so that it will not start vm at dst
+    // that means after migration, vm is paused at dst, shutoff at source.
     if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED)
         flags |= VIR_MIGRATE_PAUSED;
+    // flags comes from user with extra we added during processing at source side
+    // abort on error and auto converge are used only on source side, hence remove it when passing flags to remote libvirtd
 
     destflags = flags & ~(VIR_MIGRATE_ABORT_ON_ERROR |
                           VIR_MIGRATE_AUTO_CONVERGE);
@@ -4196,8 +4402,12 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
             goto cleanup;
     } else {
         qemuDomainObjEnterRemote(vm);
+        // as we will do rpc all, release vm lock temporary.
         if (useParams) {
+            // we pass cookiein and params, destflags to remote libvirtd
             // prepare at dst call prepare3 rpc call!!!
+            //
+            // with dst prepared, we got uri_out(migration uri) and cookieout
             ret = dconn->driver->domainMigratePrepare3Params
                 (dconn, params, nparams, cookiein, cookieinlen,
                  &cookieout, &cookieoutlen, &uri_out, destflags);
@@ -4206,6 +4416,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
                 (dconn, cookiein, cookieinlen, &cookieout, &cookieoutlen,
                  uri, &uri_out, destflags, dname, bandwidth, dom_xml);
         }
+        // vm lock is got here
         if (qemuDomainObjExitRemote(vm, !offline) < 0)
             goto cleanup;
     }
@@ -4225,6 +4436,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
         // get migration uri return by remote libvirtd
         uri = uri_out;
         if (useParams &&
+            // update migration uri set in parameter
             virTypedParamsReplaceString(&params, &nparams,
                                         VIR_MIGRATE_PARAM_URI, uri_out) < 0) {
             orig_err = virSaveLastError();
@@ -4246,6 +4458,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
     // after prepare at dst, we step in perform3 phase here.
     qemuMigrationJobSetPhase(driver, vm, QEMU_MIGRATION_PHASE_PERFORM3);
     VIR_FREE(cookiein);
+    // use the cookie sent by remote libvirt when rpc prepare3 as next cookiein
     cookiein = cookieout;
     cookieinlen = cookieoutlen;
     cookieout = NULL;
@@ -4258,7 +4471,9 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
                                             nmigrate_disks, migrate_disks,
                                             migParams);
     } else {
-        // perform native migration
+        // perform native migration, block until migration finished,
+        // no rpc call for perform, only source trigger migration by QMP and wait for its completion
+        // cookieout generated by source libvirtd based on cookiein
         ret = qemuMigrationSrcPerformNative(driver, vm, persist_xml, uri,
                                             cookiein, cookieinlen,
                                             &cookieout, &cookieoutlen,
@@ -4271,6 +4486,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
     if (ret < 0) {
         orig_err = virSaveLastError();
     } else {
+        // if migration completed, set phase to PERFORM3_DONE
         qemuMigrationJobSetPhase(driver, vm,
                                  QEMU_MIGRATION_PHASE_PERFORM3_DONE);
     }
@@ -4297,15 +4513,19 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
     if (useParams) {
         if (virTypedParamsGetString(params, nparams,
                                     VIR_MIGRATE_PARAM_DEST_NAME, NULL) <= 0 &&
+            // if user does not set domain name, set domain name in migration parameter from source->def->name
             virTypedParamsReplaceString(&params, &nparams,
                                         VIR_MIGRATE_PARAM_DEST_NAME,
                                         vm->def->name) < 0) {
             ddomain = NULL;
         } else {
+            // release vm lock as rpc call
             qemuDomainObjEnterRemote(vm);
+            // after Finish3 returns the remote libvirtd exits the migration process migration job is gone!!!
             ddomain = dconn->driver->domainMigrateFinish3Params
                 (dconn, params, nparams, cookiein, cookieinlen,
                  &cookieout, &cookieoutlen, destflags, cancelled);
+            // get vm lock again
             if (qemuDomainObjExitRemote(vm, !offline) < 0)
                 goto cleanup;
         }
@@ -4320,6 +4540,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
             goto cleanup;
     }
 
+    // cancelled is true when Perform error!!!
     if (cancelled) {
         if (ddomain) {
             VIR_ERROR(_("finish step ignored that migration was cancelled"));
@@ -4356,6 +4577,9 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
      * ddomain could in fact be running on the dest.
      * The lock manager plugins should take care of
      * safety in this scenario.
+     *
+     *
+     * now cancelled == return value of Finish3
      */
     cancelled = ddomain == NULL;
 
@@ -4366,15 +4590,18 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
         orig_err = virSaveLastError();
 
     /*
-     * If cancelled, then src VM will be restarted, else
+     * If cancelled, then src VM will be restarted(may be in paused state due to post-copy error), else
      * it will be killed
      */
     VIR_DEBUG("Confirm3 %p cancelled=%d vm=%p", sconn, cancelled, vm);
     VIR_FREE(cookiein);
+    // cookiein now is cookie return by Finish3
     cookiein = cookieout;
     cookieinlen = cookieoutlen;
     cookieout = NULL;
     cookieoutlen = 0;
+
+    // confirm means: update jobinfo stats got from dst libvirtd and kill vm if migration is ok, or resume it if fails
     ret = qemuMigrationSrcConfirmPhase(driver, vm,
                                        cookiein, cookieinlen,
                                        flags, cancelled);
@@ -4454,6 +4681,7 @@ qemuMigrationSrcPerformPeer2Peer(virQEMUDriverPtr driver,
                                  unsigned long resource,
                                  bool *v3proto)
 {
+    // this is used by p2p and tunneled case
     int ret = -1;
     virConnectPtr dconn = NULL;
     bool p2p;
@@ -4497,9 +4725,12 @@ qemuMigrationSrcPerformPeer2Peer(virQEMUDriverPtr driver,
      * destination side is completely setup before we touch the source
      */
 
+    // enter remote: release vm lock!!! when connection with remote libvirtd
     qemuDomainObjEnterRemote(vm);
     // connect with remote libvirtd with dconnuri
     dconn = virConnectOpenAuth(dconnuri, &virConnectAuthConfig, 0);
+
+    // get vm lock again after connection setup or fail
     if (qemuDomainObjExitRemote(vm, !offline) < 0)
         goto cleanup;
 
@@ -4517,13 +4748,18 @@ qemuMigrationSrcPerformPeer2Peer(virQEMUDriverPtr driver,
         goto cleanup;
 
     // callback when connection with remote libivirtd closed
+    // callback does: wakeup anyone who block on vm condition
+    //
+    // TODO: should we relase vm lock here as it's rpc call?
+    // NO, as vm is used in register close callback???
     if (virConnectRegisterCloseCallback(dconn, qemuMigrationSrcConnectionClosed,
                                         vm, NULL) < 0) {
         goto cleanup;
     }
 
+    // release vm lock when doing network operation(connect, rpc call)
     qemuDomainObjEnterRemote(vm);
-    // check if remote libvirtd supports p2p
+    // check if remote libvirtd supports p2p by rpc call
     p2p = VIR_DRV_SUPPORTS_FEATURE(dconn->driver, dconn,
                                    VIR_DRV_FEATURE_MIGRATION_P2P);
         /* v3proto reflects whether the caller used Perform3, but with
@@ -4531,16 +4767,18 @@ qemuMigrationSrcPerformPeer2Peer(virQEMUDriverPtr driver,
          * were used, we decide protocol based on what target supports
          */
 
-    // check if remote libvirtd supports v3 migration
+    // check if remote libvirtd supports v3 migration by rpc call
     *v3proto = VIR_DRV_SUPPORTS_FEATURE(dconn->driver, dconn,
                                         VIR_DRV_FEATURE_MIGRATION_V3);
-    // check if remote libvirtd supports v3 migration extension
+    // check if remote libvirtd supports v3 migration extension by rpc call
     useParams = VIR_DRV_SUPPORTS_FEATURE(dconn->driver, dconn,
                                          VIR_DRV_FEATURE_MIGRATION_PARAMS);
     if (offline)
         // check if remote libvirtd supports offline
         dstOffline = VIR_DRV_SUPPORTS_FEATURE(dconn->driver, dconn,
                                               VIR_DRV_FEATURE_MIGRATION_OFFLINE);
+
+    // get vm lock again
     if (qemuDomainObjExitRemote(vm, !offline) < 0)
         goto cleanup;
 
@@ -4589,9 +4827,11 @@ qemuMigrationSrcPerformPeer2Peer(virQEMUDriverPtr driver,
 
  cleanup:
     orig_err = virSaveLastError();
+    // relase vm lock, we do unregister closecallback which is rpc call
     qemuDomainObjEnterRemote(vm);
     virConnectUnregisterCloseCallback(dconn, qemuMigrationSrcConnectionClosed);
     virObjectUnref(dconn);
+    // get vm lock again
     ignore_value(qemuDomainObjExitRemote(vm, false));
     if (orig_err) {
         virSetError(orig_err);
@@ -4636,10 +4876,12 @@ qemuMigrationSrcPerformJob(virQEMUDriverPtr driver,
     virQEMUDriverConfigPtr cfg = virQEMUDriverGetConfig(driver);
     qemuDomainObjPrivatePtr priv = vm->privateData;
 
+    // source set async migration job
     if (qemuMigrationJobStart(driver, vm, QEMU_ASYNC_JOB_MIGRATION_OUT,
                               flags) < 0)
         goto cleanup;
 
+    // live migration but vm is not active
     if (!(flags & VIR_MIGRATE_OFFLINE) && virDomainObjCheckActive(vm) < 0)
         goto endjob;
 
@@ -4648,11 +4890,12 @@ qemuMigrationSrcPerformJob(virQEMUDriverPtr driver,
         goto endjob;
 
     // migrate local disk without unsafe or offline flags set
+    // or disk with cache!=none both are unsafe!!!
     if (!(flags & (VIR_MIGRATE_UNSAFE | VIR_MIGRATE_OFFLINE)) &&
         !qemuMigrationSrcIsSafe(vm->def, nmigrate_disks, migrate_disks, flags))
         goto endjob;
 
-    // save the vm state before migration used for restore.
+    // save the vm state before migration used for restore vm for migration error that cause vm paused.
     qemuMigrationSrcStoreDomainState(vm);
 
     if ((flags & (VIR_MIGRATE_TUNNELLED | VIR_MIGRATE_PEER2PEER))) {
@@ -4676,6 +4919,7 @@ qemuMigrationSrcPerformJob(virQEMUDriverPtr driver,
      * confirm step.
      */
     if (!v3proto) {
+        // if it's v3, we already kill the vm at confirm step above
         qemuProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED,
                         QEMU_ASYNC_JOB_MIGRATION_OUT,
                         VIR_QEMU_PROCESS_STOP_MIGRATED);
@@ -4693,17 +4937,24 @@ qemuMigrationSrcPerformJob(virQEMUDriverPtr driver,
      * here
      */
     if (!v3proto && ret < 0)
+        // if v3 and error happens(vm is still running), reset migration parameters
+        // by sending QMP command(MIGRATION_OP is allowed) even async migration job is not finished now
         qemuMigrationParamsReset(driver, vm, QEMU_ASYNC_JOB_MIGRATION_OUT,
                                  priv->job.migParams, priv->job.apiFlags);
 
     if (qemuMigrationSrcRestoreDomainState(driver, vm)) {
+        // restore vm if migration error happens
         event = virDomainEventLifecycleNewFromObj(vm,
                                          VIR_DOMAIN_EVENT_RESUMED,
                                          VIR_DOMAIN_EVENT_RESUMED_MIGRATED);
     }
 
+    // migration finishes(confirmed), error or ok, finish async job, set it to NONE
+    // so other operation blocks on it can continue
     qemuMigrationJobFinish(driver, vm);
     if (!virDomainObjIsActive(vm) && ret == 0) {
+        // successfully migration and vm is not active now
+        // if undefined_source is set, remove config of this vm from /etc
         if (flags & VIR_MIGRATE_UNDEFINE_SOURCE) {
             virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm);
             vm->persistent = 0;
@@ -4946,7 +5197,9 @@ qemuMigrationDstPersist(virQEMUDriverPtr driver,
         goto cleanup;
 
     vm->persistent = 1;
+    // oldDef is the def when Prepare3
     oldDef = vm->newDef;
+    // def from cookie use it and free oldDef
     vm->newDef = qemuMigrationCookieGetPersistent(mig);
 
     if (!(vmdef = virDomainObjGetPersistentDef(caps, driver->xmlopt, vm)))
@@ -4980,6 +5233,7 @@ qemuMigrationDstPersist(virQEMUDriverPtr driver,
 }
 
 
+// as this can be called by V2 and V3, v3proto indicate who calls me
 virDomainPtr
 qemuMigrationDstFinish(virQEMUDriverPtr driver,
                        virConnectPtr dconn,
@@ -5024,11 +5278,12 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
                                v3proto ? QEMU_MIGRATION_PHASE_FINISH3
                                        : QEMU_MIGRATION_PHASE_FINISH2);
 
-    // remove cleanup for migrationPort
+    // remove cleanup for migration
     // vm cleanup runs when stop vm process
     qemuDomainCleanupRemove(vm, qemuMigrationDstPrepareCleanup);
     VIR_FREE(priv->job.completed);
 
+    // cookie_flags indicates what cookie I will collect and send it back to source
     cookie_flags = QEMU_MIGRATION_COOKIE_NETWORK |
                    QEMU_MIGRATION_COOKIE_STATS |
                    QEMU_MIGRATION_COOKIE_NBD;
@@ -5047,7 +5302,10 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
         goto endjob;
     }
 
+    // check Perform3 return value
     if (retcode != 0) {
+        // retcode is return value of Perform3 passed by source when do FINISH3 call
+
         /* Check for a possible error on the monitor in case Finish was called
          * earlier than monitor EOF handler got a chance to process the error
          */
@@ -5068,9 +5326,12 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
     if (mig->network && qemuMigrationDstOPDRelocate(driver, vm, mig) < 0)
         VIR_WARN("unable to provide network data for relocation");
 
+    // stop ndb server as Perform3 finished
     if (qemuMigrationDstStopNBDServer(driver, vm, mig) < 0)
         goto endjob;
 
+    // why refresh channel state
+    // NOTE: as connect agent will use the the channel state!!!
     if (qemuRefreshVirtioChannelState(driver, vm,
                                       QEMU_ASYNC_JOB_MIGRATION_IN) < 0)
         goto endjob;
@@ -5079,6 +5340,7 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
         goto endjob;
 
     if (flags & VIR_MIGRATE_PERSIST_DEST) {
+        // persist vm, write conf to /etc, conf is from cookie!!!
         if (qemuMigrationDstPersist(driver, vm, mig, !v3proto) < 0) {
             /* Hmpf.  Migration was successful, but making it persistent
              * was not.  If we report successful, then when this domain
@@ -5105,6 +5367,8 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
      * job status changed based on QMP event reported by local qemu process or migration ops
      * qemuMigrationDstWaitForCompletion returns when job status in:
      * Paused, PostCopy, Completed.
+     *
+     * even source finish migration(completed), dst here should wait for completion as well
      */
     if (qemuMigrationDstWaitForCompletion(driver, vm,
                                           QEMU_ASYNC_JOB_MIGRATION_IN,
@@ -5117,7 +5381,8 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
     }
 
     /* Now that the state data was transferred we can refresh the actual state
-     * of the devices */
+     * of the devices(devices, memory, disk)
+     */
     if (qemuProcessRefreshState(driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN) < 0) {
         /* Similarly to the case above v2 protocol will not be able to recover
          * from this. Let's ignore this and perhaps stuff will not break. */
@@ -5125,13 +5390,21 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
             goto endjob;
     }
 
+    // wait returns due to goes in post-copy status
     if (priv->job.current->status == QEMU_DOMAIN_JOB_STATUS_POSTCOPY)
         inPostCopy = true;
 
     if (!(flags & VIR_MIGRATE_PAUSED)) {
+        // if source is paued, after migration, it's paused as well, we does not start vm as well!!!
+        // but source vm is shutoff if migration is ok.
+        //
         /* run 'cont' on the destination, which allows migration on qemu
          * >= 0.10.6 to work properly.  This isn't strictly necessary on
          * older qemu's, but it also doesn't hurt anything there
+         *
+         *
+         * start vm(make it run) after migrated or switch into postcopy
+         * libvirtd issues start vm, not qemu itself
          */
         if (qemuProcessStartCPUs(driver, vm,
                                  inPostCopy ? VIR_DOMAIN_RUNNING_POSTCOPY
@@ -5170,6 +5443,7 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
         jobInfo = mig->jobInfo;
         mig->jobInfo = NULL;
 
+        // update jobinfo(stats) when migration finished or in post-copy
         if (jobInfo->sent && timeReceived) {
             jobInfo->timeDelta = timeReceived - jobInfo->sent;
             jobInfo->received = timeReceived;
@@ -5181,12 +5455,13 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
     }
 
     if (inPostCopy) {
-        // if in post copy, wait for completed
+        // if in post copy, wait for migration completed event!!!
         if (qemuMigrationDstWaitForCompletion(driver, vm,
                                               QEMU_ASYNC_JOB_MIGRATION_IN,
                                               false) < 0) {
             goto endjob;
         }
+
         if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_RUNNING) {
             virDomainObjSetState(vm,
                                  VIR_DOMAIN_RUNNING,
@@ -5201,6 +5476,8 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
                                               VIR_DOMAIN_EVENT_RESUMED_MIGRATED);
     virObjectEventStateQueue(driver->domainEventState, event);
 
+    // paused that means source vm is paused before migration
+    // after migration, vm at dst is still paused!!!
     if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED) {
         virDomainObjSetState(vm, VIR_DOMAIN_PAUSED, VIR_DOMAIN_PAUSED_USER);
         event = virDomainEventLifecycleNewFromObj(vm,
@@ -5209,6 +5486,7 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
         virObjectEventStateQueue(driver->domainEventState, event);
     }
 
+    // pause is active as well!!!
     if (virDomainObjIsActive(vm) &&
         virDomainSaveStatus(driver->xmlopt, cfg->stateDir, vm, driver->caps) < 0)
         VIR_WARN("Failed to save status on vm %s", vm->def->name);
@@ -5236,11 +5514,50 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
 
     if (dom) {
         if (jobInfo) {
+            // save jobinfostats) to job.completed
             VIR_STEAL_PTR(priv->job.completed, jobInfo);
             priv->job.completed->status = QEMU_DOMAIN_JOB_STATUS_COMPLETED;
             priv->job.completed->statsType = QEMU_DOMAIN_JOB_STATS_TYPE_MIGRATION;
         }
 
+        // generate cookie with stats from dst side when src calls FINISH
+        /*
+         * </qemu-migration>
+         *   <name>vm100</name>
+         *   <uuid>e8b6545e-3fef-4a98-b222-18b2eed9f2f1</uuid>
+         *   <hostname>dev</hostname>
+         *   <hostuuid>1c66e1c0-e1c1-4ef8-986b-956d299a11cd</hostuuid>
+         *   <nbd>
+         *     <disk target='vda' capacity='8589934592'/>
+         *     <disk target='vdc' capacity='358400'/>
+         *   </nbd>
+         *   <statistics>
+         *     <started>1661932320325</started>
+         *     <stopped>1661933165088</stopped>
+         *     <sent>1661933165173</sent>
+         *     <time_elapsed>844848</time_elapsed>
+         *     <downtime>85</downtime>
+         *     <setup_time>58</setup_time>
+         *     <memory_total>1615929344</memory_total>
+         *     <memory_processed>310983868</memory_processed>
+         *     <memory_remaining>0</memory_remaining>
+         *     <memory_bps>13542105</memory_bps>
+         *     <memory_constant>321599</memory_constant>
+         *     <memory_normal>75070</memory_normal>
+         *     <memory_normal_bytes>307486720</memory_normal_bytes>
+         *     <memory_dirty_rate>0</memory_dirty_rate>
+         *     <memory_iteration>5</memory_iteration>
+         *     <memory_page_size>4096</memory_page_size>
+         *     <disk_total>0</disk_total>
+         *     <disk_processed>0</disk_processed>
+         *     <disk_remaining>0</disk_remaining>
+         *     <disk_bps>0</disk_bps>
+         *     <auto_converge_throttle>0</auto_converge_throttle>
+         *   </statistics>
+         * </qemu-migration>
+         *
+         * create FINISH3 cookie
+         */
         if (qemuMigrationBakeCookie(mig, driver, vm,
                                     QEMU_MIGRATION_DESTINATION,
                                     cookieout, cookieoutlen,
@@ -5254,9 +5571,11 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
             VIR_FREE(priv->job.completed);
     }
 
+    // reset migration parameter from priv->job.migParam which stores the orginal setting.
     qemuMigrationParamsReset(driver, vm, QEMU_ASYNC_JOB_MIGRATION_IN,
                              priv->job.migParams, priv->job.apiFlags);
 
+    // migration finished, end async job, so that other jobs blocks on async can continue to run
     qemuMigrationJobFinish(driver, vm);
     if (!virDomainObjIsActive(vm))
         qemuDomainRemoveInactiveJob(driver, vm);
@@ -5449,6 +5768,7 @@ qemuMigrationSrcCancel(virQEMUDriverPtr driver,
 
     qemuDomainObjEnterMonitor(driver, vm);
 
+    // cancel migration by sending QMP 'migrate_cancel`
     ignore_value(qemuMonitorMigrateCancel(priv->mon));
     if (storage)
         blockJobs = qemuMonitorGetAllBlockJobInfo(priv->mon);
@@ -5503,6 +5823,10 @@ qemuMigrationSrcCancel(virQEMUDriverPtr driver,
 }
 
 
+// set async job with migration op and mask
+// it's called only once at both source and dst to prevent other operation
+// so that during migration, other operation for this vm(like qmp, qga is blocked)!!!
+// to pretect the vm state consistent between source and dst
 static int
 qemuMigrationJobStart(virQEMUDriverPtr driver,
                       virDomainObjPtr vm,
@@ -5514,20 +5838,39 @@ qemuMigrationJobStart(virQEMUDriverPtr driver,
     unsigned long long mask;
 
     if (job == QEMU_ASYNC_JOB_MIGRATION_IN) {
+        // dst libvirtd calls me
+        // as mask is NONE, NO job is prevent.
         op = VIR_DOMAIN_JOB_OPERATION_MIGRATION_IN;
         mask = QEMU_JOB_NONE;
     } else {
+        // source libvirtd calls me, some operation are allowed at source!!!
         op = VIR_DOMAIN_JOB_OPERATION_MIGRATION_OUT;
+        // QEMU_JOB_DEFAULT_MASK:
+        // normal job(QMP job) like  abort job, query, destroy, suspend, migration_op job is allowed
+        // agent job is not allowed!!!
+        //
+        // virsh domjobabort vm100
+        // virsh domblkstat vm100
+        // virsh destroy vm100
+        // virsh suspend vm100
+        // virsh domjobabort vm100  (abort the current running async job [migration job acutally]) check qemuDomainAbortJob()
+        //
+        // QEMU_JOB_MIGRATION_OP job
+        // virsh migrate-setspeed vm100 20
+        // virsh migrate-setmaxdowntime 100
+        // virsh migrate-compcache vm100 --size 1000000
         mask = QEMU_JOB_DEFAULT_MASK |
                JOB_MASK(QEMU_JOB_SUSPEND) |
                JOB_MASK(QEMU_JOB_MIGRATION_OP);
     }
 
+    // set async job to job.AsycActive and operation
     if (qemuDomainObjBeginAsyncJob(driver, vm, job, op, apiFlags) < 0)
         return -1;
 
     priv->job.current->statsType = QEMU_DOMAIN_JOB_STATS_TYPE_MIGRATION;
 
+    // set mask of async
     qemuDomainObjSetAsyncJobMask(vm, mask);
     return 0;
 }
@@ -5554,6 +5897,8 @@ qemuMigrationJobStartPhase(virQEMUDriverPtr driver,
                            virDomainObjPtr vm,
                            qemuMigrationJobPhase phase)
 {
+    // qemuMigrationJobStartPhase == qemuMigrationJobSetPhase
+    // TODO: why not use qemuMigrationJobSetPhase instead???
     qemuMigrationJobSetPhase(driver, vm, phase);
 }
 
@@ -5583,6 +5928,7 @@ qemuMigrationJobIsActive(virDomainObjPtr vm,
     return true;
 }
 
+// Job Finished is called when migration FINISH in both sides or error happens at both side
 static void
 qemuMigrationJobFinish(virQEMUDriverPtr driver, virDomainObjPtr vm)
 {

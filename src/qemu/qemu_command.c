@@ -10408,6 +10408,7 @@ qemuBuildCommandLine(virQEMUDriverPtr driver,
         goto error;
 
     if (migrateURI)
+        // start vm with migrationuri at dst
         virCommandAddArgList(cmd, "-incoming", migrateURI, NULL);
 
     if (qemuBuildMemballoonCommandLine(cmd, def, qemuCaps) < 0)

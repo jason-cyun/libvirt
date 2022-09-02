@@ -53,6 +53,9 @@ void qemuProcessReconnectAll(virQEMUDriverPtr driver);
 typedef struct _qemuProcessIncomingDef qemuProcessIncomingDef;
 typedef qemuProcessIncomingDef *qemuProcessIncomingDefPtr;
 struct _qemuProcessIncomingDef {
+    // dst libvirtd build these and send it back too
+    // qemu at dst bind to this while source qemu connect with it.
+    // qemu get these parameter by QMP command at both side
     char *address; /* address where QEMU is supposed to listen */
     char *launchURI; /* used as a parameter for -incoming command line option */
     char *deferredURI; /* used when calling migrate-incoming QMP command */

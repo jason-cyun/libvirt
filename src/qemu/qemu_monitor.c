@@ -1279,6 +1279,8 @@ qemuMonitorSend(qemuMonitorPtr mon,
           "mon=%p msg=%s fd=%d",
           mon, mon->msg->txBuffer, mon->msg->txFD);
 
+    // if monitor close during waiting
+    // finished is set to true by event thread
     while (!mon->msg->finished) {
         // block here, until get reply/error in event thread who will wake me up
         // monitor is unlocked when free and get lock again when it's waken

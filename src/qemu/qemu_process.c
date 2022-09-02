@@ -681,9 +681,11 @@ qemuProcessHandleStop(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         if (priv->job.asyncActive == QEMU_ASYNC_JOB_MIGRATION_OUT) {
             if (priv->job.current->status ==
                         QEMU_DOMAIN_JOB_STATUS_POSTCOPY) {
+                // when goes into post-copy, STOP event reported by QEMU at source
                 reason = VIR_DOMAIN_PAUSED_POSTCOPY;
                 detail = VIR_DOMAIN_EVENT_SUSPENDED_POSTCOPY;
             } else {
+                // when migration is ok, STOP event reported by QEMU at source
                 reason = VIR_DOMAIN_PAUSED_MIGRATION;
                 detail = VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED;
             }
@@ -3240,6 +3242,13 @@ qemuProcessRecoverMigrationOut(virQEMUDriverPtr driver,
                      reason == VIR_DOMAIN_PAUSED_POSTCOPY_FAILED);
     bool resume = false;
 
+    // if migration is in progress(transferring ram/disk), we should cancel it
+    // as new libvirtd lost the migration context!!!
+    //
+    // if migration in some phases, we can ignore it(reset migration as it does not happen)
+    // if migration in confirm phase, migration completed, we should kill the domain at source
+    //
+    // more refer to below
     switch ((qemuMigrationJobPhase) job->phase) {
     case QEMU_MIGRATION_PHASE_NONE:
     case QEMU_MIGRATION_PHASE_PREPARE:
@@ -3265,6 +3274,7 @@ qemuProcessRecoverMigrationOut(virQEMUDriverPtr driver,
         } else {
             VIR_DEBUG("Cancelling unfinished migration of domain %s",
                       vm->def->name);
+            // cancel migration and update disk migration info
             if (qemuMigrationSrcCancel(driver, vm) < 0) {
                 VIR_WARN("Could not cancel ongoing migration of domain %s",
                          vm->def->name);
@@ -3304,7 +3314,7 @@ qemuProcessRecoverMigrationOut(virQEMUDriverPtr driver,
 
     if (resume) {
         /* resume the domain but only if it was paused as a result of
-         * migration
+         * migration, otherwise, nothing happens
          */
         if (state == VIR_DOMAIN_PAUSED &&
             (reason == VIR_DOMAIN_PAUSED_MIGRATION ||
@@ -4302,16 +4312,20 @@ qemuProcessIncomingDefNew(virQEMUCapsPtr qemuCaps,
     if (VIR_STRDUP(inc->address, listenAddress) < 0)
         goto error;
 
+    // launchURI is the migration uri that qemu listen on it
     inc->launchURI = qemuMigrationDstGetURI(migrateFrom, fd);
     if (!inc->launchURI)
         goto error;
 
     if (virQEMUCapsGet(qemuCaps, QEMU_CAPS_INCOMING_DEFER)) {
+        // if qemu support defer uri, use it
         inc->deferredURI = inc->launchURI;
         if (VIR_STRDUP(inc->launchURI, "defer") < 0)
             goto error;
     }
 
+    // fd is pipe for tunnel migration, otherwise -1
+    // path is unix path for local migration, otherwise NULL
     inc->fd = fd;
     inc->path = path;
 
@@ -6343,6 +6357,10 @@ qemuProcessLaunch(virConnectPtr conn,
     VIR_DEBUG("Building emulator command line");
     // build all command line args supported by qemu-kvm
     // -name, -S, -machine, -cpu, -bios, -m, -smp, -object, -smbios, -device, -mon, -chardev, -netdev, -serial
+    //
+    // incoming is not NULL only when start vm calls by migration api Prepare
+    // so that if migrated vm stopped and starts again there is no incoming!!!!
+    // no --incoming defer from command line!!!
     if (!(cmd = qemuBuildCommandLine(driver,
                                      qemuDomainLogContextGetManager(logCtxt),
                                      driver->securityManager,
@@ -6354,7 +6372,7 @@ qemuProcessLaunch(virConnectPtr conn,
                                      &nnicindexes, &nicindexes)))
         goto cleanup;
 
-    // migrate case
+    // migrate case, pass pipe fd to qemu for tunneled migration
     if (incoming && incoming->fd != -1)
         virCommandPassFD(cmd, incoming->fd, 0);
 
@@ -7024,7 +7042,9 @@ void qemuProcessStop(virQEMUDriverPtr driver,
     if (virAtomicIntDecAndTest(&driver->nactive) && driver->inhibitCallback)
         driver->inhibitCallback(false, driver->inhibitOpaque);
 
-    /* Wake up anything waiting on domain condition */
+    /* Wake up anything waiting on domain condition
+     * as vm is inactive now, so that when others wakeup, it should check if vm is active or not like for QMP command, then quit that thread!!!
+     */
     virDomainObjBroadcast(vm);
 
     if ((timestamp = virTimeStringNow()) != NULL) {

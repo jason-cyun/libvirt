@@ -52,6 +52,8 @@
 # endif
 
 # define JOB_MASK(job)                  (job == 0 ? 0 : 1 << (job - 1))
+// default mast only for QMP job, not allowed agent job!!!
+// if there is an async job running, with QEMU_JOB_DEFAULT_MASK, no agent job is allowed to run!!!
 # define QEMU_JOB_DEFAULT_MASK \
     (JOB_MASK(QEMU_JOB_QUERY) | \
      JOB_MASK(QEMU_JOB_DESTROY) | \
@@ -146,8 +148,8 @@ struct _qemuDomainJobInfo {
     virDomainJobOperation operation;
     unsigned long long started; /* When the async job started */
     unsigned long long stopped; /* When the domain's CPUs were stopped */
-    unsigned long long sent; /* When the source sent status info to the
-                                destination (only for migrations). */
+    unsigned long long sent;    /* When the source sent status info to the
+                                   destination (only for migrations). */
     unsigned long long received; /* When the destination host received status
                                     info from the source (migrations only). */
     /* Computed values */
@@ -161,6 +163,9 @@ struct _qemuDomainJobInfo {
     /* Raw values from QEMU */
     qemuDomainJobStatsType statsType;
     union {
+        // ram, disk transferred and left, downtime
+        // this stats are got from qemu with QMP command 'query-migrate'
+        // issued by libvirtd
         qemuMonitorMigrationStats mig;
         qemuMonitorDumpStats dump;
     } stats;
@@ -192,10 +197,40 @@ struct _qemuDomainJobObj {
      * This allows clients to, e.g., query statistical data, cancel the job, or change parameters of the job
      */
     virCond asyncCond;                  /* Use to coordinate with async jobs */
-    qemuDomainAsyncJob asyncActive;        /* Currently active async job */
+    qemuDomainAsyncJob asyncActive;     /* Currently active async job */
     unsigned long long asyncOwner;      /* Thread which set current async job */
     const char *asyncOwnerAPI;          /* The API which owns the async job */
     unsigned long long asyncStarted;    /* When the current async job started */
+
+   /* migration phase is used for recover migration job when we reconnect with qemu process
+    * say libvirtd restart when qemu is still in migration process
+    * how can we do when next time we reconnected with this domain
+    * the operation depends on the migration phase it's in
+    * refer to: qemuProcessRecoverMigrationOut at source libvirtd
+    * refer to: QEMU_ASYNC_JOB_MIGRATION_IN at destination libvirtd
+    *
+    * as when we reconnect with qemu, phase is restored from /var/run/libvirt/qemu/vm100.xml
+    *
+    * <job type='none' async='migration out' phase='perform3' flags='0x141'>
+    *   <disk dev='vda' migrating='yes'/>
+    *   <disk dev='vdc' migrating='no'/>
+    *   <migParams>
+    *     <param name='compress-level' value='1'/>
+    *     <param name='compress-threads' value='8'/>
+    *     <param name='decompress-threads' value='2'/>
+    *     <param name='cpu-throttle-initial' value='20'/>
+    *     <param name='cpu-throttle-increment' value='10'/>
+    *     <param name='tls-creds' value=''/>
+    *     <param name='tls-hostname' value=''/>
+    *     <param name='max-bandwidth' value='10485760'/>
+    *     <param name='downtime-limit' value='300'/>
+    *     <param name='block-incremental' value='no'/>
+    *     <param name='xbzrle-cache-size' value='67108864'/>
+    *   </migParams>
+    * </job>
+    *
+    * then we do migration restore based on the phase
+    */
     int phase;                          /* Job phase (mainly for migrations) */
     // QEMU_JOB_DESTROY is always allowed
     // default mask is QEMU_JOB_QUERY, QEMU_JOB_ABORT, QEMU_JOB_DESTROY
@@ -209,6 +244,7 @@ struct _qemuDomainJobObj {
     char *error;                        /* job event completion error */
     bool dumpCompleted;                 /* dump completed */
 
+    // orginal migration parameter
     qemuMigrationParamsPtr migParams;
     unsigned long apiFlags; /* flags passed to the API which started the async job */
 };
@@ -307,6 +343,7 @@ struct _qemuDomainObjPrivate {
     virDomainUSBAddressSetPtr usbaddrs;
 
     virQEMUCapsPtr qemuCaps;
+    // TODO: lockState for what???
     char *lockState;
 
     // this is set by user, later on when when got SHUTDOWN event from qemu process
@@ -320,6 +357,9 @@ struct _qemuDomainObjPrivate {
     char *origname;
     int nbdPort; /* Port used for migration with NBD */
     unsigned short migrationPort;
+    // before migration save vm state here
+    // if error happens during migration that cause vm paused
+    // we should resume vm(if it's running before)
     int preMigrationState;
 
     virChrdevsPtr devs;

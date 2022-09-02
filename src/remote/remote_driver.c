@@ -7108,6 +7108,7 @@ remoteDomainMigratePrepare3Params(virConnectPtr dconn,
     args.cookie_in.cookie_in_len = cookieinlen;
     args.flags = flags;
 
+    // call remote libvirtd rpc with arg and ret
     if (call(dconn, priv, 0, REMOTE_PROC_DOMAIN_MIGRATE_PREPARE3_PARAMS,
              (xdrproc_t) xdr_remote_domain_migrate_prepare3_params_args,
              (char *) &args,

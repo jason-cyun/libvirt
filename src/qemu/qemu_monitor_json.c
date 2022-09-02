@@ -134,7 +134,7 @@ static qemuEventHandler eventHandlers[] = {
     { "SPICE_DISCONNECTED", qemuMonitorJSONHandleSPICEDisconnect, },
     { "SPICE_INITIALIZED", qemuMonitorJSONHandleSPICEInitialize, },
     { "SPICE_MIGRATE_COMPLETED", qemuMonitorJSONHandleSpiceMigrated, },
-    { "STOP", qemuMonitorJSONHandleStop, },
+    { "STOP", qemuMonitorJSONHandleStop, }, // stop just means vcpu is stopped, libvirtd thinks it as 'paused'
     { "SUSPEND", qemuMonitorJSONHandlePMSuspend, },
     { "SUSPEND_DISK", qemuMonitorJSONHandlePMSuspendDisk, },
     { "VNC_CONNECTED", qemuMonitorJSONHandleVNCConnect, },

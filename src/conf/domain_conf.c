@@ -28685,6 +28685,7 @@ virDomainObjFormat(virDomainXMLOptionPtr xmlopt,
                               virDomainTaintTypeToString(i));
     }
 
+    // runtime info saved at privateData
     if (xmlopt->privateData.format &&
         xmlopt->privateData.format(&buf, obj) < 0)
         goto error;

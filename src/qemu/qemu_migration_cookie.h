@@ -39,6 +39,7 @@ typedef enum {
 
 VIR_ENUM_DECL(qemuMigrationCookieFlag);
 
+// TODO: what does these mean here???
 typedef enum {
     QEMU_MIGRATION_COOKIE_GRAPHICS  = (1 << QEMU_MIGRATION_COOKIE_FLAG_GRAPHICS),
     QEMU_MIGRATION_COOKIE_LOCKSTATE = (1 << QEMU_MIGRATION_COOKIE_FLAG_LOCKSTATE),
