@@ -7734,8 +7734,10 @@ qemuDomainLogContextPtr qemuDomainLogContextNew(virQEMUDriverPtr driver,
         if (!ctxt->manager)
             goto error;
 
-        // get fd of qemu process log opened by virtlogd, pass back here with rpc reply
+        // get pipe write fd opened by virtlogd, pass back here with rpc reply
         // inode of log file and it's pos returned as well
+        // when qemu (or libvirtd here)writes to writefd, virtlogd which read the read side of pipe
+        // get the message, then it writes log to qemu log
         ctxt->writefd = virLogManagerDomainOpenLogFile(ctxt->manager,
                                                        "qemu",
                                                        vm->def->uuid,
@@ -7748,6 +7750,7 @@ qemuDomainLogContextPtr qemuDomainLogContextNew(virQEMUDriverPtr driver,
             goto error;
     } else {
         // open log file used by qemu process by libvirtd if virtlogd is not enabled
+        // so that qemu writes log to its file directly without pass to virtlogd
         if ((ctxt->writefd = open(ctxt->path, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)) < 0) {
             virReportSystemError(errno, _("failed to create logfile %s"),
                                  ctxt->path);
