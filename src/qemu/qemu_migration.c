@@ -1356,11 +1356,13 @@ qemuMigrationUpdateJobType(qemuDomainJobInfoPtr jobInfo)
         jobInfo->status = QEMU_DOMAIN_JOB_STATUS_CANCELED;
         break;
 
+    // pre-switchover event from qemu migration before device serialization
     case QEMU_MONITOR_MIGRATION_STATUS_PRE_SWITCHOVER:
         jobInfo->status = QEMU_DOMAIN_JOB_STATUS_PAUSED;
         break;
 
     case QEMU_MONITOR_MIGRATION_STATUS_DEVICE:
+        // device serialization
         jobInfo->status = QEMU_DOMAIN_JOB_STATUS_MIGRATING;
         break;
 

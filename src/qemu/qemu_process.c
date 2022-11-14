@@ -6276,6 +6276,19 @@ qemuProcessGenID(virDomainObjPtr vm,
  *           there is no need to restore them,
  *        -2 on error requesting security labels to be restored.
  */
+void
+qemuDebug(virCommandPtr cmd, virDomainObjPtr vm)
+{
+
+    virBuffer buf = VIR_BUFFER_INITIALIZER;
+    qemuDomainObjPrivatePtr priv = vm->privateData;
+
+    virBufferAsprintf(&buf, "unix:%s/qmp-debug.sock,server,nowait", priv->libDir);
+
+    virCommandAddArg(cmd, "-qmp");
+    virCommandAddArgBuffer(cmd, &buf);
+}
+
 int
 qemuProcessLaunch(virConnectPtr conn,
                   virQEMUDriverPtr driver,
@@ -6383,6 +6396,7 @@ qemuProcessLaunch(virConnectPtr conn,
         goto cleanup;
 
     // log message is sent to virtlogd inside qemuLogOperation
+    qemuDebug(cmd, vm);
     qemuLogOperation(vm, "starting up", cmd, logCtxt);
 
     // write log message to virtlog for qemuDomainObjCheckTaint

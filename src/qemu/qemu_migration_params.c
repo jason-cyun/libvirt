@@ -178,6 +178,7 @@ static const qemuMigrationParamsTPMapItem qemuMigrationParamsTPMap[] = {
      QEMU_MIGRATION_SOURCE | QEMU_MIGRATION_DESTINATION},
 };
 
+// type of each parameter
 static const qemuMigrationParamType qemuMigrationParamTypes[] = {
     [QEMU_MIGRATION_PARAM_COMPRESS_LEVEL] = QEMU_MIGRATION_PARAM_TYPE_INT,
     [QEMU_MIGRATION_PARAM_COMPRESS_THREADS] = QEMU_MIGRATION_PARAM_TYPE_INT,
@@ -279,6 +280,7 @@ qemuMigrationParamsGetTPInt(qemuMigrationParamsPtr migParams,
     if (qemuMigrationParamsCheckType(param, QEMU_MIGRATION_PARAM_TYPE_INT) < 0)
         return -1;
 
+    // params is NULL, not set by user,, return directly
     if (!params)
         return 0;
 
@@ -382,6 +384,7 @@ qemuMigrationParamsSetCompression(virTypedParameterPtr params,
             goto error;
         }
 
+        // compress method is |, so can combine them!!!
         migParams->compMethods |= 1ULL << method;
 
         switch ((qemuMigrationCompressMethod) method) {
@@ -397,6 +400,7 @@ qemuMigrationParamsSetCompression(virTypedParameterPtr params,
         default:
             continue;
         }
+        // enable cap based on compress method
         ignore_value(virBitmapSetBit(migParams->caps, cap));
     }
 
@@ -418,6 +422,7 @@ qemuMigrationParamsSetCompression(virTypedParameterPtr params,
 
     if (!migParams->compMethods && (flags & VIR_MIGRATE_COMPRESSED)) {
         migParams->compMethods = 1ULL << QEMU_MIGRATION_COMPRESS_XBZRLE;
+        // enable cap based on compress flag
         ignore_value(virBitmapSetBit(migParams->caps,
                                      QEMU_MIGRATION_CAP_XBZRLE));
     }
@@ -438,13 +443,16 @@ qemuMigrationParamsFromFlags(virTypedParameterPtr params,
     qemuMigrationParamsPtr migParams;
     size_t i;
 
+    // migParams has caps and parameters
     if (!(migParams = qemuMigrationParamsNew()))
         return NULL;
 
     for (i = 0; i < ARRAY_CARDINALITY(qemuMigrationParamsFlagMap); i++) {
+        // all supported caps
         qemuMigrationCapability cap = qemuMigrationParamsFlagMap[i].cap;
 
         if (qemuMigrationParamsFlagMap[i].party & party &&
+            // if user enables this cap, set it in migParams which will be applied to vm later on before migration starts
             flags & qemuMigrationParamsFlagMap[i].flag) {
             VIR_DEBUG("Enabling migration capability '%s'",
                       qemuMigrationCapabilityTypeToString(cap));
@@ -453,14 +461,17 @@ qemuMigrationParamsFromFlags(virTypedParameterPtr params,
     }
 
     for (i = 0; i < ARRAY_CARDINALITY(qemuMigrationParamsTPMap); i++) {
+        // check all supported parameters
         const qemuMigrationParamsTPMapItem *item = &qemuMigrationParamsTPMap[i];
 
+        // party which side and set it(party is dst, src or both sides)
         if (!(item->party & party))
             continue;
 
         VIR_DEBUG("Setting migration parameter '%s' from '%s'",
                   qemuMigrationParamTypeToString(item->param), item->typedParam);
 
+        // parameter type
         switch (qemuMigrationParamTypes[item->param]) {
         case QEMU_MIGRATION_PARAM_TYPE_INT:
             if (qemuMigrationParamsGetTPInt(migParams, item->param, params,
@@ -488,9 +499,11 @@ qemuMigrationParamsFromFlags(virTypedParameterPtr params,
         goto error;
     }
 
+    // set cap flags based on compress methond seleted!!!
     if (qemuMigrationParamsSetCompression(params, nparams, flags, migParams) < 0)
         goto error;
 
+    // now migParam has cap setting and parameters from user!!!
     return migParams;
 
  error:
