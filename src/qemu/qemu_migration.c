@@ -4542,7 +4542,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
             goto cleanup;
     }
 
-    // cancelled is true when Perform error!!!
+    // cancelled is true when Perform error(error when do migration copy)!!!
     if (cancelled) {
         if (ddomain) {
             VIR_ERROR(_("finish step ignored that migration was cancelled"));
@@ -4581,7 +4581,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
      * safety in this scenario.
      *
      *
-     * now cancelled == return value of Finish3
+     * now cancelled == return value of Finish3(which check if guest starts ok after migration done)
      */
     cancelled = ddomain == NULL;
 
