@@ -372,6 +372,7 @@ qemuDomainObjRestoreJob(virDomainObjPtr obj,
 static void
 qemuDomainObjFreeJob(qemuDomainObjPrivatePtr priv)
 {
+    // this is called when domain is freed, like destroy domain
     VIR_FREE(priv->job.current);
     VIR_FREE(priv->job.completed);
     virCondDestroy(&priv->job.cond);
@@ -423,6 +424,8 @@ qemuDomainJobInfoUpdateDowntime(qemuDomainJobInfoPtr jobInfo)
         return 0;
     }
 
+    // stopped is the time guest cpu is stopped in post-copy when do migration
+    // in that case libvirt will got STOP event from QEMU, then update jobInfo->stoppped
     jobInfo->stats.mig.downtime = now - jobInfo->stopped;
     jobInfo->stats.mig.downtime_set = true;
     return 0;
@@ -6770,11 +6773,12 @@ qemuDomainObjBeginJobInternal(virQEMUDriverPtr driver,
  * Successful calls must be followed by EndJob eventually
  *
  *
- * try to start normal job if it's allowed or blocked
- * allowed if
+ * try to start normal job if it's allowed or blocked allowed
+ * allowed only if
  * 1. no async or async allowed this normal job
  * AND
  * 2. no other normal job is running
+ * 3. agent job(agent in guest) and normal job uses different locks
  */
 int qemuDomainObjBeginJob(virQEMUDriverPtr driver,
                           virDomainObjPtr obj,

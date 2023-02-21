@@ -1447,6 +1447,8 @@ qemuMigrationJobCheckStatus(virQEMUDriverPtr driver,
             return -1;
     }
 
+    // update jobInfo->status based on jobInfo->stats.mig.status
+    // from Migration status to Dom job status
     qemuMigrationUpdateJobType(jobInfo);
 
     switch (jobInfo->status) {
@@ -1510,7 +1512,7 @@ qemuMigrationAnyCompleted(virQEMUDriverPtr driver,
     int pauseReason;
 
     // migration finished by check async job status which is set by event handler
-    // when get migration event.
+    // when get migration event, event handler will update job.current->stats.mig.status
     if (qemuMigrationJobCheckStatus(driver, vm, asyncJob) < 0)
         goto error;
 
@@ -1610,15 +1612,18 @@ qemuMigrationSrcWaitForCompletion(virQEMUDriverPtr driver,
 
     while ((rv = qemuMigrationAnyCompleted(driver, vm, asyncJob,
                                            dconn, flags)) != 1) {
+        // when error, return directly
         if (rv < 0)
             return rv;
 
         if (events) {
+            // for each migration event, I'm waken up, then check status
             if (virDomainObjWait(vm) < 0) {
                 jobInfo->status = QEMU_DOMAIN_JOB_STATUS_FAILED;
                 return -2;
             }
         } else {
+            // NOTE: if qemu does not support migration event notification to libvirt
             /* Poll every 50ms for progress & to allow cancellation */
             struct timespec ts = { .tv_sec = 0, .tv_nsec = 50 * 1000 * 1000ull };
 
@@ -1628,13 +1633,22 @@ qemuMigrationSrcWaitForCompletion(virQEMUDriverPtr driver,
         }
     }
 
+
+    // goes here means we got completed or post-copy event from QEME
+
     if (events)
+        // update migration stats when got completed event from QEMU
+        // by sending query-migrate QMP command to QEMU
         ignore_value(qemuMigrationAnyFetchStats(driver, vm, asyncJob, jobInfo, NULL));
 
     qemuDomainJobInfoUpdateTime(jobInfo);
     qemuDomainJobInfoUpdateDowntime(jobInfo);
+
+    // free previous completed job
+    // allocate a new completed job for each migration process when migration completed
     VIR_FREE(priv->job.completed);
     if (VIR_ALLOC(priv->job.completed) == 0) {
+        // copied jobinfo from current
         *priv->job.completed = *jobInfo;
         // stats job
         priv->job.completed->status = QEMU_DOMAIN_JOB_STATUS_COMPLETED;
@@ -3108,6 +3122,7 @@ qemuMigrationSrcConfirmPhase(virQEMUDriverPtr driver,
      * mig->jobInfo is the migration stats sent by remote libvirtd(dst)
      */
     if (mig->jobInfo && jobInfo) {
+        //  update completed job stats based on mig->jobInfo got from remote dst!!!
         int reason;
 
         /* We need to refresh migration statistics after a completed post-copy
@@ -5282,6 +5297,7 @@ qemuMigrationDstFinish(virQEMUDriverPtr driver,
 
     // remove cleanup for migration
     // vm cleanup runs when stop vm process
+    // this runs at dst side
     qemuDomainCleanupRemove(vm, qemuMigrationDstPrepareCleanup);
     VIR_FREE(priv->job.completed);
 

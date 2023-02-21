@@ -13665,8 +13665,10 @@ qemuDomainGetJobInfoMigrationStats(virQEMUDriverPtr driver,
         jobInfo->status == QEMU_DOMAIN_JOB_STATUS_MIGRATING ||
         jobInfo->status == QEMU_DOMAIN_JOB_STATUS_QEMU_COMPLETED ||
         jobInfo->status == QEMU_DOMAIN_JOB_STATUS_POSTCOPY) {
+        // support migration events and jobinfo is not status active
         if (events &&
             jobInfo->status != QEMU_DOMAIN_JOB_STATUS_ACTIVE &&
+            // send QMP query-migrate to get migration stats
             qemuMigrationAnyFetchStats(driver, vm, QEMU_ASYNC_JOB_NONE,
                                        jobInfo, NULL) < 0)
             return -1;
@@ -13747,8 +13749,16 @@ qemuDomainGetJobStatsInternal(virQEMUDriverPtr driver,
 
     if (completed) {
         if (priv->job.completed && !priv->job.current)
+            // return completed job(copied)
+            // only when
+            // 1. we have a completed and
+            // 2. no running job
             *jobInfo = *priv->job.completed;
         else
+            // return none
+            // when
+            // 1. no completed job
+            // 2. has a completed job but has a running job
             jobInfo->status = QEMU_DOMAIN_JOB_STATUS_NONE;
 
         return 0;
@@ -13768,6 +13778,7 @@ qemuDomainGetJobStatsInternal(virQEMUDriverPtr driver,
         goto cleanup;
 
     if (!priv->job.current) {
+        // query without completed flag, but no running job
         jobInfo->status = QEMU_DOMAIN_JOB_STATUS_NONE;
         ret = 0;
         goto cleanup;
@@ -13775,6 +13786,7 @@ qemuDomainGetJobStatsInternal(virQEMUDriverPtr driver,
     *jobInfo = *priv->job.current;
 
     switch (jobInfo->statsType) {
+    // job stats support migration, dump
     case QEMU_DOMAIN_JOB_STATS_TYPE_MIGRATION:
     case QEMU_DOMAIN_JOB_STATS_TYPE_SAVEDUMP:
         if (qemuDomainGetJobInfoMigrationStats(driver, vm, jobInfo) < 0)
@@ -13798,6 +13810,7 @@ qemuDomainGetJobStatsInternal(virQEMUDriverPtr driver,
 }
 
 
+// NOTE: old API, only supported running job
 static int
 qemuDomainGetJobInfo(virDomainPtr dom,
                      virDomainJobInfoPtr info)
@@ -13813,6 +13826,7 @@ qemuDomainGetJobInfo(virDomainPtr dom,
     if (virDomainGetJobInfoEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
+    // as here completed is passed as false, so only for running job
     if (qemuDomainGetJobStatsInternal(driver, vm, false, &jobInfo) < 0)
         goto cleanup;
 
@@ -13831,6 +13845,7 @@ qemuDomainGetJobInfo(virDomainPtr dom,
 }
 
 
+// NOTE: new API, supported running job and completed job
 static int
 qemuDomainGetJobStats(virDomainPtr dom,
                       int *type,
@@ -13868,6 +13883,7 @@ qemuDomainGetJobStats(virDomainPtr dom,
     ret = qemuDomainJobInfoToParams(&jobInfo, type, params, nparams);
 
     if (completed && ret == 0)
+        // NOTE: free completed job if it returns to user successfully!!!
         VIR_FREE(priv->job.completed);
 
  cleanup:
@@ -17444,6 +17460,7 @@ qemuDomainGetBlockJobInfo(virDomainPtr dom,
 
     virCheckFlags(VIR_DOMAIN_BLOCK_JOB_INFO_BANDWIDTH_BYTES, -1);
 
+    // vm object is locked when a valid vm is return
     if (!(vm = qemuDomObjFromDomain(dom)))
         return -1;
 
@@ -17467,8 +17484,10 @@ qemuDomainGetBlockJobInfo(virDomainPtr dom,
     }
 
     qemuDomainObjEnterMonitor(driver, vm);
+    // after entered monitor, vm self lock is freed and monitor object is locked
     ret = qemuMonitorGetBlockJobInfo(qemuDomainGetMonitor(vm),
                                      disk->info.alias, &rawInfo);
+    // free monitor lock, get vm object lock
     if (qemuDomainObjExitMonitor(driver, vm) < 0)
         ret = -1;
     if (ret <= 0)
@@ -17498,6 +17517,8 @@ qemuDomainGetBlockJobInfo(virDomainPtr dom,
     qemuDomainObjEndJob(driver, vm);
 
  cleanup:
+
+    // free vm object lock
     virDomainObjEndAPI(&vm);
     return ret;
 }

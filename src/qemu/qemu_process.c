@@ -1567,6 +1567,7 @@ qemuProcessHandleSpiceMigrated(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
 }
 
 
+// for each migration event reported by qemu
 static int
 qemuProcessHandleMigrationStatus(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
                                  virDomainObjPtr vm,
@@ -1589,6 +1590,8 @@ qemuProcessHandleMigrationStatus(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
 
     // migration event handler update status reported by qemu
     priv->job.current->stats.mig.status = status;
+    // notify thread who is blocking on vm condition
+    // when in migration process, the migration process blocks here
     virDomainObjBroadcast(vm);
 
  cleanup:
