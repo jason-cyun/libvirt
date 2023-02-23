@@ -18213,7 +18213,7 @@ virDomainDefParseIOThreads(virDomainDefPtr def,
 
 /* Parse the XML definition for a vcpupin
  *
- * vcpupin has the form of
+ * vcpupin has the form of, cpuset is the host's physical cpu where the vcpus can run
  * <domain>
  *   <cputune>
  *     <vcpupin vcpu='0' cpuset='0'/>

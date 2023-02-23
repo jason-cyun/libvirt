@@ -2565,6 +2565,10 @@ struct _virDomainMemtune {
      *     </hugepages>
      *   <memoryBacking>
      * <domain>
+     *
+     * nodeset says where the memory comes from(which host node(numa node))
+     * it's used to build host-nodes parameters like below
+     * -object memory-backend-ram,id=id,prealloc=on|off,size=size,host-nodes=host-nodes,policy=default|preferred|bind|interleave
      */
     virDomainHugePagePtr hugepages;
     size_t nhugepages;

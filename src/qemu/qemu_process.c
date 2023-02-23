@@ -5371,6 +5371,7 @@ qemuProcessSetupVcpu(virDomainObjPtr vm,
     virDomainVcpuDefPtr vcpu = virDomainDefGetVcpu(vm->def, vcpuid);
     size_t i = 0;
 
+    // set vcpu pin(to host's physical cpu) by cgroup or cpuset_setaffinity() if cgroup is not available
     if (qemuProcessSetupPid(vm, vcpupid, VIR_CGROUP_THREAD_VCPU,
                             vcpuid, vcpu->cpumask,
                             vm->def->cputune.period,

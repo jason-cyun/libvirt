@@ -3203,6 +3203,7 @@ qemuBuildMemoryBackendProps(virJSONValuePtr *backendProps,
     }
 
     if (nodemask) {
+        // set host-node(numa node) for guest memory
         if (!virNumaNodesetIsAvailable(nodemask))
             goto cleanup;
         if (virJSONValueObjectAdd(props,
