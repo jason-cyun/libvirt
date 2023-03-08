@@ -27,7 +27,6 @@
 #include "virerror.h"
 #include "virfile.h"
 #include "viralloc.h"
-#include "virstring.h"
 #include "domain_conf.h"
 #include "capabilities.h"
 #include "domain_capabilities.h"
@@ -305,8 +304,7 @@ libxlCapsInitNuma(libxl_ctx *ctx, virCaps *caps)
         for (i = 0; cpus && i < nr_nodes; i++)
             VIR_FREE(cpus[i]);
         if (caps->host.numa) {
-            virCapabilitiesHostNUMAUnref(caps->host.numa);
-            caps->host.numa = NULL;
+            g_clear_pointer(&caps->host.numa, virCapabilitiesHostNUMAUnref);
         }
         VIR_FREE(distances);
     }

@@ -22,26 +22,16 @@
   <!-- Build keys for all symbols -->
   <xsl:key name="symbols" match="/api/symbols/*" use="@name"/>
 
-  <xsl:param name="indexfile" select="'index.html'"/>
+  <xsl:param name="indexfile" select="''"/>
 
   <!-- the target directory for the HTML output -->
   <xsl:variable name="htmldir">html</xsl:variable>
   <xsl:variable name="href_base">../</xsl:variable>
 
-  <xsl:variable name="acls">
-    <xsl:copy-of select="document('{$builddir}/src/libvirt_access.xml')/aclinfo/api"/>
-  </xsl:variable>
-  <xsl:variable name="qemuacls">
-    <xsl:copy-of select="document('{$builddir}/src/libvirt_access_qemu.xml')/aclinfo/api"/>
-  </xsl:variable>
-  <xsl:variable name="lxcacls">
-    <xsl:copy-of select="document('{$builddir}/src/libvirt_access_lxc.xml')/aclinfo/api"/>
-  </xsl:variable>
-
   <xsl:template name="aclinfo">
-    <xsl:param name="api"/>
+    <xsl:param name="acl"/>
 
-    <xsl:if test="count(exsl:node-set($acls)/api[@name=$api]/check) > 0">
+    <xsl:if test="count($acl/check) > 0">
       <h5>Access control parameter checks</h5>
       <table>
         <thead>
@@ -51,10 +41,10 @@
             <th>Condition</th>
           </tr>
         </thead>
-        <xsl:apply-templates select="exsl:node-set($acls)/api[@name=$api]/check" mode="acl"/>
+        <xsl:apply-templates select="$acl/check" mode="acl"/>
       </table>
     </xsl:if>
-    <xsl:if test="count(exsl:node-set($acls)/api[@name=$api]/filter) > 0">
+    <xsl:if test="count($acl/filter) > 0">
       <h5>Access control return value filters</h5>
       <table>
         <thead>
@@ -63,7 +53,7 @@
             <th>Permission</th>
           </tr>
         </thead>
-        <xsl:apply-templates select="exsl:node-set($acls)/api[@name=$api]/filter" mode="acl"/>
+        <xsl:apply-templates select="$acl/filter" mode="acl"/>
       </table>
     </xsl:if>
   </xsl:template>
@@ -91,28 +81,6 @@
   </xsl:template>
 
 
-  <xsl:template name="navbar">
-    <xsl:variable name="previous" select="preceding-sibling::file[1]"/>
-    <xsl:variable name="next" select="following-sibling::file[1]"/>
-    <table class="navigation" width="100%" summary="Navigation header"
-           cellpadding="2" cellspacing="2">
-      <tr valign="middle">
-        <xsl:if test="$previous">
-          <td><a accesskey="p" href="libvirt-{$previous/@name}.html"><img src="left.png" width="24" height="24" border="0" alt="Prev"></img></a></td>
-	  <th align="left"><a href="libvirt-{$previous/@name}.html"><xsl:value-of select="$previous/@name"/></a></th>
-	</xsl:if>
-        <td><a accesskey="u" href="{$indexfile}"><img src="up.png" width="24" height="24" border="0" alt="Up"></img></a></td>
-	<th align="left"><a href="{$indexfile}">API documentation</a></th>
-        <td><a accesskey="h" href="../{$indexfile}"><img src="home.png" width="24" height="24" border="0" alt="Home"></img></a></td>
-        <th align="center"><a href="../{$indexfile}">The virtualization API</a></th>
-        <xsl:if test="$next">
-	  <th align="right"><a href="libvirt-{$next/@name}.html"><xsl:value-of select="$next/@name"/></a></th>
-          <td><a accesskey="n" href="libvirt-{$next/@name}.html"><img src="right.png" width="24" height="24" border="0" alt="Next"></img></a></td>
-        </xsl:if>
-      </tr>
-    </table>
-  </xsl:template>
-
   <!-- This is convoluted but needed to force the current document to
        be the API one and not the result tree from the tokenize() result,
        because the keys are only defined on the main document -->
@@ -127,6 +95,11 @@
         <xsl:value-of select="substring-after($token, $stem)"/>
       </xsl:when>
       <xsl:when test="starts-with($token, 'http://')">
+        <a href="{$token}">
+          <xsl:value-of select="$token"/>
+        </a>
+      </xsl:when>
+      <xsl:when test="starts-with($token, 'https://')">
         <a href="{$token}">
           <xsl:value-of select="$token"/>
         </a>
@@ -711,7 +684,7 @@
     </xsl:if>
     <div class="acl">
       <xsl:call-template name="aclinfo">
-        <xsl:with-param name="api" select="$name"/>
+        <xsl:with-param name="acl" select="acls"/>
       </xsl:call-template>
     </div>
   </xsl:template>
@@ -773,18 +746,22 @@
             </xsl:apply-templates>
           </pre>
         </xsl:if>
-        <h3><a href="#types">Types</a></h3>
-        <pre class="api">
-          <xsl:apply-templates select="exports[@type='typedef']" mode="toc">
-            <xsl:sort select='@symbol'/>
-          </xsl:apply-templates>
-        </pre>
-        <h3><a href="#functions">Functions</a></h3>
-        <pre class="api">
-          <xsl:apply-templates select="exports[@type='function']" mode="toc">
-            <xsl:sort select='@symbol'/>
-          </xsl:apply-templates>
-        </pre>
+        <xsl:if test="count(exports[@type='typedef']) > 0">
+          <h3><a href="#types">Types</a></h3>
+          <pre class="api">
+            <xsl:apply-templates select="exports[@type='typedef']" mode="toc">
+              <xsl:sort select='@symbol'/>
+            </xsl:apply-templates>
+          </pre>
+        </xsl:if>
+        <xsl:if test="count(exports[@type='function']) > 0">
+          <h3><a href="#functions">Functions</a></h3>
+          <pre class="api">
+            <xsl:apply-templates select="exports[@type='function']" mode="toc">
+              <xsl:sort select='@symbol'/>
+            </xsl:apply-templates>
+          </pre>
+        </xsl:if>
 
         <h2>Description</h2>
 
@@ -794,14 +771,18 @@
             <xsl:sort select='@symbol'/>
           </xsl:apply-templates>
         </xsl:if>
-        <h3><a id="types">Types</a></h3>
-        <xsl:apply-templates select="exports[@type='typedef']">
-          <xsl:sort select='@symbol'/>
-        </xsl:apply-templates>
-        <h3><a id="functions">Functions</a></h3>
-        <xsl:apply-templates select="exports[@type='function']">
-          <xsl:sort select='@symbol'/>
-        </xsl:apply-templates>
+        <xsl:if test="count(exports[@type='typedef']) > 0">
+          <h3><a id="types">Types</a></h3>
+          <xsl:apply-templates select="exports[@type='typedef']">
+            <xsl:sort select='@symbol'/>
+          </xsl:apply-templates>
+        </xsl:if>
+        <xsl:if test="count(exports[@type='function']) > 0">
+          <h3><a id="functions">Functions</a></h3>
+          <xsl:apply-templates select="exports[@type='function']">
+            <xsl:sort select='@symbol'/>
+          </xsl:apply-templates>
+        </xsl:if>
       </body>
     </html>
   </xsl:template>
@@ -832,18 +813,20 @@
 
   <xsl:template match="/">
     <!-- Save the main index.html as well as a couple of copies -->
-    <xsl:variable name="mainpage">
-      <xsl:call-template name="mainpage"/>
-    </xsl:variable>
-    <xsl:document
-      href="{concat($htmldir, '/', $indexfile)}"
-      method="xml"
-      indent="yes"
-      encoding="UTF-8">
-      <xsl:apply-templates select="exsl:node-set($mainpage)" mode="page">
-        <xsl:with-param name="timestamp" select="$timestamp"/>
-      </xsl:apply-templates>
-    </xsl:document>
+    <xsl:if test="$indexfile != ''">
+      <xsl:variable name="mainpage">
+        <xsl:call-template name="mainpage"/>
+      </xsl:variable>
+      <xsl:document
+        href="{concat($htmldir, '/', $indexfile)}"
+        method="xml"
+        indent="yes"
+        encoding="UTF-8">
+        <xsl:apply-templates select="exsl:node-set($mainpage)" mode="page">
+          <xsl:with-param name="timestamp" select="$timestamp"/>
+        </xsl:apply-templates>
+      </xsl:document>
+    </xsl:if>
 
     <xsl:for-each select="/api/files/file">
       <xsl:variable name="subpage">

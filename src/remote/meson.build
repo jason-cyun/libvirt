@@ -204,11 +204,6 @@ if conf.has('WITH_REMOTE')
       'confd': files('libvirtd.confd'),
     }
 
-    sysconf_files += {
-      'name': 'libvirtd',
-      'file': files('libvirtd.sysconf'),
-    }
-
     virt_daemons += {
       'name': 'virtproxyd',
       'c_args': [
@@ -239,17 +234,15 @@ if conf.has('WITH_REMOTE')
       'confd': files('virtproxyd.confd'),
     }
 
-    sysconf_files += {
-      'name': 'virtproxyd',
-      'file': files('virtproxyd.sysconf'),
-    }
-
     virt_install_dirs += [
       localstatedir / 'log' / 'libvirt',
+      runstatedir / 'libvirt',
+      runstatedir / 'libvirt' / 'common',
     ]
 
-    logrotate_conf = configuration_data()
-    logrotate_conf.set('localstatedir', localstatedir)
+    logrotate_conf = configuration_data({
+      'localstatedir': localstatedir,
+    })
 
     foreach name : logrotate_files
       log_file = configure_file(

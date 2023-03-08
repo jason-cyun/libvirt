@@ -29,7 +29,7 @@
 #include "xenxs_private.h"
 #include "xen_xm.h"
 #include "domain_conf.h"
-#include "virstring.h"
+#include "domain_postparse.h"
 #include "xen_common.h"
 
 #define VIR_FROM_THIS VIR_FROM_XENXM
@@ -42,7 +42,7 @@ xenParseXMOS(virConf *conf, virDomainDef *def)
     if (def->os.type == VIR_DOMAIN_OSTYPE_HVM) {
         g_autofree char *boot = NULL;
 
-        def->os.loader = g_new0(virDomainLoaderDef, 1);
+        def->os.loader = virDomainLoaderDefNew();
 
         if (xenConfigCopyString(conf, "kernel", &def->os.loader->path) < 0)
             return -1;
@@ -340,7 +340,7 @@ xenFormatXMDisk(virConfValue *list,
 static int
 xenFormatXMDisks(virConf *conf, virDomainDef *def)
 {
-    virConfValue *diskVal = NULL;
+    g_autoptr(virConfValue) diskVal = NULL;
     size_t i = 0;
 
     diskVal = g_new0(virConfValue, 1);
@@ -353,22 +353,14 @@ xenFormatXMDisks(virConf *conf, virDomainDef *def)
             continue;
 
         if (xenFormatXMDisk(diskVal, def->disks[i]) < 0)
-            goto cleanup;
+            return -1;
     }
 
-    if (diskVal->list != NULL) {
-        int ret = virConfSetValue(conf, "disk", diskVal);
-        diskVal = NULL;
-        if (ret < 0)
-            goto cleanup;
-    }
-    VIR_FREE(diskVal);
+    if (diskVal->list != NULL &&
+        virConfSetValue(conf, "disk", &diskVal) < 0)
+        return -1;
 
     return 0;
-
- cleanup:
-    virConfFreeValue(diskVal);
-    return -1;
 }
 
 
@@ -464,6 +456,8 @@ xenFormatXMOS(virConf *conf, virDomainDef *def)
             case VIR_DOMAIN_BOOT_DISK:
             default:
                 boot[i] = 'c';
+                break;
+            case VIR_DOMAIN_BOOT_LAST:
                 break;
             }
         }

@@ -2,6 +2,7 @@
   <arch>x86_64</arch>
   <model>Westmere-IBRS</model>
   <vendor>Intel</vendor>
+  <signature family='6' model='134' stepping='5'/>
   <feature name='vme'/>
   <feature name='ds'/>
   <feature name='acpi'/>
@@ -55,6 +56,7 @@
   <feature name='xsaves'/>
   <feature name='mbm_total'/>
   <feature name='mbm_local'/>
+  <feature name='intel-pt-lip'/>
   <feature name='rdtscp'/>
   <feature name='3dnowprefetch'/>
   <feature name='invtsc'/>

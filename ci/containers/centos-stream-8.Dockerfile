@@ -6,11 +6,12 @@
 
 FROM quay.io/centos/centos:stream8
 
-RUN dnf update -y && \
+RUN dnf distro-sync -y && \
     dnf install 'dnf-command(config-manager)' -y && \
     dnf config-manager --set-enabled -y powertools && \
     dnf install -y centos-release-advanced-virtualization && \
     dnf install -y epel-release && \
+    dnf install -y epel-next-release && \
     dnf install -y \
         audit-libs-devel \
         augeas \
@@ -20,10 +21,8 @@ RUN dnf update -y && \
         clang \
         cpp \
         cyrus-sasl-devel \
-        dbus-devel \
         device-mapper-devel \
         diffutils \
-        dnsmasq \
         dwarves \
         ebtables \
         firewalld-filesystem \
@@ -56,7 +55,6 @@ RUN dnf update -y && \
         libssh-devel \
         libssh2-devel \
         libtirpc-devel \
-        libudev-devel \
         libwsman-devel \
         libxml2 \
         libxml2-devel \
@@ -69,7 +67,6 @@ RUN dnf update -y && \
         ninja-build \
         numactl-devel \
         numad \
-        parted \
         parted-devel \
         perl \
         pkgconfig \
@@ -78,16 +75,16 @@ RUN dnf update -y && \
         python3-docutils \
         python3-flake8 \
         qemu-img \
-        radvd \
         readline-devel \
         rpcgen \
         rpm-build \
         sanlock-devel \
         scrub \
         sed \
+        systemd-devel \
+        systemd-rpm-macros \
         systemtap-sdt-devel \
         wireshark-devel \
-        xfsprogs-devel \
         yajl-devel && \
     dnf autoremove -y && \
     dnf clean all -y && \
@@ -97,8 +94,8 @@ RUN dnf update -y && \
     ln -s /usr/bin/ccache /usr/libexec/ccache-wrappers/clang && \
     ln -s /usr/bin/ccache /usr/libexec/ccache-wrappers/gcc
 
+ENV CCACHE_WRAPPERSDIR "/usr/libexec/ccache-wrappers"
 ENV LANG "en_US.UTF-8"
 ENV MAKE "/usr/bin/make"
 ENV NINJA "/usr/bin/ninja"
 ENV PYTHON "/usr/bin/python3"
-ENV CCACHE_WRAPPERSDIR "/usr/libexec/ccache-wrappers"

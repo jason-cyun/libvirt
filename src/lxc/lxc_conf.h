@@ -23,15 +23,11 @@
 
 #include "internal.h"
 #include "libvirt_internal.h"
-#include "domain_conf.h"
 #include "domain_event.h"
-#include "capabilities.h"
 #include "virthread.h"
 #include "security/security_manager.h"
 #include "configmake.h"
-#include "vircgroup.h"
 #include "virsysinfo.h"
-#include "virusb.h"
 #include "virclosecallbacks.h"
 #include "virhostdev.h"
 
@@ -97,9 +93,6 @@ struct _virLXCDriver {
 
     /* Immutable pointer. self-locking APIs */
     virSecurityManager *securityManager;
-
-    /* Immutable pointer, self-locking APIs */
-    virCloseCallbacks *closeCallbacks;
 };
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virLXCDriverConfig, virObjectUnref);
@@ -113,12 +106,3 @@ virCaps *virLXCDriverGetCapabilities(virLXCDriver *driver,
                                        bool refresh);
 virDomainXMLOption *lxcDomainXMLConfInit(virLXCDriver *driver,
                                            const char *defsecmodel);
-
-static inline void lxcDriverLock(virLXCDriver *driver)
-{
-    virMutexLock(&driver->lock);
-}
-static inline void lxcDriverUnlock(virLXCDriver *driver)
-{
-    virMutexUnlock(&driver->lock);
-}

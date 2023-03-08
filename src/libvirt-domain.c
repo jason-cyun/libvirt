@@ -49,6 +49,8 @@ VIR_LOG_INIT("libvirt.domain");
  * call to virConnectNumOfDomains() and this call; you are only guaranteed
  * that all currently active domains were listed if the return is less
  * than @maxids.
+ *
+ * Since: 0.0.3
  */
 int
 virConnectListDomains(virConnectPtr conn, int *ids, int maxids)
@@ -82,6 +84,8 @@ virConnectListDomains(virConnectPtr conn, int *ids, int maxids)
  * Provides the number of active domains.
  *
  * Returns the number of domain found or -1 in case of error
+ *
+ * Since: 0.0.3
  */
 int
 virConnectNumOfDomains(virConnectPtr conn)
@@ -115,6 +119,8 @@ virConnectNumOfDomains(virConnectPtr conn)
  * call.
  *
  * Returns the virConnectPtr or NULL in case of failure.
+ *
+ * Since: 0.3.0
  */
 virConnectPtr
 virDomainGetConnect(virDomainPtr dom)
@@ -154,10 +160,16 @@ virDomainGetConnect(virDomainPtr dom)
  * block attempts at migration. Hypervisors may also block save-to-file,
  * or snapshots.
  *
+ * If @flags includes VIR_DOMAIN_START_RESET_NVRAM, then libvirt will
+ * discard any existing NVRAM file and re-initialize NVRAM from the
+ * pristine template.
+ *
  * virDomainFree should be used to free the resources after the
  * domain object is no longer needed.
  *
  * Returns a new domain object or NULL in case of failure
+ *
+ * Since: 0.5.0
  */
 virDomainPtr
 virDomainCreateXML(virConnectPtr conn, const char *xmlDesc,
@@ -224,6 +236,8 @@ virDomainCreateXML(virConnectPtr conn, const char *xmlDesc,
  * domain object is no longer needed.
  *
  * Returns a new domain object or NULL in case of failure
+ *
+ * Since: 1.1.1
  */
 virDomainPtr
 virDomainCreateXMLWithFiles(virConnectPtr conn, const char *xmlDesc,
@@ -239,6 +253,18 @@ virDomainCreateXMLWithFiles(virConnectPtr conn, const char *xmlDesc,
     virCheckConnectReturn(conn, NULL);
     virCheckNonNullArgGoto(xmlDesc, error);
     virCheckReadOnlyGoto(conn->flags, error);
+
+    if (nfiles > 0) {
+        int rc;
+
+        if ((rc = VIR_DRV_SUPPORTS_FEATURE(conn->driver, conn,
+                                           VIR_DRV_FEATURE_FD_PASSING)) <= 0) {
+            if (rc == 0)
+                virReportError(VIR_ERR_ARGUMENT_UNSUPPORTED, "%s",
+                               _("fd passing is not supported by this connection"));
+            goto error;
+        }
+    }
 
     if (conn->driver->domainCreateXMLWithFiles) {
         virDomainPtr ret;
@@ -268,6 +294,8 @@ virDomainCreateXMLWithFiles(virConnectPtr conn, const char *xmlDesc,
  * This existing name will be left indefinitely for API compatibility.
  *
  * Returns a new domain object or NULL in case of failure
+ *
+ * Since: 0.0.3
  */
 virDomainPtr
 virDomainCreateLinux(virConnectPtr conn, const char *xmlDesc,
@@ -291,6 +319,8 @@ virDomainCreateLinux(virConnectPtr conn, const char *xmlDesc,
  *
  * Returns a new domain object or NULL in case of failure.  If the
  * domain cannot be found, then VIR_ERR_NO_DOMAIN error is raised.
+ *
+ * Since: 0.0.3
  */
 virDomainPtr
 virDomainLookupByID(virConnectPtr conn, int id)
@@ -330,6 +360,8 @@ virDomainLookupByID(virConnectPtr conn, int id)
  *
  * Returns a new domain object or NULL in case of failure.  If the
  * domain cannot be found, then VIR_ERR_NO_DOMAIN error is raised.
+ *
+ * Since: 0.0.5
  */
 virDomainPtr
 virDomainLookupByUUID(virConnectPtr conn, const unsigned char *uuid)
@@ -369,6 +401,8 @@ virDomainLookupByUUID(virConnectPtr conn, const unsigned char *uuid)
  *
  * Returns a new domain object or NULL in case of failure.  If the
  * domain cannot be found, then VIR_ERR_NO_DOMAIN error is raised.
+ *
+ * Since: 0.1.1
  */
 virDomainPtr
 virDomainLookupByUUIDString(virConnectPtr conn, const char *uuidstr)
@@ -406,6 +440,8 @@ virDomainLookupByUUIDString(virConnectPtr conn, const char *uuidstr)
  *
  * Returns a new domain object or NULL in case of failure.  If the
  * domain cannot be found, then VIR_ERR_NO_DOMAIN error is raised.
+ *
+ * Since: 0.0.3
  */
 virDomainPtr
 virDomainLookupByName(virConnectPtr conn, const char *name)
@@ -456,6 +492,8 @@ virDomainLookupByName(virConnectPtr conn, const char *name)
  * be deleted when the domain quits.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainDestroy(virDomainPtr domain)
@@ -508,6 +546,12 @@ virDomainDestroy(virDomainPtr domain)
  * timeout; at that time, the management application can decide if
  * calling again without VIR_DOMAIN_DESTROY_GRACEFUL is appropriate.
  *
+ * If VIR_DOMAIN_DESTROY_REMOVE_LOGS flag is set then domain specific
+ * logs will be deleted as well if there are any. Note that not all
+ * deployments are be supported. For example in case of QEMU driver
+ * this flags is noop if virtlogd is not used for handling QEMU
+ * process output.
+ *
  * Another alternative which may produce cleaner results for the
  * guest's disks is to use virDomainShutdown() instead, but that
  * depends on guest support (some hypervisor/guest combinations may
@@ -515,6 +559,8 @@ virDomainDestroy(virDomainPtr domain)
  *
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainDestroyFlags(virDomainPtr domain,
@@ -555,6 +601,8 @@ virDomainDestroyFlags(virDomainPtr domain,
  * The data structure is freed and should not be used thereafter.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainFree(virDomainPtr domain)
@@ -586,6 +634,8 @@ virDomainFree(virDomainPtr domain)
  * the reference count.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.6.0
  */
 int
 virDomainRef(virDomainPtr domain)
@@ -614,6 +664,8 @@ virDomainRef(virDomainPtr domain)
  * special state like VIR_DOMAIN_PMSUSPENDED.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainSuspend(virDomainPtr domain)
@@ -656,6 +708,8 @@ virDomainSuspend(virDomainPtr domain)
  * special state like VIR_DOMAIN_PMSUSPENDED.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainResume(virDomainPtr domain)
@@ -712,6 +766,8 @@ virDomainResume(virDomainPtr domain)
  *
  * Returns: 0 on success,
  *          -1 on failure.
+ *
+ * Since: 0.9.10
  */
 int
 virDomainPMSuspendForDuration(virDomainPtr dom,
@@ -759,6 +815,8 @@ virDomainPMSuspendForDuration(virDomainPtr dom,
  *
  * Returns: 0 on success,
  *          -1 on failure.
+ *
+ * Since: 0.9.11
  */
 int
 virDomainPMWakeup(virDomainPtr dom,
@@ -801,11 +859,13 @@ virDomainPMWakeup(virDomainPtr dom,
  * listed as running anymore (this ends the life of a transient domain).
  * Use virDomainRestore() to restore a domain after saving.
  *
- * See virDomainSaveFlags() for more control.  Also, a save file can
- * be inspected or modified slightly with virDomainSaveImageGetXMLDesc()
- * and virDomainSaveImageDefineXML().
+ * See virDomainSaveFlags() and virDomainSaveParams() for more control.
+ * Also, a save file can be inspected or modified slightly with
+ * virDomainSaveImageGetXMLDesc() and virDomainSaveImageDefineXML().
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainSave(virDomainPtr domain, const char *to)
@@ -888,6 +948,8 @@ virDomainSave(virDomainPtr domain, const char *to)
  * to stop the block job first.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainSaveFlags(virDomainPtr domain, const char *to,
@@ -937,6 +999,56 @@ virDomainSaveFlags(virDomainPtr domain, const char *to,
     return -1;
 }
 
+/**
+ * virDomainSaveParams:
+ * @domain: a domain object
+ * @params: save parameters
+ * @nparams: number of save parameters
+ * @flags: bitwise-OR of virDomainSaveRestoreFlags
+ *
+ * This method extends virDomainSaveFlags by adding parameters.
+ * If VIR_DOMAIN_SAVE_PARAM_FILE is not provided then a managed save is
+ * performed (see virDomainManagedSave).
+ *
+ * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 8.4.0
+ */
+int
+virDomainSaveParams(virDomainPtr domain,
+                    virTypedParameterPtr params, int nparams,
+                    unsigned int flags)
+{
+    virConnectPtr conn;
+
+    VIR_DOMAIN_DEBUG(domain, "params=%p, nparams=%d, flags=0x%x",
+                     params, nparams, flags);
+    VIR_TYPED_PARAMS_DEBUG(params, nparams);
+
+    virResetLastError();
+
+    virCheckDomainReturn(domain, -1);
+    conn = domain->conn;
+
+    virCheckReadOnlyGoto(conn->flags, error);
+
+    VIR_EXCLUSIVE_FLAGS_GOTO(VIR_DOMAIN_SAVE_RUNNING,
+                             VIR_DOMAIN_SAVE_PAUSED,
+                             error);
+
+    if (conn->driver->domainSaveParams) {
+        if (conn->driver->domainSaveParams(domain, params, nparams, flags) < 0)
+            goto error;
+        return 0;
+    }
+
+    virReportUnsupportedError();
+
+ error:
+    virDispatchError(domain->conn);
+    return -1;
+}
+
 
 /**
  * virDomainRestore:
@@ -948,6 +1060,8 @@ virDomainSaveFlags(virDomainPtr domain, const char *to,
  * See virDomainRestoreFlags() for more control.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainRestore(virConnectPtr conn, const char *from)
@@ -1015,7 +1129,13 @@ virDomainRestore(virConnectPtr conn, const char *from)
  * @flags will override the default read from the file.  These two
  * flags are mutually exclusive.
  *
+ * If @flags includes VIR_DOMAIN_SAVE_RESET_NVRAM, then libvirt will
+ * discard any existing NVRAM file and re-initialize NVRAM from the
+ * pristine template.
+ *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainRestoreFlags(virConnectPtr conn, const char *from, const char *dxml,
@@ -1064,6 +1184,53 @@ virDomainRestoreFlags(virConnectPtr conn, const char *from, const char *dxml,
 
 
 /**
+ * virDomainRestoreParams:
+ * @conn: pointer to the hypervisor connection
+ * @params: restore parameters
+ * @nparams: number of restore parameters
+ * @flags: bitwise-OR of virDomainSaveRestoreFlags
+ *
+ * This method extends virDomainRestoreFlags by adding parameters. For
+ * now, VIR_DOMAIN_SAVE_PARAM_FILE is required but this requirement may
+ * be lifted in the future.
+ *
+ * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 8.4.0
+ */
+int
+virDomainRestoreParams(virConnectPtr conn,
+                       virTypedParameterPtr params, int nparams,
+                       unsigned int flags)
+{
+    VIR_DEBUG("conn=%p, params=%p, nparams=%d, flags=0x%x",
+              conn, params, nparams, flags);
+    VIR_TYPED_PARAMS_DEBUG(params, nparams);
+
+    virResetLastError();
+
+    virCheckConnectReturn(conn, -1);
+    virCheckReadOnlyGoto(conn->flags, error);
+
+    VIR_EXCLUSIVE_FLAGS_GOTO(VIR_DOMAIN_SAVE_RUNNING,
+                             VIR_DOMAIN_SAVE_PAUSED,
+                             error);
+
+    if (conn->driver->domainRestoreParams) {
+        if (conn->driver->domainRestoreParams(conn, params, nparams, flags) < 0)
+            goto error;
+        return 0;
+    }
+
+    virReportUnsupportedError();
+
+ error:
+    virDispatchError(conn);
+    return -1;
+}
+
+
+/**
  * virDomainSaveImageGetXMLDesc:
  * @conn: pointer to the hypervisor connection
  * @file: path to saved state file
@@ -1078,6 +1245,8 @@ virDomainRestoreFlags(virConnectPtr conn, const char *from, const char *dxml,
  *
  * Returns a 0 terminated UTF-8 encoded XML instance, or NULL in case of
  * error.  The caller must free() the returned value.
+ *
+ * Since: 0.9.4
  */
 char *
 virDomainSaveImageGetXMLDesc(virConnectPtr conn, const char *file,
@@ -1146,6 +1315,8 @@ virDomainSaveImageGetXMLDesc(virConnectPtr conn, const char *file,
  * exclusive.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainSaveImageDefineXML(virConnectPtr conn, const char *file,
@@ -1220,6 +1391,8 @@ virDomainSaveImageDefineXML(virConnectPtr conn, const char *file,
  * For more control over the output format, see virDomainCoreDumpWithFormat().
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.1.9
  */
 int
 virDomainCoreDump(virDomainPtr domain, const char *to, unsigned int flags)
@@ -1296,6 +1469,8 @@ virDomainCoreDump(virDomainPtr domain, const char *to, unsigned int flags)
  * pressure on file system cache, but also risks slowing saves to NFS.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 1.2.3
  */
 int
 virDomainCoreDumpWithFormat(virDomainPtr domain, const char *to,
@@ -1375,6 +1550,8 @@ virDomainCoreDumpWithFormat(virDomainPtr domain, const char *to,
  *
  * Returns a string representing the mime-type of the image format, or
  * NULL upon error. The caller must free() the returned value.
+ *
+ * Since: 0.9.2
  */
 char *
 virDomainScreenshot(virDomainPtr domain,
@@ -1434,6 +1611,8 @@ virDomainScreenshot(virDomainPtr domain,
  * be deleted when the domain quits.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainShutdown(virDomainPtr domain)
@@ -1494,6 +1673,8 @@ virDomainShutdown(virDomainPtr domain)
  * must have <channel> configured.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.10
  */
 int
 virDomainShutdownFlags(virDomainPtr domain, unsigned int flags)
@@ -1552,6 +1733,8 @@ virDomainShutdownFlags(virDomainPtr domain, unsigned int flags)
  * to a plain shutdown on the destination.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.1.0
  */
 int
 virDomainReboot(virDomainPtr domain, unsigned int flags)
@@ -1596,6 +1779,8 @@ virDomainReboot(virDomainPtr domain, unsigned int flags)
  * guest OS shutdown.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.7
  */
 int
 virDomainReset(virDomainPtr domain, unsigned int flags)
@@ -1635,6 +1820,8 @@ virDomainReset(virDomainPtr domain, unsigned int flags)
  *
  * Returns a pointer to the name or NULL, the string need not be deallocated
  * its lifetime will be the same as the domain object.
+ *
+ * Since: 0.0.3
  */
 const char *
 virDomainGetName(virDomainPtr domain)
@@ -1657,6 +1844,8 @@ virDomainGetName(virDomainPtr domain)
  * Get the UUID for a domain
  *
  * Returns -1 in case of error, 0 in case of success
+ *
+ * Since: 0.0.5
  */
 int
 virDomainGetUUID(virDomainPtr domain, unsigned char *uuid)
@@ -1687,6 +1876,8 @@ virDomainGetUUID(virDomainPtr domain, unsigned char *uuid)
  * UUID see RFC4122.
  *
  * Returns -1 in case of error, 0 in case of success
+ *
+ * Since: 0.1.1
  */
 int
 virDomainGetUUIDString(virDomainPtr domain, char *buf)
@@ -1714,6 +1905,8 @@ virDomainGetUUIDString(virDomainPtr domain, char *buf)
  * Get the hypervisor ID number for the domain
  *
  * Returns the domain ID number or (unsigned int) -1 in case of error
+ *
+ * Since: 0.0.3
  */
 unsigned int
 virDomainGetID(virDomainPtr domain)
@@ -1736,6 +1929,8 @@ virDomainGetID(virDomainPtr domain)
  *
  * Returns the new string or NULL in case of error, the string must be
  *         freed by the caller.
+ *
+ * Since: 0.0.3
  */
 char *
 virDomainGetOSType(virDomainPtr domain)
@@ -1775,6 +1970,8 @@ virDomainGetOSType(virDomainPtr domain)
  *
  * Returns the memory size in kibibytes (blocks of 1024 bytes), or 0 in
  * case of error.
+ *
+ * Since: 0.0.3
  */
 unsigned long
 virDomainGetMaxMemory(virDomainPtr domain)
@@ -1824,6 +2021,8 @@ virDomainGetMaxMemory(virDomainPtr domain)
  * virDomainSetMemoryFlags().
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainSetMaxMemory(virDomainPtr domain, unsigned long memory)
@@ -1877,6 +2076,8 @@ virDomainSetMaxMemory(virDomainPtr domain, unsigned long memory)
  * virDomainSetMemoryFlags().
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.1.1
  */
 int
 virDomainSetMemory(virDomainPtr domain, unsigned long memory)
@@ -1939,6 +2140,8 @@ virDomainSetMemory(virDomainPtr domain, unsigned long memory)
  * Not all hypervisors can support all flag combinations.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.9.0
  */
 int
 virDomainSetMemoryFlags(virDomainPtr domain, unsigned long memory,
@@ -1999,6 +2202,8 @@ virDomainSetMemoryFlags(virDomainPtr domain, unsigned long memory,
  * Not all hypervisors can support all flag combinations.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 1.1.1
  */
 int
 virDomainSetMemoryStatsPeriod(virDomainPtr domain, int period,
@@ -2049,6 +2254,8 @@ virDomainSetMemoryStatsPeriod(virDomainPtr domain, int period,
  * VIR_DOMAIN_MEMORY_PARAM_UNLIMITED.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.8.5
  */
 int
 virDomainSetMemoryParameters(virDomainPtr domain,
@@ -2123,6 +2330,8 @@ virDomainSetMemoryParameters(virDomainPtr domain,
  * expects the caller to allocate the @params.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.8.5
  */
 int
 virDomainGetMemoryParameters(virDomainPtr domain,
@@ -2182,7 +2391,16 @@ virDomainGetMemoryParameters(virDomainPtr domain,
  * Change all or a subset of the numa tunables.
  * This function may require privileged access to the hypervisor.
  *
+ * Changing live configuration may be possible only in some cases. For
+ * instance, for QEMU driver the mode (VIR_DOMAIN_NUMA_MODE) can not be
+ * changed, and changing the nodeset (VIR_DOMAIN_NUMA_NODESET) is possible
+ * only for VIR_DOMAIN_NUMATUNE_MEM_RESTRICTIVE mode.
+ *
+ * Changing persistent configuration does not pose such limitations.
+ *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.9
  */
 int
 virDomainSetNumaParameters(virDomainPtr domain,
@@ -2248,6 +2466,8 @@ virDomainSetNumaParameters(virDomainPtr domain,
  * expects the caller to allocate the @params.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.9
  */
 int
 virDomainGetNumaParameters(virDomainPtr domain,
@@ -2305,6 +2525,8 @@ virDomainGetNumaParameters(virDomainPtr domain,
  * This function may require privileged access to the hypervisor.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.0
  */
 int
 virDomainSetBlkioParameters(virDomainPtr domain,
@@ -2370,6 +2592,8 @@ virDomainSetBlkioParameters(virDomainPtr domain,
  * expects the caller to allocate the @params.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.0
  */
 int
 virDomainGetBlkioParameters(virDomainPtr domain,
@@ -2428,6 +2652,8 @@ virDomainGetBlkioParameters(virDomainPtr domain,
  * can be extracted.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.0.3
  */
 int
 virDomainGetInfo(virDomainPtr domain, virDomainInfoPtr info)
@@ -2474,6 +2700,8 @@ virDomainGetInfo(virDomainPtr domain, virDomainInfoPtr info)
  * which led to the state.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.2
  */
 int
 virDomainGetState(virDomainPtr domain,
@@ -2517,6 +2745,8 @@ virDomainGetState(virDomainPtr domain,
  * Extract details about current state of control interface to a domain.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.9.3
  */
 int
 virDomainGetControlInfo(virDomainPtr domain,
@@ -2578,6 +2808,8 @@ virDomainGetControlInfo(virDomainPtr domain,
  *
  * Returns a 0 terminated UTF-8 encoded XML instance, or NULL in case
  * of error. The caller must free() the returned value.
+ *
+ * Since: 0.0.3
  */
 char *
 virDomainGetXMLDesc(virDomainPtr domain, unsigned int flags)
@@ -2627,6 +2859,8 @@ virDomainGetXMLDesc(virDomainPtr domain, unsigned int flags)
  *
  * Returns a 0 terminated UTF-8 encoded XML instance, or NULL in case
  * of error. The caller must free() the returned value.
+ *
+ * Since: 0.6.4
  */
 char *
 virConnectDomainXMLFromNative(virConnectPtr conn,
@@ -2675,8 +2909,17 @@ virConnectDomainXMLFromNative(virConnectPtr conn,
  * a native configuration file describing the domain.
  * The format of the native data is hypervisor dependent.
  *
+ * Note that certain hypervisor drivers such as the QEMU driver configure many
+ * aspects of the domain dynamically via hypervisor APIs and that may not be
+ * part of the returned native configuration format. Similarly certain resources
+ * are passed to the hypervisor via file descriptors, which are not part of the
+ * native configuration returned by this API. Such configuration is thus not
+ * trivially usable outside of libvirt.
+ *
  * Returns a 0 terminated UTF-8 encoded native config datafile, or
  * NULL in case of error. The caller must free() the returned value.
+ *
+ * Since: 0.6.4
  */
 char *
 virConnectDomainXMLToNative(virConnectPtr conn,
@@ -3015,8 +3258,7 @@ virDomainMigrateVersion3Full(virDomainPtr domain,
         return NULL;
     }
 
-    if (virTypedParamsCopy(&tmp, params, nparams) < 0)
-        return NULL;
+    virTypedParamsCopy(&tmp, params, nparams);
     params = tmp;
 
     ret = VIR_DRV_SUPPORTS_FEATURE(domain->conn->driver, domain->conn,
@@ -3047,7 +3289,9 @@ virDomainMigrateVersion3Full(virDomainPtr domain,
         ret = virDomainGetInfo(domain, &info);
         state = info.state;
     }
-    if (ret == 0 && state == VIR_DOMAIN_PAUSED)
+    if (ret == 0 &&
+        state == VIR_DOMAIN_PAUSED &&
+        !(flags & VIR_MIGRATE_POSTCOPY_RESUME))
         flags |= VIR_MIGRATE_PAUSED;
 
     destflags = flags & ~(VIR_MIGRATE_ABORT_ON_ERROR |
@@ -3198,8 +3442,7 @@ virDomainMigrateVersion3Full(virDomainPtr domain,
                 if (err &&
                     err->domain == VIR_FROM_QEMU &&
                     err->code != VIR_ERR_MIGRATE_FINISH_OK) {
-                    virFreeError(orig_err);
-                    orig_err = NULL;
+                    g_clear_pointer(&orig_err, virFreeError);
                 }
             }
         }
@@ -3531,6 +3774,8 @@ virDomainMigrateUnmanaged(virDomainPtr domain,
  * Returns the new domain object if the migration was successful,
  *   or NULL in case of error.  Note that the new domain object
  *   exists in the scope of the destination connection (dconn).
+ *
+ * Since: 0.3.2
  */
 virDomainPtr
 virDomainMigrate(virDomainPtr domain,
@@ -3727,6 +3972,8 @@ virDomainMigrate(virDomainPtr domain,
  * Returns the new domain object if the migration was successful,
  *   or NULL in case of error.  Note that the new domain object
  *   exists in the scope of the destination connection (dconn).
+ *
+ * Since: 0.9.2
  */
 virDomainPtr
 virDomainMigrate2(virDomainPtr domain,
@@ -3936,6 +4183,8 @@ virDomainMigrate2(virDomainPtr domain,
  * Returns the new domain object if the migration was successful,
  *   or NULL in case of error.  Note that the new domain object
  *   exists in the scope of the destination connection (dconn).
+ *
+ * Since: 1.1.0
  */
 virDomainPtr
 virDomainMigrate3(virDomainPtr domain,
@@ -4224,6 +4473,8 @@ int virDomainMigrateUnmanagedCheckCompat(virDomainPtr domain,
  * corresponds to VIR_MIGRATE_PARAM_URI of virDomainMigrateToURI3.
  *
  * Returns 0 if the migration succeeded, -1 upon error.
+ *
+ * Since: 0.7.2
  */
 int
 virDomainMigrateToURI(virDomainPtr domain,
@@ -4300,6 +4551,8 @@ virDomainMigrateToURI(virDomainPtr domain,
  * virDomainMigrateToURI3.
  *
  * Returns 0 if the migration succeeded, -1 upon error.
+ *
+ * Since: 0.9.2
  */
 int
 virDomainMigrateToURI2(virDomainPtr domain,
@@ -4380,6 +4633,8 @@ virDomainMigrateToURI2(virDomainPtr domain,
  * different types of hypervisor.
  *
  * Returns 0 if the migration succeeded, -1 upon error.
+ *
+ * Since: 1.1.0
  */
 int
 virDomainMigrateToURI3(virDomainPtr domain,
@@ -5249,6 +5504,8 @@ virDomainMigrateConfirm3Params(virDomainPtr domain,
  * Get the scheduler type and the number of scheduler parameters.
  *
  * Returns NULL in case of error. The caller must free the returned string.
+ *
+ * Since: 0.2.3
  */
 char *
 virDomainGetSchedulerType(virDomainPtr domain, int *nparams)
@@ -5297,6 +5554,8 @@ virDomainGetSchedulerType(virDomainPtr domain, int *nparams)
  * virDomainGetSchedulerParametersFlags().
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.2.3
  */
 int
 virDomainGetSchedulerParameters(virDomainPtr domain,
@@ -5362,6 +5621,8 @@ virDomainGetSchedulerParameters(virDomainPtr domain,
  *   }
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.2
  */
 int
 virDomainGetSchedulerParametersFlags(virDomainPtr domain,
@@ -5426,6 +5687,8 @@ virDomainGetSchedulerParametersFlags(virDomainPtr domain,
  * virDomainSetSchedulerParametersFlags.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.2.3
  */
 int
 virDomainSetSchedulerParameters(virDomainPtr domain,
@@ -5480,6 +5743,8 @@ virDomainSetSchedulerParameters(virDomainPtr domain,
  * flags are supported.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.2
  */
 int
 virDomainSetSchedulerParametersFlags(virDomainPtr domain,
@@ -5551,6 +5816,8 @@ virDomainSetSchedulerParametersFlags(virDomainPtr domain,
  * that particular statistic.
  *
  * Returns: 0 in case of success or -1 in case of failure.
+ *
+ * Since: 0.3.2
  */
 int
 virDomainBlockStats(virDomainPtr dom, const char *disk,
@@ -5628,6 +5895,8 @@ virDomainBlockStats(virDomainPtr dom, const char *disk,
  * again. See virDomainGetMemoryParameters() for more details.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.5
  */
 int
 virDomainBlockStatsFlags(virDomainPtr dom,
@@ -5696,7 +5965,12 @@ virDomainBlockStatsFlags(virDomainPtr dom,
  *
  * The returned stats are from domain's point of view.
  *
+ * Please note, for an unmanaged ethernet type, returned stats
+ * might have RX/TX swapped.
+ *
  * Returns: 0 in case of success or -1 in case of failure.
+ *
+ * Since: 0.3.2
  */
 int
 virDomainInterfaceStats(virDomainPtr dom, const char *device,
@@ -5757,6 +6031,8 @@ virDomainInterfaceStats(virDomainPtr dom, const char *device,
  * This function may require privileged access to the hypervisor.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.9
  */
 int
 virDomainSetInterfaceParameters(virDomainPtr domain,
@@ -5825,6 +6101,8 @@ virDomainSetInterfaceParameters(virDomainPtr domain,
  * expects the caller to allocate the @params.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.9
  */
 int
 virDomainGetInterfaceParameters(virDomainPtr domain,
@@ -5915,6 +6193,8 @@ virDomainGetInterfaceParameters(virDomainPtr domain,
  *     The number of failed huge page allocations from inside the domain
  *
  * Returns: The number of stats provided or -1 in case of failure.
+ *
+ * Since: 0.7.5
  */
 int
 virDomainMemoryStats(virDomainPtr dom, virDomainMemoryStatPtr stats,
@@ -5994,6 +6274,8 @@ virDomainMemoryStats(virDomainPtr dom, virDomainMemoryStatPtr stats,
  * Now large requests up to 16M byte are supported.
  *
  * Returns: 0 in case of success or -1 in case of failure.
+ *
+ * Since: 0.4.3
  */
 int
 virDomainBlockPeek(virDomainPtr dom,
@@ -6063,6 +6345,8 @@ virDomainBlockPeek(virDomainPtr dom,
  * hypervisor.
  *
  * Returns: 0 in case of success or -1 in case of failure.
+ *
+ * Since: 0.9.8
  */
 int
 virDomainBlockResize(virDomainPtr dom,
@@ -6131,6 +6415,8 @@ virDomainBlockResize(virDomainPtr dom,
  * Now large requests up to 16M byte are supported.
  *
  * Returns: 0 in case of success or -1 in case of failure.
+ *
+ * Since: 0.4.3
  */
 int
 virDomainMemoryPeek(virDomainPtr dom,
@@ -6267,6 +6553,8 @@ virDomainMemoryPeek(virDomainPtr dom,
  *   ...
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.8.1
  */
 int
 virDomainGetBlockInfo(virDomainPtr domain, const char *disk,
@@ -6317,6 +6605,8 @@ virDomainGetBlockInfo(virDomainPtr domain, const char *disk,
  * domain object is no longer needed.
  *
  * Returns NULL in case of error, a pointer to the domain otherwise
+ *
+ * Since: 0.1.1
  */
 virDomainPtr
 virDomainDefineXML(virConnectPtr conn, const char *xml)
@@ -6360,6 +6650,8 @@ virDomainDefineXML(virConnectPtr conn, const char *xml)
  * domain object is no longer needed.
  *
  * Returns NULL in case of error, a pointer to the domain otherwise
+ *
+ * Since: 1.2.12
  */
 virDomainPtr
 virDomainDefineXMLFlags(virConnectPtr conn, const char *xml, unsigned int flags)
@@ -6403,6 +6695,8 @@ virDomainDefineXMLFlags(virConnectPtr conn, const char *xml, unsigned int flags)
  * will fail. See virDomainUndefineFlags() for more control.
  *
  * Returns 0 in case of success, -1 in case of error
+ *
+ * Since: 0.1.1
  */
 int
 virDomainUndefine(virDomainPtr domain)
@@ -6472,6 +6766,8 @@ virDomainUndefine(virDomainPtr domain)
  * VIR_DOMAIN_UNDEFINE_NVRAM is specified to remove the nvram file.
  *
  * Returns 0 in case of success, -1 in case of error
+ *
+ * Since: 0.9.4
  */
 int
 virDomainUndefineFlags(virDomainPtr domain,
@@ -6511,6 +6807,8 @@ virDomainUndefineFlags(virDomainPtr domain,
  * Provides the number of defined but inactive domains.
  *
  * Returns the number of domain found or -1 in case of error
+ *
+ * Since: 0.1.5
  */
 int
 virConnectNumOfDefinedDomains(virConnectPtr conn)
@@ -6554,6 +6852,8 @@ virConnectNumOfDefinedDomains(virConnectPtr conn)
  * a call to virConnectNumOfDefinedDomains() and this call; you are only
  * guaranteed that all currently defined domains were listed if the return
  * is less than @maxids.  The client must call free() on each returned name.
+ *
+ * Since: 0.1.1
  */
 int
 virConnectListDefinedDomains(virConnectPtr conn, char **const names,
@@ -6653,6 +6953,8 @@ virConnectListDefinedDomains(virConnectPtr conn, char **const names,
  * extra allocated element set to NULL but not included in the return count, to
  * make iteration easier. The caller is responsible for calling virDomainFree()
  * on each array element, then calling free() on @domains.
+ *
+ * Since: 0.9.13
  */
 int
 virConnectListAllDomains(virConnectPtr conn,
@@ -6694,6 +6996,8 @@ virConnectListAllDomains(virConnectPtr conn,
  * control, see virDomainCreateWithFlags().
  *
  * Returns 0 in case of success, -1 in case of error
+ *
+ * Since: 0.1.1
  */
 int
 virDomainCreate(virDomainPtr domain)
@@ -6757,7 +7061,13 @@ virDomainCreate(virDomainPtr domain)
  * If the VIR_DOMAIN_START_FORCE_BOOT flag is set, then any managed save
  * file for this domain is discarded, and the domain boots from scratch.
  *
+ * If @flags includes VIR_DOMAIN_START_RESET_NVRAM, then libvirt will
+ * discard any existing NVRAM file and re-initialize NVRAM from the
+ * pristine template.
+ *
  * Returns 0 in case of success, -1 in case of error
+ *
+ * Since: 0.8.2
  */
 int
 virDomainCreateWithFlags(virDomainPtr domain, unsigned int flags)
@@ -6829,7 +7139,13 @@ virDomainCreateWithFlags(virDomainPtr domain, unsigned int flags)
  * If the VIR_DOMAIN_START_FORCE_BOOT flag is set, then any managed save
  * file for this domain is discarded, and the domain boots from scratch.
  *
+ * If @flags includes VIR_DOMAIN_START_RESET_NVRAM, then libvirt will
+ * discard any existing NVRAM file and re-initialize NVRAM from the
+ * pristine template.
+ *
  * Returns 0 in case of success, -1 in case of error
+ *
+ * Since: 1.1.1
  */
 int
 virDomainCreateWithFiles(virDomainPtr domain, unsigned int nfiles,
@@ -6846,6 +7162,18 @@ virDomainCreateWithFiles(virDomainPtr domain, unsigned int nfiles,
     conn = domain->conn;
 
     virCheckReadOnlyGoto(conn->flags, error);
+
+    if (nfiles > 0) {
+        int rc;
+
+        if ((rc = VIR_DRV_SUPPORTS_FEATURE(conn->driver, conn,
+                                           VIR_DRV_FEATURE_FD_PASSING)) <= 0) {
+            if (rc == 0)
+                virReportError(VIR_ERR_ARGUMENT_UNSUPPORTED, "%s",
+                               _("fd passing is not supported by this connection"));
+            goto error;
+        }
+    }
 
     if (conn->driver->domainCreateWithFiles) {
         int ret;
@@ -6875,6 +7203,8 @@ virDomainCreateWithFiles(virDomainPtr domain, unsigned int nfiles,
  * machine boots.
  *
  * Returns -1 in case of error, 0 in case of success
+ *
+ * Since: 0.2.1
  */
 int
 virDomainGetAutostart(virDomainPtr domain,
@@ -6916,6 +7246,8 @@ virDomainGetAutostart(virDomainPtr domain,
  * when the host machine boots.
  *
  * Returns -1 in case of error, 0 in case of success
+ *
+ * Since: 0.2.1
  */
 int
 virDomainSetAutostart(virDomainPtr domain,
@@ -6956,6 +7288,8 @@ virDomainSetAutostart(virDomainPtr domain,
  * Send NMI to the guest
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.9.2
  */
 int
 virDomainInjectNMI(virDomainPtr domain, unsigned int flags)
@@ -6998,6 +7332,8 @@ virDomainInjectNMI(virDomainPtr domain, unsigned int flags)
  * Send key(s) to the guest.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.9.3
  */
 int
 virDomainSendKey(virDomainPtr domain,
@@ -7083,6 +7419,8 @@ virDomainSendKey(virDomainPtr domain,
  * the container/guest.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 1.0.1
  */
 int
 virDomainSendProcessSignal(virDomainPtr domain,
@@ -7140,6 +7478,8 @@ virDomainSendProcessSignal(virDomainPtr domain,
  * use virDomainSetVcpusFlags().
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.1.4
  */
 int
 virDomainSetVcpus(virDomainPtr domain, unsigned int nvcpus)
@@ -7211,6 +7551,8 @@ virDomainSetVcpus(virDomainPtr domain, unsigned int nvcpus)
  * Not all hypervisors can support all flag combinations.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.8.5
  */
 int
 virDomainSetVcpusFlags(virDomainPtr domain, unsigned int nvcpus,
@@ -7280,6 +7622,8 @@ virDomainSetVcpusFlags(virDomainPtr domain, unsigned int nvcpus,
  * on live domains. Guest agent may be needed for this flag to be available.
  *
  * Returns the number of vCPUs in case of success, -1 in case of failure.
+ *
+ * Since: 0.8.5
  */
 int
 virDomainGetVcpusFlags(virDomainPtr domain, unsigned int flags)
@@ -7336,6 +7680,8 @@ virDomainGetVcpusFlags(virDomainPtr domain, unsigned int flags)
  * so can only be called on an active domain.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.1.4
  */
 int
 virDomainPinVcpu(virDomainPtr domain, unsigned int vcpu,
@@ -7403,6 +7749,7 @@ virDomainPinVcpu(virDomainPtr domain, unsigned int vcpu,
  *
  * Returns 0 in case of success, -1 in case of failure.
  *
+ * Since: 0.9.3
  */
 int
 virDomainPinVcpuFlags(virDomainPtr domain, unsigned int vcpu,
@@ -7461,6 +7808,8 @@ virDomainPinVcpuFlags(virDomainPtr domain, unsigned int vcpu,
  *
  * Returns the number of virtual CPUs in case of success,
  * -1 in case of failure.
+ *
+ * Since: 0.9.3
  */
 int
 virDomainGetVcpuPinInfo(virDomainPtr domain, int ncpumaps,
@@ -7538,6 +7887,7 @@ virDomainGetVcpuPinInfo(virDomainPtr domain, int ncpumaps,
  *
  * Returns 0 in case of success, -1 in case of failure.
  *
+ * Since: 0.10.0
  */
 int
 virDomainPinEmulator(virDomainPtr domain, unsigned char *cpumap,
@@ -7593,6 +7943,8 @@ virDomainPinEmulator(virDomainPtr domain, unsigned char *cpumap,
  * Returns 1 in case of success,
  * 0 in case of no emulator threads are pined to pcpus,
  * -1 in case of failure.
+ *
+ * Since: 0.10.0
  */
 int
 virDomainGetEmulatorPinInfo(virDomainPtr domain, unsigned char *cpumap,
@@ -7658,6 +8010,8 @@ virDomainGetEmulatorPinInfo(virDomainPtr domain, unsigned char *cpumap,
  * an inactive domain.
  *
  * Returns the number of info filled in case of success, -1 in case of failure.
+ *
+ * Since: 0.1.4
  */
 int
 virDomainGetVcpus(virDomainPtr domain, virVcpuInfoPtr info, int maxinfo,
@@ -7717,6 +8071,8 @@ virDomainGetVcpus(virDomainPtr domain, virVcpuInfoPtr info, int maxinfo,
  * guest was booted with.  For more details, see virDomainGetVcpusFlags().
  *
  * Returns the maximum of virtual CPU or -1 in case of error.
+ *
+ * Since: 0.2.1
  */
 int
 virDomainGetMaxVcpus(virDomainPtr domain)
@@ -7761,6 +8117,8 @@ virDomainGetMaxVcpus(virDomainPtr domain)
  * On success, the array of information is stored into @info. The caller is
  * responsible for calling virDomainIOThreadInfoFree() on each array element,
  * then calling free() on @info. On error, @info is set to NULL.
+ *
+ * Since: 1.2.14
  */
 int
 virDomainGetIOThreadInfo(virDomainPtr dom,
@@ -7800,6 +8158,8 @@ virDomainGetIOThreadInfo(virDomainPtr dom,
  * @info: pointer to a virDomainIOThreadInfo object
  *
  * Frees the memory used by @info.
+ *
+ * Since: 1.2.14
  */
 void
 virDomainIOThreadInfoFree(virDomainIOThreadInfoPtr info)
@@ -7843,6 +8203,8 @@ virDomainIOThreadInfoFree(virDomainIOThreadInfoPtr info)
  * See also virDomainGetIOThreadInfo for querying this information.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 1.2.14
  */
 int
 virDomainPinIOThread(virDomainPtr domain,
@@ -7907,6 +8269,8 @@ virDomainPinIOThread(virDomainPtr domain,
  * just live or both live and persistent state is changed.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 1.2.15
  */
 int
 virDomainAddIOThread(virDomainPtr domain,
@@ -7966,6 +8330,8 @@ virDomainAddIOThread(virDomainPtr domain,
  * just live or both live and persistent state is changed.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 1.2.15
  */
 int
 virDomainDelIOThread(virDomainPtr domain,
@@ -8027,6 +8393,8 @@ virDomainDelIOThread(virDomainPtr domain,
  * This function requires privileged access to the hypervisor.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 4.10.0
  */
 int
 virDomainSetIOThreadParams(virDomainPtr domain,
@@ -8080,6 +8448,8 @@ virDomainSetIOThreadParams(virDomainPtr domain,
  * string if the domain is not running under a security model.
  *
  * Returns 0 in case of success, -1 in case of failure
+ *
+ * Since: 0.6.1
  */
 int
 virDomainGetSecurityLabel(virDomainPtr domain, virSecurityLabelPtr seclabel)
@@ -8122,6 +8492,8 @@ virDomainGetSecurityLabel(virDomainPtr domain, virSecurityLabelPtr seclabel)
  * string if the domain is not running under a security model.
  *
  * Returns number of elements in @seclabels on success, -1 in case of failure.
+ *
+ * Since: 0.10.0
  */
 int
 virDomainGetSecurityLabelList(virDomainPtr domain,
@@ -8184,6 +8556,8 @@ virDomainGetSecurityLabelList(virDomainPtr domain,
  * or both will be modified.
  *
  * Returns 0 on success, -1 in case of failure.
+ *
+ * Since: 0.9.10
  */
 int
 virDomainSetMetadata(virDomainPtr domain,
@@ -8269,6 +8643,8 @@ virDomainSetMetadata(virDomainPtr domain,
  *
  * Returns the metadata string on success (caller must free),
  * or NULL in case of failure.
+ *
+ * Since: 0.9.10
  */
 char *
 virDomainGetMetadata(virDomainPtr domain,
@@ -8336,6 +8712,8 @@ virDomainGetMetadata(virDomainPtr domain,
  * persistent domain definition.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.1.9
  */
 int
 virDomainAttachDevice(virDomainPtr domain, const char *xml)
@@ -8395,6 +8773,8 @@ virDomainAttachDevice(virDomainPtr domain, const char *xml)
  * persistent domain definition.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.7.7
  */
 int
 virDomainAttachDeviceFlags(virDomainPtr domain,
@@ -8439,6 +8819,8 @@ virDomainAttachDeviceFlags(virDomainPtr domain,
  * See virDomainDetachDeviceFlags() for more details.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.1.9
  */
 int
 virDomainDetachDevice(virDomainPtr domain, const char *xml)
@@ -8521,6 +8903,8 @@ virDomainDetachDevice(virDomainPtr domain, const char *xml)
  * may lead to unexpected results.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.7.7
  */
 int
 virDomainDetachDeviceFlags(virDomainPtr domain,
@@ -8585,6 +8969,8 @@ virDomainDetachDeviceFlags(virDomainPtr domain,
  * domain XML with only the disk path changed.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 0.8.0
  */
 int
 virDomainUpdateDeviceFlags(virDomainPtr domain,
@@ -8639,6 +9025,8 @@ virDomainUpdateDeviceFlags(virDomainPtr domain,
  * device removal.
  *
  * Returns 0 in case of success, -1 in case of failure.
+ *
+ * Since: 4.4.0
  */
 int
 virDomainDetachDeviceAlias(virDomainPtr domain,
@@ -8699,6 +9087,8 @@ virDomainDetachDeviceAlias(virDomainPtr domain,
  * Returns 0 on success, -1 on failure.  Older versions of some hypervisors
  * sometimes returned a positive number on success, but without any reliable
  * semantics on what that number represents.
+ *
+ * Since: 0.5.0
  */
 int
 virConnectDomainEventRegister(virConnectPtr conn,
@@ -8742,6 +9132,8 @@ virConnectDomainEventRegister(virConnectPtr conn,
  * Returns 0 on success, -1 on failure.  Older versions of some hypervisors
  * sometimes returned a positive number on success, but without any reliable
  * semantics on what that number represents.
+ *
+ * Since: 0.5.0
  */
 int
 virConnectDomainEventDeregister(virConnectPtr conn,
@@ -8776,6 +9168,8 @@ virConnectDomainEventDeregister(virConnectPtr conn,
  * Determine if the domain is currently running
  *
  * Returns 1 if running, 0 if inactive, -1 on error
+ *
+ * Since: 0.7.3
  */
 int
 virDomainIsActive(virDomainPtr dom)
@@ -8809,6 +9203,8 @@ virDomainIsActive(virDomainPtr dom)
  * which means it will still exist after shutting down
  *
  * Returns 1 if persistent, 0 if transient, -1 on error
+ *
+ * Since: 0.7.3
  */
 int
 virDomainIsPersistent(virDomainPtr dom)
@@ -8849,6 +9245,8 @@ virDomainIsPersistent(virDomainPtr dom)
  * advised to change these after the rename was successful.
  *
  * Returns 0 if successfully renamed, -1 on error
+ *
+ * Since: 1.2.19
  */
 int
 virDomainRename(virDomainPtr dom,
@@ -8882,6 +9280,8 @@ virDomainRename(virDomainPtr dom,
  * Determine if the domain has been updated.
  *
  * Returns 1 if updated, 0 if not, -1 on error
+ *
+ * Since: 0.8.6
  */
 int
 virDomainIsUpdated(virDomainPtr dom)
@@ -8919,6 +9319,8 @@ virDomainIsUpdated(virDomainPtr dom)
  * to virDomainGetJobStats().
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.7.7
  */
 int
 virDomainGetJobInfo(virDomainPtr domain, virDomainJobInfoPtr info)
@@ -8983,6 +9385,8 @@ virDomainGetJobInfo(virDomainPtr domain, virDomainJobInfoPtr info)
  * source host in case of a migration job).
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 1.0.3
  */
 int
 virDomainGetJobStats(virDomainPtr domain,
@@ -9035,6 +9439,8 @@ virDomainGetJobStats(virDomainPtr domain,
  * for more details).
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 0.7.7
  */
 int
 virDomainAbortJob(virDomainPtr domain)
@@ -9067,6 +9473,51 @@ virDomainAbortJob(virDomainPtr domain)
 
 
 /**
+ * virDomainAbortJobFlags:
+ * @domain: a domain object
+ * @flags: bitwise-OR of virDomainAbortJobFlagsValues
+ *
+ * Requests that the current background job be aborted at the
+ * soonest opportunity. In case the job is a migration in a post-copy mode,
+ * this function will report an error unless VIR_DOMAIN_ABORT_JOB_POSTCOPY
+ * flag is used (see virDomainMigrateStartPostCopy for more details).
+ *
+ * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 8.5.0
+ */
+int
+virDomainAbortJobFlags(virDomainPtr domain,
+                       unsigned int flags)
+{
+    virConnectPtr conn;
+
+    VIR_DOMAIN_DEBUG(domain);
+
+    virResetLastError();
+
+    virCheckDomainReturn(domain, -1);
+    conn = domain->conn;
+
+    virCheckReadOnlyGoto(conn->flags, error);
+
+    if (conn->driver->domainAbortJobFlags) {
+        int ret;
+        ret = conn->driver->domainAbortJobFlags(domain, flags);
+        if (ret < 0)
+            goto error;
+        return ret;
+    }
+
+    virReportUnsupportedError();
+
+ error:
+    virDispatchError(conn);
+    return -1;
+}
+
+
+/**
  * virDomainMigrateSetMaxDowntime:
  * @domain: a domain object
  * @downtime: maximum tolerable downtime for live migration, in milliseconds
@@ -9077,6 +9528,8 @@ virDomainAbortJob(virDomainPtr domain)
  * being live-migrated as a reaction to migration progress.
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 0.8.0
  */
 int
 virDomainMigrateSetMaxDowntime(virDomainPtr domain,
@@ -9118,6 +9571,8 @@ virDomainMigrateSetMaxDowntime(virDomainPtr domain,
  * at the end of live migration.
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 3.7.0
  */
 int
 virDomainMigrateGetMaxDowntime(virDomainPtr domain,
@@ -9158,6 +9613,8 @@ virDomainMigrateGetMaxDowntime(virDomainPtr domain,
  * transferred memory pages during live migration.
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 1.0.3
  */
 int
 virDomainMigrateGetCompressionCache(virDomainPtr domain,
@@ -9202,6 +9659,8 @@ virDomainMigrateGetCompressionCache(virDomainPtr domain,
  * virDomainGetJobStats.
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 1.0.3
  */
 int
 virDomainMigrateSetCompressionCache(virDomainPtr domain,
@@ -9246,6 +9705,8 @@ virDomainMigrateSetCompressionCache(virDomainPtr domain,
  * phase of the migration.
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 0.9.0
  */
 int
 virDomainMigrateSetMaxSpeed(virDomainPtr domain,
@@ -9289,6 +9750,8 @@ virDomainMigrateSetMaxSpeed(virDomainPtr domain,
  * migration.
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 0.9.5
  */
 int
 virDomainMigrateGetMaxSpeed(virDomainPtr domain,
@@ -9350,10 +9813,20 @@ virDomainMigrateGetMaxSpeed(virDomainPtr domain,
  * at most once no matter how fast it changes. On the other hand once the
  * guest is running on the destination host, the migration can no longer be
  * rolled back because none of the hosts has complete state. If this happens,
- * libvirt will leave the domain paused on both hosts with
- * VIR_DOMAIN_PAUSED_POSTCOPY_FAILED reason. It's up to the upper layer to
- * decide what to do in such case. Because of this, libvirt will refuse to
- * cancel post-copy migration via virDomainAbortJob.
+ * libvirt will leave the domain paused on the source host with
+ * VIR_DOMAIN_PAUSED_POSTCOPY_FAILED reason. The domain on the destination host
+ * will remain running with VIR_DOMAIN_RUNNING_POSTCOPY_FAILED reason.
+ * It's up to the upper layer to decide what to do in such case. Because of
+ * this, libvirt will refuse to cancel post-copy migration via
+ * virDomainAbortJobFlags unless it is called with
+ * VIR_DOMAIN_ABORT_JOB_POSTCOPY, in which case the post-copy migration will be
+ * paused.
+ *
+ * Failed post-copy migration can be recovered once the cause for the failure
+ * (e.g., a network issue) is resolved by repeating the migration with an
+ * additional VIR_MIGRATE_POSTCOPY_RESUME flag. This will recreate the
+ * connection and resume migration from the point where it failed. This step
+ * can be repeated in case the migration breaks again.
  *
  * The following domain life cycle events are emitted during post-copy
  * migration:
@@ -9367,9 +9840,11 @@ virDomainMigrateGetMaxSpeed(virDomainPtr domain,
  *  VIR_DOMAIN_EVENT_RESUMED_MIGRATED (on the destination),
  *  VIR_DOMAIN_EVENT_STOPPED_MIGRATED (on the source) -- migration finished
  *      successfully and the destination host holds a complete guest state.
- *  VIR_DOMAIN_EVENT_SUSPENDED_POSTCOPY_FAILED (on the destination) -- emitted
- *      when migration fails in post-copy mode and it's unclear whether any
- *      of the hosts has a complete guest state.
+ *  VIR_DOMAIN_EVENT_SUSPENDED_POSTCOPY_FAILED (on the source),
+ *  VIR_DOMAIN_EVENT_RESUMED_POSTCOPY_FAILED (on the destination) -- emitted
+ *      when migration fails in post-copy mode and it's unclear whether any of
+ *      the hosts has a complete guest state. Virtual CPUs on the destination
+ *      are still running.
  *
  * The progress of a post-copy migration can be monitored normally using
  * virDomainGetJobStats on the source host. Fetching statistics of a completed
@@ -9382,6 +9857,8 @@ virDomainMigrateGetMaxSpeed(virDomainPtr domain,
  * migration and there's no domain to run virDomainGetJobStats on).
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 1.3.3
  */
 int
 virDomainMigrateStartPostCopy(virDomainPtr domain,
@@ -9440,11 +9917,13 @@ virDomainMigrateStartPostCopy(virDomainPtr domain,
  * The reference can be released once the object is no longer required
  * by calling virDomainFree().
  *
- * The return value from this method is a positive integer identifier
+ * The return value from this method is a non-negative integer identifier
  * for the callback. To unregister a callback, this callback ID should
  * be passed to the virConnectDomainEventDeregisterAny() method.
  *
  * Returns a callback identifier on success, -1 on failure.
+ *
+ * Since: 0.8.0
  */
 int
 virConnectDomainEventRegisterAny(virConnectPtr conn,
@@ -9503,7 +9982,10 @@ virConnectDomainEventRegisterAny(virConnectPtr conn,
  *
  * Returns 0 on success, -1 on failure.  Older versions of some hypervisors
  * sometimes returned a positive number on success, but without any reliable
- * semantics on what that number represents. */
+ * semantics on what that number represents.
+ *
+ * Since: 0.8.0
+ */
 int
 virConnectDomainEventDeregisterAny(virConnectPtr conn,
                                    int callbackID)
@@ -9558,6 +10040,8 @@ virConnectDomainEventDeregisterAny(virConnectPtr conn,
  * flags are mutually exclusive.
  *
  * Returns 0 in case of success or -1 in case of failure
+ *
+ * Since: 0.8.0
  */
 int
 virDomainManagedSave(virDomainPtr dom, unsigned int flags)
@@ -9605,6 +10089,8 @@ virDomainManagedSave(virDomainPtr dom, unsigned int flags)
  *
  * Returns 0 if no image is present, 1 if an image is present, and
  *         -1 in case of error
+ *
+ * Since: 0.8.0
  */
 int
 virDomainHasManagedSaveImage(virDomainPtr dom, unsigned int flags)
@@ -9643,6 +10129,8 @@ virDomainHasManagedSaveImage(virDomainPtr dom, unsigned int flags)
  * Remove any managed save image for this domain.
  *
  * Returns 0 in case of success, and -1 in case of error
+ *
+ * Since: 0.8.0
  */
 int
 virDomainManagedSaveRemove(virDomainPtr dom, unsigned int flags)
@@ -9689,6 +10177,8 @@ virDomainManagedSaveRemove(virDomainPtr dom, unsigned int flags)
  *
  * Returns a 0 terminated UTF-8 encoded XML instance, or NULL in case of
  * error.  The caller must free() the returned value.
+ *
+ * Since: 3.7.0
  */
 char *
 virDomainManagedSaveGetXMLDesc(virDomainPtr domain, unsigned int flags)
@@ -9747,6 +10237,8 @@ virDomainManagedSaveGetXMLDesc(virDomainPtr domain, unsigned int flags)
  * exclusive.
  *
  * Returns 0 in case of success and -1 in case of failure.
+ *
+ * Since: 3.7.0
  */
 int
 virDomainManagedSaveDefineXML(virDomainPtr domain, const char *dxml,
@@ -9812,6 +10304,8 @@ virDomainManagedSaveDefineXML(virDomainPtr domain, const char *dxml,
  * versions, it is up to the client to ensure mutual exclusion.
  *
  * Returns 0 if the console was opened, -1 on error
+ *
+ * Since: 0.8.6
  */
 int
 virDomainOpenConsole(virDomainPtr dom,
@@ -9876,6 +10370,8 @@ virDomainOpenConsole(virDomainPtr dom,
  * other client prior to opening this channel.
  *
  * Returns 0 if the channel was opened, -1 on error
+ *
+ * Since: 1.0.2
  */
 int
 virDomainOpenChannel(virDomainPtr dom,
@@ -9933,6 +10429,8 @@ virDomainOpenChannel(virDomainPtr dom,
  * Linux perf events are performance analyzing tool in Linux.
  *
  * Returns -1 in case of failure, 0 in case of success.
+ *
+ * Since: 1.3.3
  */
 int virDomainGetPerfEvents(virDomainPtr domain,
                            virTypedParameterPtr *params,
@@ -9983,6 +10481,8 @@ int virDomainGetPerfEvents(virDomainPtr domain,
  * Linux perf events are performance analyzing tool in Linux.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 1.3.3
  */
 int virDomainSetPerfEvents(virDomainPtr domain,
                            virTypedParameterPtr params,
@@ -10066,6 +10566,8 @@ int virDomainSetPerfEvents(virDomainPtr domain,
  * beginning of the first phase.
  *
  * Returns -1 in case of failure, 0 when successful.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainBlockJobAbort(virDomainPtr dom, const char *disk,
@@ -10143,6 +10645,8 @@ virDomainBlockJobAbort(virDomainPtr dom, const char *disk,
  * space required for the backup.
  *
  * Returns -1 in case of failure, 0 when nothing found, 1 when info was found.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainGetBlockJobInfo(virDomainPtr dom, const char *disk,
@@ -10206,6 +10710,8 @@ virDomainGetBlockJobInfo(virDomainPtr dom, const char *disk,
  * elements within //domain/devices/disk.
  *
  * Returns -1 in case of failure, 0 when successful.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainBlockJobSetSpeed(virDomainPtr dom, const char *disk,
@@ -10280,6 +10786,8 @@ virDomainBlockJobSetSpeed(virDomainPtr dom, const char *disk,
  * This is shorthand for virDomainBlockRebase() with a NULL base.
  *
  * Returns 0 if the operation has started, -1 on failure.
+ *
+ * Since: 0.9.4
  */
 int
 virDomainBlockPull(virDomainPtr dom, const char *disk,
@@ -10424,6 +10932,8 @@ virDomainBlockPull(virDomainPtr dom, const char *disk,
  * to the source format or probed from the reused file.
  *
  * Returns 0 if the operation has started, -1 on failure.
+ *
+ * Since: 0.9.10
  */
 int
 virDomainBlockRebase(virDomainPtr dom, const char *disk,
@@ -10554,6 +11064,8 @@ virDomainBlockRebase(virDomainPtr dom, const char *disk,
  * is not a local file, and the possibility of additional tuning parameters.
  *
  * Returns 0 if the operation has started, -1 on failure.
+ *
+ * Since: 1.2.8
  */
 int
 virDomainBlockCopy(virDomainPtr dom, const char *disk,
@@ -10700,6 +11212,8 @@ virDomainBlockCopy(virDomainPtr dom, const char *disk,
  * virDomainGetBlockJobInfo().
  *
  * Returns 0 if the operation has started, -1 on failure.
+ *
+ * Since: 0.10.2
  */
 int
 virDomainBlockCommit(virDomainPtr dom, const char *disk,
@@ -10759,6 +11273,8 @@ virDomainBlockCommit(virDomainPtr dom, const char *disk,
  * to use this method over a TCP connection will always fail
  *
  * Returns 0 on success, -1 on failure
+ *
+ * Since: 0.9.7
  */
 int
 virDomainOpenGraphics(virDomainPtr dom,
@@ -10839,6 +11355,8 @@ virDomainOpenGraphics(virDomainPtr dom,
  * to use this method over a TCP connection will always fail.
  *
  * Returns an fd on success, -1 on failure
+ *
+ * Since: 1.2.8
  */
 int
 virDomainOpenGraphicsFD(virDomainPtr dom,
@@ -10900,6 +11418,8 @@ virDomainOpenGraphicsFD(virDomainPtr dom,
  * within //domain/devices/disk.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.8
  */
 int
 virDomainSetBlockIoTune(virDomainPtr dom,
@@ -10975,6 +11495,8 @@ virDomainSetBlockIoTune(virDomainPtr dom,
  * unless @nparams is 0 on input.
  *
  * Returns -1 in case of error, 0 in case of success.
+ *
+ * Since: 0.9.8
  */
 int
 virDomainGetBlockIoTune(virDomainPtr dom,
@@ -11104,6 +11626,8 @@ virDomainGetBlockIoTune(virDomainPtr dom,
  * skipped elements if @nparams is too large, and tail elements if
  * @ncpus is too large).  The caller is responsible for freeing any
  * returned string parameters.
+ *
+ * Since: 0.9.10
  */
 int
 virDomainGetCPUStats(virDomainPtr domain,
@@ -11204,6 +11728,8 @@ virDomainGetCPUStats(virDomainPtr domain,
  *
  * Returns number of disks with errors filled in the @errors array or -1 on
  * error.
+ *
+ * Since: 0.9.10
  */
 int
 virDomainGetDiskErrors(virDomainPtr dom,
@@ -11249,6 +11775,8 @@ virDomainGetDiskErrors(virDomainPtr dom,
  *
  * Returns the hostname which must be freed by the caller, or
  * NULL if there was an error.
+ *
+ * Since: 0.10.0
  */
 char *
 virDomainGetHostname(virDomainPtr domain, unsigned int flags)
@@ -11298,6 +11826,8 @@ virDomainGetHostname(virDomainPtr domain, unsigned int flags)
  * If @minimum is not zero, the command may fail.
  *
  * Returns 0 on success, -1 otherwise.
+ *
+ * Since: 1.0.1
  */
 int
 virDomainFSTrim(virDomainPtr dom,
@@ -11342,6 +11872,8 @@ virDomainFSTrim(virDomainPtr dom,
  * support mountpoints argument), @mountpoints may need to be NULL.
  *
  * Returns the number of frozen filesystems on success, -1 otherwise.
+ *
+ * Since: 1.2.5
  */
 int
 virDomainFSFreeze(virDomainPtr dom,
@@ -11385,6 +11917,8 @@ virDomainFSFreeze(virDomainPtr dom,
  * In some drivers (e.g. QEMU driver), @mountpoints may need to be NULL.
  *
  * Returns the number of thawed filesystems on success, -1 otherwise.
+ *
+ * Since: 1.2.5
  */
 int
 virDomainFSThaw(virDomainPtr dom,
@@ -11430,6 +11964,8 @@ virDomainFSThaw(virDomainPtr dom,
  * be configured and running in order to run this API.
  *
  * Returns 0 on success, -1 otherwise.
+ *
+ * Since: 1.2.5
  */
 int
 virDomainGetTime(virDomainPtr dom,
@@ -11480,6 +12016,8 @@ virDomainGetTime(virDomainPtr dom,
  * be configured and running in order to be able to run this API.
  *
  * Returns 0 on success, -1 otherwise.
+ *
+ * Since: 1.2.5
  */
 int
 virDomainSetTime(virDomainPtr dom,
@@ -11526,6 +12064,8 @@ virDomainSetTime(virDomainPtr dom,
  * be configured and running in order to be able to run this API.
  *
  * Returns 0 on success, -1 otherwise.
+ *
+ * Since: 1.2.16
  */
 int
 virDomainSetUserPassword(virDomainPtr dom,
@@ -11576,6 +12116,8 @@ virDomainSetUserPassword(virDomainPtr dom,
  *
  * Returns NULL in case of error or an XML string
  * defining the capabilities.
+ *
+ * Since: 1.2.7
  */
 char *
 virConnectGetDomainCapabilities(virConnectPtr conn,
@@ -11730,6 +12272,23 @@ virConnectGetDomainCapabilities(virConnectPtr conn,
  *                          host scheduler, but was waiting in the queue
  *                          instead of running. Exposed to the VM as a steal
  *                          time.
+ *
+ *    This group of statistics also reports additional hypervisor-originating
+ *    per-vCPU stats. The hypervisor-specific statistics in this group have the
+ *    following naming scheme:
+ *
+ *     "vcpu.<num>.$NAME.$TYPE"
+ *
+ *       $NAME - name of the statistics field provided by the hypervisor
+ *
+ *       $TYPE - Type of the value. The following types are returned:
+ *          'cur' - current instant value
+ *          'sum' - aggregate value
+ *          'max' - peak value
+ *
+ *      The returned value may be either an unsigned long long or a boolean.
+ *      Meaning is hypervisor specific. Please see the disclaimer for the
+ *      VIR_DOMAIN_STATS_VM group below.
  *
  * VIR_DOMAIN_STATS_INTERFACE:
  *     Return network interface statistics (from domain point of view).
@@ -11934,6 +12493,39 @@ virConnectGetDomainCapabilities(virConnectPtr conn,
  *     "dirtyrate.megabytes_per_second" - the calculated memory dirty rate in
  *                                        MiB/s as long long. It is produced
  *                                        only if the calc_status is measured.
+ *     "dirtyrate.calc_mode" - the calculation mode used last measurement, either
+ *                             of these 3 'page-sampling,dirty-bitmap,dirty-ring'
+ *                             values returned.
+ *     "dirtyrate.vcpu.<num>.megabytes_per_second" - the calculated memory dirty
+ *                                                   rate for a virtual cpu as
+ *                                                   unsigned long long.
+ *
+ * VIR_DOMAIN_STATS_VM:
+ *     Return hypervisor-specific statistics. Note that the naming and meaning
+ *     of the fields is entirely hypervisor dependent.
+ *
+ *     The statistics in this group have the following naming scheme:
+ *
+ *     "vm.$NAME.$TYPE"
+ *
+ *       $NAME - name of the statistics field provided by the hypervisor
+ *
+ *       $TYPE - Type of the value. The following types are returned:
+ *          'cur' - current instant value
+ *          'sum' - aggregate value
+ *          'max' - peak value
+ *
+ *      The returned value may be either an unsigned long long or a boolean.
+ *
+ *     WARNING:
+ *      The stats reported in this group are runtime-collected and
+ *      hypervisor originated, thus fall outside of the usual stable API
+ *      policies of libvirt.
+ *
+ *      Libvirt can't guarantee that the statistics reported from the outside
+ *      source will be present in further versions of the hypervisor, or that
+ *      naming or meaning will stay consistent. Changes to existing fields,
+ *      however, are expected to be rare.
  *
  * Note that entire stats groups or individual stat fields may be missing from
  * the output in case they are not supported by the given hypervisor, are not
@@ -11976,6 +12568,8 @@ virConnectGetDomainCapabilities(virConnectPtr conn,
  * Returns the count of returned statistics structures on success, -1 on error.
  * The requested data are returned in the @retStats parameter. The returned
  * array should be freed by the caller. See virDomainStatsRecordListFree.
+ *
+ * Since: 1.2.8
  */
 int
 virConnectGetAllDomainStats(virConnectPtr conn,
@@ -12055,6 +12649,8 @@ virConnectGetAllDomainStats(virConnectPtr conn,
  * array should be freed by the caller. See virDomainStatsRecordListFree.
  * Note that the count of returned stats may be less than the domain count
  * provided via @doms.
+ *
+ * Since: 1.2.8
  */
 int
 virDomainListGetStats(virDomainPtr *doms,
@@ -12122,6 +12718,8 @@ virDomainListGetStats(virDomainPtr *doms,
  *
  * Convenience function to free a list of domain stats returned by
  * virDomainListGetStats and virConnectGetAllDomainStats.
+ *
+ * Since: 1.2.8
  */
 void
 virDomainStatsRecordListFree(virDomainStatsRecordPtr *stats)
@@ -12154,6 +12752,8 @@ virDomainStatsRecordListFree(virDomainStatsRecordPtr *stats)
  * On success, the array of the information is stored into @info. The caller is
  * responsible for calling virDomainFSInfoFree() on each array element, then
  * calling free() on @info. On error, @info is set to NULL.
+ *
+ * Since: 1.2.11
  */
 int
 virDomainGetFSInfo(virDomainPtr dom,
@@ -12189,6 +12789,8 @@ virDomainGetFSInfo(virDomainPtr dom,
  * @info: pointer to a FSInfo object
  *
  * Frees all the memory occupied by @info.
+ *
+ * Since: 1.2.11
  */
 void
 virDomainFSInfoFree(virDomainFSInfoPtr info)
@@ -12281,6 +12883,8 @@ virDomainFSInfoFree(virDomainFSInfoPtr info)
  *       free(ifaces);
  *
  * Returns the number of interfaces on success, -1 in case of error.
+ *
+ * Since: 1.2.14
  */
 int
 virDomainInterfaceAddresses(virDomainPtr dom,
@@ -12322,6 +12926,8 @@ virDomainInterfaceAddresses(virDomainPtr dom,
  * Free the interface object. The data structure is
  * freed and should not be used thereafter. If @iface
  * is NULL, then this method has no effect.
+ *
+ * Since: 1.2.14
  */
 void
 virDomainInterfaceFree(virDomainInterfacePtr iface)
@@ -12365,6 +12971,8 @@ virDomainInterfaceFree(virDomainInterfacePtr iface)
  * virTypedParamsFree to free memory returned in @params.
  *
  * Returns 0 on success, -1 on error.
+ *
+ * Since: 2.0.0
  */
 int
 virDomainGetGuestVcpus(virDomainPtr domain,
@@ -12423,6 +13031,8 @@ virDomainGetGuestVcpus(virDomainPtr domain,
  * low-level features a S3 sleep.
  *
  * Returns 0 on success, -1 on error.
+ *
+ * Since: 2.0.0
  */
 int
 virDomainSetGuestVcpus(virDomainPtr domain,
@@ -12472,6 +13082,8 @@ virDomainSetGuestVcpus(virDomainPtr domain,
  * Note that OSes and hypervisors may require vCPU 0 to stay online.
  *
  * Returns 0 on success, -1 on error.
+ *
+ * Since: 3.1.0
  */
 int
 virDomainSetVcpu(virDomainPtr domain,
@@ -12624,6 +13236,8 @@ virDomainSetVcpu(virDomainPtr domain,
  * virTypedParamsFree to free memory returned in @params.
  *
  * Returns 0 on success, -1 on error.
+ *
+ * Since: 5.7.0
  */
 int virDomainGetGuestInfo(virDomainPtr domain,
                           unsigned int types,
@@ -12698,6 +13312,8 @@ int virDomainGetGuestInfo(virDomainPtr domain,
  * tools to grow it without the need for polling of the data.
  *
  * Returns 0 if the operation has started, -1 on failure.
+ *
+ * Since: 3.2.0
  */
 int
 virDomainSetBlockThreshold(virDomainPtr domain,
@@ -12747,6 +13363,8 @@ virDomainSetBlockThreshold(virDomainPtr domain,
  * any action for running domain.
  *
  * Returns 0 on success, -1 on failure.
+ *
+ * Since: 3.9.0
  */
 int virDomainSetLifecycleAction(virDomainPtr domain,
                                 unsigned int type,
@@ -12802,6 +13420,8 @@ int virDomainSetLifecycleAction(virDomainPtr domain,
  * return the launch measurement.
  *
  * Returns -1 in case of failure, 0 in case of success.
+ *
+ * Since: 4.5.0
  */
 int virDomainGetLaunchSecurityInfo(virDomainPtr domain,
                                    virTypedParameterPtr *params,
@@ -12845,6 +13465,70 @@ int virDomainGetLaunchSecurityInfo(virDomainPtr domain,
 
 
 /**
+ * virDomainSetLaunchSecurityState:
+ * @domain: a domain object
+ * @params: pointer to launch security parameter objects
+ * @nparams: number of launch security parameters
+ * @flags: currently used, set to 0.
+ *
+ * Set a launch security secret in the guest's memory. The guest must be
+ * in a paused state, e.g. in state VIR_DOMIAN_PAUSED as reported by
+ * virDomainGetState. On success, the guest can be transitioned to a
+ * running state. On failure, the guest should be destroyed.
+ *
+ * A basic guest attestation process can be achieved by:
+ * - Start a secure guest in the paused state by passing VIR_DOMAIN_START_PAUSED
+ *   to one of the virDomainCreate APIs
+ * - Retrieve the guest launch measurement with virDomainGetLaunchSecurityInfo
+ * - Verify launch measurement and generate a secret for the guest
+ * - Set the secret in the guest's memory with virDomainSetLaunchSecurityState
+ * - Start running the guest with virDomainResume
+ *
+ * See VIR_DOMAIN_LAUNCH_SECURITY_* for a detailed description of accepted
+ * launch security parameters.
+ *
+ * Returns -1 in case of failure, 0 in case of success.
+ *
+ * Since: 8.0.0
+ */
+int virDomainSetLaunchSecurityState(virDomainPtr domain,
+                                    virTypedParameterPtr params,
+                                    int nparams,
+                                    unsigned int flags)
+{
+    virConnectPtr conn = domain->conn;
+
+    VIR_DOMAIN_DEBUG(domain, "params=%p, nparams=%d flags=0x%x",
+                     params, nparams, flags);
+    VIR_TYPED_PARAMS_DEBUG(params, nparams);
+
+    virResetLastError();
+
+    virCheckDomainReturn(domain, -1);
+    virCheckNonNullArgGoto(params, error);
+    virCheckPositiveArgGoto(nparams, error);
+    virCheckReadOnlyGoto(domain->conn->flags, error);
+
+    if (virTypedParameterValidateSet(conn, params, nparams) < 0)
+        goto error;
+
+    if (conn->driver->domainSetLaunchSecurityState) {
+        int ret;
+        ret = conn->driver->domainSetLaunchSecurityState(domain, params,
+                                                         nparams, flags);
+        if (ret < 0)
+            goto error;
+        return ret;
+    }
+    virReportUnsupportedError();
+
+ error:
+    virDispatchError(domain->conn);
+    return -1;
+}
+
+
+/**
  * virDomainAgentSetResponseTimeout:
  * @domain: a domain object
  * @timeout: timeout in seconds
@@ -12863,6 +13547,8 @@ int virDomainGetLaunchSecurityInfo(virDomainPtr domain,
  *   positive value: wait for @timeout seconds
  *
  * Returns 0 on success, -1 on failure
+ *
+ * Since: 5.10.0
  */
 int
 virDomainAgentSetResponseTimeout(virDomainPtr domain,
@@ -12942,7 +13628,7 @@ virDomainAgentSetResponseTimeout(virDomainPtr domain,
  *
  * virDomainBackupGetXMLDesc() can be called to learn actual
  * values selected.  For more information, see
- * formatcheckpoint.html#BackupAttributes.
+ * https://www.libvirt.org/formatbackup.html#backup-xml
  *
  * The @checkpointXML parameter is optional; if non-NULL, then libvirt
  * behaves as if virDomainCheckpointCreateXML() were called to create
@@ -12959,6 +13645,8 @@ virDomainAgentSetResponseTimeout(virDomainPtr domain,
  * formats if checkpoints are not involved.
  *
  * Returns 0 on success or -1 on failure.
+ *
+ * Since: 6.0.0
  */
 int
 virDomainBackupBegin(virDomainPtr domain,
@@ -13009,6 +13697,8 @@ virDomainBackupBegin(virDomainPtr domain,
  *
  * Returns a NUL-terminated UTF-8 encoded XML instance or NULL in
  * case of error.  The caller must free() the returned value.
+ *
+ * Since: 6.0.0
  */
 char *
 virDomainBackupGetXMLDesc(virDomainPtr domain,
@@ -13058,6 +13748,8 @@ virDomainBackupGetXMLDesc(virDomainPtr domain,
  *
  * Returns: number of keys stored in @keys,
  *          -1 otherwise.
+ *
+ * Since: 6.10.0
  */
 int
 virDomainAuthorizedSSHKeysGet(virDomainPtr domain,
@@ -13126,6 +13818,8 @@ virDomainAuthorizedSSHKeysGet(virDomainPtr domain,
  *
  * Returns: 0 on success,
  *         -1 otherwise.
+ *
+ * Since: 6.10.0
  */
 int
 virDomainAuthorizedSSHKeysSet(virDomainPtr domain,
@@ -13194,6 +13888,8 @@ virDomainAuthorizedSSHKeysSet(virDomainPtr domain,
  *
  * Returns: number of messages stored in @msgs,
  *          -1 otherwise.
+ *
+ * Since: 7.1.0
  */
 int
 virDomainGetMessages(virDomainPtr domain,
@@ -13229,13 +13925,15 @@ virDomainGetMessages(virDomainPtr domain,
  * virDomainStartDirtyRateCalc:
  * @domain: a domain object
  * @seconds: specified calculating time in seconds
- * @flags: extra flags; not used yet, so callers should always pass 0
+ * @flags: bitwise-OR of supported virDomainDirtyRateCalcFlags
  *
  * Calculate the current domain's memory dirty rate in next @seconds.
  * The calculated dirty rate information is available by calling
  * virConnectGetAllDomainStats.
  *
  * Returns 0 in case of success, -1 otherwise.
+ *
+ * Since: 7.2.0
  */
 int
 virDomainStartDirtyRateCalc(virDomainPtr domain,
@@ -13253,6 +13951,16 @@ virDomainStartDirtyRateCalc(virDomainPtr domain,
 
     virCheckReadOnlyGoto(conn->flags, error);
 
+    VIR_EXCLUSIVE_FLAGS_GOTO(VIR_DOMAIN_DIRTYRATE_MODE_PAGE_SAMPLING,
+                             VIR_DOMAIN_DIRTYRATE_MODE_DIRTY_BITMAP,
+                             error);
+    VIR_EXCLUSIVE_FLAGS_GOTO(VIR_DOMAIN_DIRTYRATE_MODE_PAGE_SAMPLING,
+                             VIR_DOMAIN_DIRTYRATE_MODE_DIRTY_RING,
+                             error);
+    VIR_EXCLUSIVE_FLAGS_GOTO(VIR_DOMAIN_DIRTYRATE_MODE_DIRTY_BITMAP,
+                             VIR_DOMAIN_DIRTYRATE_MODE_DIRTY_RING,
+                             error);
+
     if (conn->driver->domainStartDirtyRateCalc) {
         int ret;
         ret = conn->driver->domainStartDirtyRateCalc(domain, seconds, flags);
@@ -13262,6 +13970,86 @@ virDomainStartDirtyRateCalc(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
+
+ error:
+    virDispatchError(conn);
+    return -1;
+}
+
+
+/**
+ * virDomainFDAssociate:
+ * @domain: a domain object
+ * @name: name for the file descriptor group
+ * @nfds: number of fds in @fds
+ * @fds: file descriptors to associate with domain
+ * @flags: optional flags; bitwise-OR of supported virDomainFDAssociateFlags
+ *
+ * Associate the FDs in @fd with @domain under @name. The FDs are associated as
+ * long as the connection used to associated exists and are disposed of
+ * afterwards. FD may still be kept open by the hypervisor for as long as it's
+ * needed.
+ *
+ * Security labelling (e.g. via the selinux) may be applied on the passed FDs
+ * when required for usage by the VM. By default libvirt does not restore the
+ * seclabels on the FDs afterwards to avoid keeping it open unnecessarily.
+ *
+ * Restoring of the security label can be requested by passing either
+ * VIR_DOMAIN_FD_ASSOCIATE_SECLABEL_RESTORE for a best-effort attempt to restore
+ * the security label after use.
+ * Requesting the restore of security label will require that the file
+ * descriptors are kept open for the whole time they are used by the hypervisor,
+ * or other additional overhead.
+ *
+ * In certain cases usage of the fd group would imply read-only access. Passing
+ * VIR_DOMAIN_FD_ASSOCIATE_SECLABEL_WRITABLE in @flags ensures that a writable
+ * security label is picked in case when the file represented by the fds may
+ * be used in write mode.
+ *
+ * Returns 0 on success, -1 on error.
+ *
+ * Since: 9.0.0
+ */
+int
+virDomainFDAssociate(virDomainPtr domain,
+                     const char *name,
+                     unsigned int nfds,
+                     int *fds,
+                     unsigned int flags)
+{
+    virConnectPtr conn;
+    int rc;
+
+    VIR_DOMAIN_DEBUG(domain,
+                     "name='%s', nfds=%u, fds=%p, flags=0x%x",
+                     name, nfds, fds, flags);
+
+    virResetLastError();
+
+    conn = domain->conn;
+
+    if ((rc = VIR_DRV_SUPPORTS_FEATURE(conn->driver, conn, VIR_DRV_FEATURE_FD_PASSING)) < 0)
+        goto error;
+
+    if (rc == 0) {
+        virReportError(VIR_ERR_ARGUMENT_UNSUPPORTED, "%s",
+                       _("fd passing is not supported by this connection"));
+        goto error;
+    }
+
+    virCheckNonZeroArgGoto(nfds, error);
+    virCheckNonNullArgGoto(fds, error);
+    virCheckReadOnlyGoto(conn->flags, error);
+
+    if (!conn->driver->domainFDAssociate) {
+        virReportUnsupportedError();
+        goto error;
+    }
+
+    if ((rc = conn->driver->domainFDAssociate(domain, name, nfds, fds, flags)) < 0)
+        goto error;
+
+    return rc;
 
  error:
     virDispatchError(conn);

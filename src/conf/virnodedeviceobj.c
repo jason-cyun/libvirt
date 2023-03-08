@@ -27,7 +27,6 @@
 #include "virerror.h"
 #include "virhash.h"
 #include "virlog.h"
-#include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_NODEDEV
 
@@ -48,7 +47,7 @@ struct _virNodeDeviceObjList {
     virObjectRWLockable parent;
 
     /* name string -> virNodeDeviceObj mapping
-     * for O(1), lockless lookup-by-name */
+     * for O(1), lookup-by-name */
     GHashTable *objs;
 
 };
@@ -58,7 +57,6 @@ static virClass *virNodeDeviceObjClass;
 static virClass *virNodeDeviceObjListClass;
 static void virNodeDeviceObjDispose(void *opaque);
 static void virNodeDeviceObjListDispose(void *opaque);
-static bool virNodeDeviceObjHasCap(const virNodeDeviceObj *obj, int type);
 
 static int
 virNodeDeviceObjOnceInit(void)
@@ -108,8 +106,7 @@ virNodeDeviceObjEndAPI(virNodeDeviceObj **obj)
         return;
 
     virObjectUnlock(*obj);
-    virObjectUnref(*obj);
-    *obj = NULL;
+    g_clear_pointer(obj, virObjectUnref);
 }
 
 
@@ -468,7 +465,7 @@ virNodeDeviceObjListNew(void)
     if (!(devs = virObjectRWLockableNew(virNodeDeviceObjListClass)))
         return NULL;
 
-    devs->objs = virHashNew(virObjectFreeHashData);
+    devs->objs = virHashNew(virObjectUnref);
 
     return devs;
 }
@@ -524,7 +521,7 @@ virNodeDeviceObjListRemove(virNodeDeviceObjList *devs,
     virObjectRWLockWrite(devs);
     virObjectLock(obj);
     virNodeDeviceObjListRemoveLocked(devs, obj);
-    virNodeDeviceObjEndAPI(&obj);
+    virObjectUnref(obj);
     virObjectRWUnlock(devs);
 }
 
@@ -685,7 +682,7 @@ virNodeDeviceObjListGetParentHost(virNodeDeviceObjList *devs,
 }
 
 
-static bool
+bool
 virNodeDeviceObjHasCap(const virNodeDeviceObj *obj,
                        int type)
 {

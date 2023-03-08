@@ -21,8 +21,6 @@
 #include "testutils.h"
 #include "testutilsqemu.h"
 #include "testutilsqemuschema.h"
-#include "virstoragefile.h"
-#include "virstring.h"
 #include "virlog.h"
 #include "qemu/qemu_block.h"
 #include "qemu/qemu_qapi.h"
@@ -30,8 +28,6 @@
 #include "qemu/qemu_backup.h"
 #include "qemu/qemu_checkpoint.h"
 #include "qemu/qemu_validate.h"
-
-#include "qemu/qemu_command.h"
 
 #define LIBVIRT_SNAPSHOT_CONF_PRIV_H_ALLOW
 #include "conf/snapshot_conf_priv.h"
@@ -298,7 +294,7 @@ testQemuDiskXMLToProps(const void *opaque)
         if (testQemuDiskXMLToJSONFakeSecrets(n) < 0)
             return -1;
 
-        if (qemuDomainValidateStorageSource(n, data->qemuCaps, false) < 0)
+        if (qemuDomainValidateStorageSource(n, data->qemuCaps) < 0)
             return -1;
 
         qemuDomainPrepareDiskSourceData(disk, n);
@@ -523,7 +519,7 @@ testQemuImageCreate(const void *opaque)
     src->capacity = UINT_MAX * 2ULL;
     src->physical = UINT_MAX + 1ULL;
 
-    if (qemuDomainValidateStorageSource(src, data->qemuCaps, false) < 0)
+    if (qemuDomainValidateStorageSource(src, data->qemuCaps) < 0)
         return -1;
 
     if (qemuBlockStorageSourceCreateGetStorageProps(src, &protocolprops) < 0)
@@ -1215,7 +1211,7 @@ mymain(void)
 
     TEST_IMAGE_CREATE("network-gluster-qcow2", NULL);
     TEST_IMAGE_CREATE("network-rbd-qcow2", NULL);
-    TEST_IMAGE_CREATE("network-ssh-qcow2", NULL);
+    TEST_IMAGE_CREATE("network-ssh-qcow2-invalid", NULL);
 
 #define TEST_BITMAP_DETECT(testname) \
     do { \

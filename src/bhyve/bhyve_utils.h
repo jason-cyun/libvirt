@@ -59,8 +59,6 @@ struct _bhyveConn {
 
     virObjectEventState *domainEventState;
 
-    virCloseCallbacks *closeCallbacks;
-
     virPortAllocatorRange *remotePorts;
 
     unsigned bhyvecaps;
@@ -73,6 +71,3 @@ struct bhyveAutostartData {
     struct _bhyveConn *driver;
     virConnectPtr conn;
 };
-
-void bhyveDriverLock(struct _bhyveConn *driver);
-void bhyveDriverUnlock(struct _bhyveConn *driver);

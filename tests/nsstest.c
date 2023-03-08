@@ -23,7 +23,6 @@
 #ifdef WITH_NSS
 
 # include "libvirt_nss.h"
-# include "virsocket.h"
 
 # define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -173,6 +172,7 @@ mymain(void)
 # if !defined(LIBVIRT_NSS_GUEST)
     DO_TEST("fedora", AF_INET, "192.168.122.197", "192.168.122.198", "192.168.122.199", "192.168.122.3");
     DO_TEST("gentoo", AF_INET, "192.168.122.254");
+    DO_TEST("Gentoo", AF_INET, "192.168.122.254");
     DO_TEST("gentoo", AF_INET6, "2001:1234:dead:beef::2");
     DO_TEST("gentoo", AF_UNSPEC, "192.168.122.254");
     DO_TEST("non-existent", AF_UNSPEC, NULL);

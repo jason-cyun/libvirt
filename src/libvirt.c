@@ -197,16 +197,7 @@ static virConnectAuth virConnectAuthDefault = {
     NULL,
 };
 
-/*
- * virConnectAuthPtrDefault
- *
- * A default implementation of the authentication callbacks. This
- * implementation is suitable for command line based tools. It will
- * prompt for username, passwords, realm and one time keys as needed.
- * It will print on STDOUT, and read from STDIN. If this is not
- * suitable for the application's needs an alternative implementation
- * should be provided.
- */
+/* Explanation in the header file */
 virConnectAuthPtr virConnectAuthPtrDefault = &virConnectAuthDefault;
 
 static bool virGlobalError;
@@ -232,7 +223,8 @@ virGlobalInit(void)
         goto error;
     }
 
-    virLogSetFromEnv();
+    if (virLogSetFromEnv() < 0)
+        goto error;
 
     virNetTLSInit();
 
@@ -304,15 +296,18 @@ virGlobalInit(void)
  * connection attempt.
  *
  * Returns 0 in case of success, -1 in case of error
+ *
+ * Since: 0.1.0
  */
 int
 virInitialize(void)
 {
-    if (virOnce(&virGlobalOnce, virGlobalInit) < 0)
+    if (virOnce(&virGlobalOnce, virGlobalInit) < 0 ||
+        virGlobalError) {
+        virDispatchError(NULL);
         return -1;
+    }
 
-    if (virGlobalError)
-        return -1;
     return 0;
 }
 
@@ -609,6 +604,7 @@ virRegisterStateDriver(virStateDriver *driver)
  * @privileged: set to true if running with root privilege, false otherwise
  * @mandatory: set to true if all drivers must report success, not skipped
  * @root: directory to use for embedded mode
+ * @monolithic: set to true if running in monolithic mode (daemon is libvirtd)
  * @callback: callback to invoke to inhibit shutdown of the daemon
  * @opaque: data to pass to @callback
  *
@@ -638,6 +634,7 @@ int
 virStateInitialize(bool privileged,
                    bool mandatory,
                    const char *root,
+                   bool monolithic,
                    virStateInhibitCallback callback,
                    void *opaque)
 {
@@ -655,6 +652,7 @@ virStateInitialize(bool privileged,
             virStateDriverTab[i]->initialized = true;
             ret = virStateDriverTab[i]->stateInitialize(privileged,
                                                         root,
+                                                        monolithic,
                                                         callback,
                                                         opaque);
             VIR_DEBUG("State init result %d (mandatory=%d)", ret, mandatory);
@@ -804,6 +802,8 @@ virStateStop(void)
  *
  * Returns -1 in case of failure, 0 otherwise, and values for @libVer and
  *       @typeVer have the format major * 1,000,000 + minor * 1,000 + release.
+ *
+ * Since: 0.0.3
  */
 int
 virGetVersion(unsigned long *libVer, const char *type G_GNUC_UNUSED,
@@ -885,9 +885,9 @@ virConnectOpenInternal(const char *name,
 {
     size_t i;
     int res;
-    virConnectPtr ret;
+    g_autoptr(virConnect) ret = NULL;
     g_autoptr(virConf) conf = NULL;
-    char *uristr = NULL;
+    g_autofree char *uristr = NULL;
     bool embed = false;
 
     ret = virGetConnect();
@@ -895,7 +895,7 @@ virConnectOpenInternal(const char *name,
         return NULL;
 
     if (virConfLoadConfig(&conf, "libvirt.conf") < 0)
-        goto failed;
+        return NULL;
 
     if (name && name[0] == '\0')
         name = NULL;
@@ -919,14 +919,14 @@ virConnectOpenInternal(const char *name,
         uristr = g_strdup(name);
     } else {
         if (virConnectGetDefaultURI(conf, &uristr) < 0)
-            goto failed;
+            return NULL;
 
         if (uristr == NULL) {
             VIR_DEBUG("Trying to probe for default URI");
             for (i = 0; i < virConnectDriverTabCount && uristr == NULL; i++) {
                 if (virConnectDriverTab[i]->hypervisorDriver->connectURIProbe) {
                     if (virConnectDriverTab[i]->hypervisorDriver->connectURIProbe(&uristr) < 0)
-                        goto failed;
+                        return NULL;
                     VIR_DEBUG("%s driver URI probe returned '%s'",
                               virConnectDriverTab[i]->hypervisorDriver->name,
                               NULLSTR(uristr));
@@ -940,17 +940,15 @@ virConnectOpenInternal(const char *name,
 
         if (!(flags & VIR_CONNECT_NO_ALIASES) &&
             virURIResolveAlias(conf, uristr, &alias) < 0)
-            goto failed;
+            return NULL;
 
         if (alias) {
-            VIR_FREE(uristr);
-            uristr = alias;
+            g_free(uristr);
+            uristr = g_steal_pointer(&alias);
         }
 
-        if (!(ret->uri = virURIParse(uristr))) {
-            VIR_FREE(alias);
-            goto failed;
-        }
+        if (!(ret->uri = virURIParse(uristr)))
+            return NULL;
 
         /* Avoid need for drivers to worry about NULLs, as
          * no one needs to distinguish "" vs NULL */
@@ -972,12 +970,12 @@ virConnectOpenInternal(const char *name,
             virReportError(VIR_ERR_NO_CONNECT,
                            _("URI '%s' does not include a driver name"),
                            name);
-            goto failed;
+            return NULL;
         }
 
         if (virConnectCheckURIMissingSlash(uristr,
                                            ret->uri) < 0) {
-            goto failed;
+            return NULL;
         }
 
         if (STREQ(ret->uri->path, "/embed")) {
@@ -990,26 +988,26 @@ virConnectOpenInternal(const char *name,
                 virReportError(VIR_ERR_NO_CONNECT,
                                _("URI scheme '%s' for embedded driver is not valid"),
                                ret->uri->scheme);
-                goto failed;
+                return NULL;
             }
 
             root = virURIGetParam(ret->uri, "root");
             if (!root)
-                goto failed;
+                return NULL;
 
             if (!g_path_is_absolute(root)) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                                _("root path must be absolute"));
-                goto failed;
+                return NULL;
             }
 
             if (virEventRequireImpl() < 0)
-                goto failed;
+                return NULL;
 
             regMethod = g_strdup_printf("%sRegister", ret->uri->scheme);
 
             if (virDriverLoadModule(ret->uri->scheme, regMethod, false) < 0)
-                goto failed;
+                return NULL;
 
             if (virAccessManagerGetDefault() == NULL) {
                 virAccessManager *acl;
@@ -1017,12 +1015,12 @@ virConnectOpenInternal(const char *name,
                 virResetLastError();
 
                 if (!(acl = virAccessManagerNew("none")))
-                    goto failed;
+                    return NULL;
                 virAccessManagerSetDefault(acl);
             }
 
-            if (virStateInitialize(geteuid() == 0, true, root, NULL, NULL) < 0)
-                goto failed;
+            if (virStateInitialize(geteuid() == 0, true, root, false, NULL, NULL) < 0)
+                return NULL;
 
             embed = true;
         }
@@ -1060,7 +1058,7 @@ virConnectOpenInternal(const char *name,
                                  __FILE__, __FUNCTION__, __LINE__,
                                  _("libvirt was built without the '%s' driver"),
                                  ret->uri->scheme);
-            goto failed;
+            return NULL;
         }
 
         VIR_DEBUG("trying driver %zu (%s) ...",
@@ -1110,13 +1108,13 @@ virConnectOpenInternal(const char *name,
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("Driver %s cannot be used in embedded mode"),
                            virConnectDriverTab[i]->hypervisorDriver->name);
-            goto failed;
+            return NULL;
         }
         /* before starting the new connection, check if the driver only works
          * with a server, and so return an error if the server is missing */
         if (virConnectDriverTab[i]->remoteOnly && ret->uri && !ret->uri->server) {
             virReportError(VIR_ERR_INVALID_ARG, "%s", _("URI is missing the server part"));
-            goto failed;
+            return NULL;
         }
 
         ret->driver = virConnectDriverTab[i]->hypervisorDriver;
@@ -1146,25 +1144,17 @@ virConnectOpenInternal(const char *name,
             ret->storageDriver = NULL;
 
             if (res == VIR_DRV_OPEN_ERROR)
-                goto failed;
+                return NULL;
         }
     }
 
     if (!ret->driver) {
         /* If we reach here, then all drivers declined the connection. */
         virReportError(VIR_ERR_NO_CONNECT, "%s", NULLSTR(name));
-        goto failed;
+        return NULL;
     }
 
-    VIR_FREE(uristr);
-
-    return ret;
-
- failed:
-    VIR_FREE(uristr);
-    virObjectUnref(ret);
-
-    return NULL;
+    return g_steal_pointer(&ret);
 }
 
 
@@ -1192,6 +1182,8 @@ virConnectOpenInternal(const char *name,
  * is no longer needed.
  *
  * Returns a pointer to the hypervisor connection or NULL in case of error
+ *
+ * Since: 0.0.3
  */
 virConnectPtr
 virConnectOpen(const char *name)
@@ -1199,18 +1191,15 @@ virConnectOpen(const char *name)
     virConnectPtr ret = NULL;
 
     if (virInitialize() < 0)
-        goto error;
+        return NULL;
 
     VIR_DEBUG("name=%s", NULLSTR(name));
     virResetLastError();
     ret = virConnectOpenInternal(name, NULL, 0);
     if (!ret)
-        goto error;
-    return ret;
+        virDispatchError(NULL);
 
- error:
-    virDispatchError(NULL);
-    return NULL;
+    return ret;
 }
 
 
@@ -1228,6 +1217,8 @@ virConnectOpen(const char *name)
  * URIs are documented at https://libvirt.org/uri.html
  *
  * Returns a pointer to the hypervisor connection or NULL in case of error
+ *
+ * Since: 0.0.3
  */
 virConnectPtr
 virConnectOpenReadOnly(const char *name)
@@ -1235,18 +1226,14 @@ virConnectOpenReadOnly(const char *name)
     virConnectPtr ret = NULL;
 
     if (virInitialize() < 0)
-        goto error;
+        return NULL;
 
     VIR_DEBUG("name=%s", NULLSTR(name));
     virResetLastError();
     ret = virConnectOpenInternal(name, NULL, VIR_CONNECT_RO);
     if (!ret)
-        goto error;
+        virDispatchError(NULL);
     return ret;
-
- error:
-    virDispatchError(NULL);
-    return NULL;
 }
 
 
@@ -1266,6 +1253,8 @@ virConnectOpenReadOnly(const char *name)
  * URIs are documented at https://libvirt.org/uri.html
  *
  * Returns a pointer to the hypervisor connection or NULL in case of error
+ *
+ * Since: 0.4.0
  */
 virConnectPtr
 virConnectOpenAuth(const char *name,
@@ -1275,18 +1264,14 @@ virConnectOpenAuth(const char *name,
     virConnectPtr ret = NULL;
 
     if (virInitialize() < 0)
-        goto error;
+        return NULL;
 
     VIR_DEBUG("name=%s, auth=%p, flags=0x%x", NULLSTR(name), auth, flags);
     virResetLastError();
     ret = virConnectOpenInternal(name, auth, flags);
     if (!ret)
-        goto error;
+        virDispatchError(NULL);
     return ret;
-
- error:
-    virDispatchError(NULL);
-    return NULL;
 }
 
 
@@ -1318,6 +1303,8 @@ virConnectOpenAuth(const char *name,
  * value if some other object still has a temporary reference to the
  * connection, but the application should not try to further use a
  * connection after the virConnectClose that matches the initial open.
+ *
+ * Since: 0.0.3
  */
 int
 virConnectClose(virConnectPtr conn)

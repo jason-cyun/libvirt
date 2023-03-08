@@ -20,7 +20,6 @@
 
 #include "virnetdevmidonet.h"
 #include "vircommand.h"
-#include "viralloc.h"
 #include "virerror.h"
 #include "viruuid.h"
 
@@ -39,8 +38,7 @@ int
 virNetDevMidonetBindPort(const char *ifname,
                          const virNetDevVPortProfile *virtualport)
 {
-    int ret = -1;
-    virCommand *cmd = NULL;
+    g_autoptr(virCommand) cmd = NULL;
     char virtportuuid[VIR_UUID_STRING_BUFLEN];
 
     virUUIDFormat(virtualport->interfaceID, virtportuuid);
@@ -53,13 +51,10 @@ virNetDevMidonetBindPort(const char *ifname,
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Unable to bind port %s to the virtual port %s"),
                        ifname, virtportuuid);
-        goto cleanup;
+        return -1;
     }
 
-    ret = 0;
- cleanup:
-    virCommandFree(cmd);
-    return ret;
+    return 0;
 }
 
 /**
@@ -73,8 +68,7 @@ virNetDevMidonetBindPort(const char *ifname,
 int
 virNetDevMidonetUnbindPort(const virNetDevVPortProfile *virtualport)
 {
-    int ret = -1;
-    virCommand *cmd = NULL;
+    g_autoptr(virCommand) cmd = NULL;
     char virtportuuid[VIR_UUID_STRING_BUFLEN];
 
     virUUIDFormat(virtualport->interfaceID, virtportuuid);
@@ -86,11 +80,8 @@ virNetDevMidonetUnbindPort(const virNetDevVPortProfile *virtualport)
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Unable to unbind the virtual port %s from Midonet"),
                        virtportuuid);
-        goto cleanup;
+        return -1;
     }
 
-    ret = 0;
- cleanup:
-    virCommandFree(cmd);
-    return ret;
+    return 0;
 }

@@ -302,8 +302,7 @@ virshInterfaceListCollect(vshControl *ctl,
     VIR_FREE(inactiveNames);
 
     if (!success) {
-        virshInterfaceListFree(list);
-        list = NULL;
+        g_clear_pointer(&list, virshInterfaceListFree);
     }
 
     return list;
@@ -471,6 +470,17 @@ static const vshCmdOptDef opts_interface_dumpxml[] = {
      .type = VSH_OT_BOOL,
      .help = N_("show inactive defined XML")
     },
+    {.name = "xpath",
+     .type = VSH_OT_STRING,
+     .flags = VSH_OFLAG_REQ_OPT,
+     .completer = virshCompleteEmpty,
+     .help = N_("xpath expression to filter the XML document")
+    },
+    {.name = "wrap",
+     .type = VSH_OT_BOOL,
+     .help = N_("wrap xpath results in an common root element"),
+    },
+
     {.name = NULL}
 };
 
@@ -478,7 +488,9 @@ static bool
 cmdInterfaceDumpXML(vshControl *ctl, const vshCmd *cmd)
 {
     g_autoptr(virshInterface) iface = NULL;
-    g_autofree char *dump = NULL;
+    g_autofree char *xml = NULL;
+    bool wrap = vshCommandOptBool(cmd, "wrap");
+    const char *xpath = NULL;
     unsigned int flags = 0;
 
     if (vshCommandOptBool(cmd, "inactive"))
@@ -487,11 +499,13 @@ cmdInterfaceDumpXML(vshControl *ctl, const vshCmd *cmd)
     if (!(iface = virshCommandOptInterface(ctl, cmd, NULL)))
         return false;
 
-    if (!(dump = virInterfaceGetXMLDesc(iface, flags)))
+    if (vshCommandOptStringQuiet(ctl, cmd, "xpath", &xpath) < 0)
         return false;
 
-    vshPrint(ctl, "%s", dump);
-    return true;
+    if (!(xml = virInterfaceGetXMLDesc(iface, flags)))
+        return false;
+
+    return virshDumpXML(ctl, xml, "interface", xpath, wrap);
 }
 
 /*

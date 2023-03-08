@@ -28,8 +28,6 @@
 
 #include "virhostdev.h"
 #include "viralloc.h"
-#include "virstring.h"
-#include "virfile.h"
 #include "virerror.h"
 #include "virlog.h"
 #include "virutil.h"
@@ -463,6 +461,7 @@ virHostdevSetNetConfig(virDomainHostdevDef *hostdev,
     const virNetDevVPortProfile *virtPort;
     int vf = -1;
     bool port_profile_associate = true;
+    bool setVlan = false;
 
     if (!virHostdevIsPCINetDevice(hostdev))
         return 0;
@@ -471,6 +470,7 @@ virHostdevSetNetConfig(virDomainHostdevDef *hostdev,
         return -1;
 
     vlan = virDomainNetGetActualVlan(hostdev->parentnet);
+    setVlan = vlan != NULL;
     virtPort = virDomainNetGetActualVirtPortProfile(hostdev->parentnet);
     if (virtPort) {
         if (vlan) {
@@ -486,7 +486,7 @@ virHostdevSetNetConfig(virDomainHostdevDef *hostdev,
             return -1;
     } else {
         if (virNetDevSetNetConfig(linkdev, vf, &hostdev->parentnet->mac,
-                                  vlan, NULL, true) < 0)
+                                  vlan, NULL, setVlan) < 0)
             return -1;
     }
 
@@ -586,8 +586,7 @@ virHostdevRestoreNetConfig(virDomainHostdevDef *hostdev,
          */
         if (MAC) {
             VIR_FREE(adminMAC);
-            adminMAC = MAC;
-            MAC = NULL;
+            adminMAC = g_steal_pointer(&MAC);
         }
 
         ignore_value(virNetDevSetNetConfig(linkdev, vf,
@@ -874,12 +873,18 @@ virHostdevPreparePCIDevicesImpl(virHostdevManager *mgr,
         if (actual) {
             VIR_DEBUG("Saving network configuration of PCI device %s",
                       virPCIDeviceGetName(actual));
-            hostdev->origstates.states.pci.unbind_from_stub =
-                virPCIDeviceGetUnbindFromStub(actual);
-            hostdev->origstates.states.pci.remove_slot =
-                virPCIDeviceGetRemoveSlot(actual);
-            hostdev->origstates.states.pci.reprobe =
-                virPCIDeviceGetReprobe(actual);
+
+            if (!pcisrc->origstates)
+                pcisrc->origstates = virBitmapNew(VIR_DOMAIN_HOSTDEV_PCI_ORIGSTATE_LAST);
+            else
+                virBitmapClearAll(pcisrc->origstates);
+
+            if (virPCIDeviceGetUnbindFromStub(actual))
+                virBitmapSetBitExpand(pcisrc->origstates, VIR_DOMAIN_HOSTDEV_PCI_ORIGSTATE_UNBIND);
+            if (virPCIDeviceGetRemoveSlot(actual))
+                virBitmapSetBitExpand(pcisrc->origstates, VIR_DOMAIN_HOSTDEV_PCI_ORIGSTATE_REMOVESLOT);
+            if (virPCIDeviceGetReprobe(actual))
+                virBitmapSetBitExpand(pcisrc->origstates, VIR_DOMAIN_HOSTDEV_PCI_ORIGSTATE_REPROBE);
         }
     }
 
@@ -1133,6 +1138,7 @@ virHostdevUpdateActivePCIDevices(virHostdevManager *mgr,
     for (i = 0; i < nhostdevs; i++) {
         const virDomainHostdevDef *hostdev = hostdevs[i];
         g_autoptr(virPCIDevice) actual = NULL;
+        virBitmap *orig = hostdev->source.subsys.u.pci.origstates;
 
         if (virHostdevGetPCIHostDevice(hostdev, &actual) < 0)
             goto cleanup;
@@ -1144,9 +1150,9 @@ virHostdevUpdateActivePCIDevices(virHostdevManager *mgr,
             goto cleanup;
 
         /* Setup the original states for the PCI device */
-        virPCIDeviceSetUnbindFromStub(actual, hostdev->origstates.states.pci.unbind_from_stub);
-        virPCIDeviceSetRemoveSlot(actual, hostdev->origstates.states.pci.remove_slot);
-        virPCIDeviceSetReprobe(actual, hostdev->origstates.states.pci.reprobe);
+        virPCIDeviceSetUnbindFromStub(actual, virBitmapIsBitSet(orig, VIR_DOMAIN_HOSTDEV_PCI_ORIGSTATE_UNBIND));
+        virPCIDeviceSetRemoveSlot(actual, virBitmapIsBitSet(orig, VIR_DOMAIN_HOSTDEV_PCI_ORIGSTATE_REMOVESLOT));
+        virPCIDeviceSetReprobe(actual, virBitmapIsBitSet(orig, VIR_DOMAIN_HOSTDEV_PCI_ORIGSTATE_REPROBE));
 
         if (virPCIDeviceListAdd(mgr->activePCIHostdevs, actual) < 0)
             goto cleanup;

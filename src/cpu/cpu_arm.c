@@ -35,7 +35,6 @@
 #include "cpu_arm.h"
 #include "cpu_map.h"
 #include "virlog.h"
-#include "virstring.h"
 #include "virxml.h"
 
 #define VIR_FROM_THIS VIR_FROM_CPU
@@ -58,7 +57,7 @@ static const virArch archs[] = {
 typedef struct _virCPUarmVendor virCPUarmVendor;
 struct _virCPUarmVendor {
     char *name;
-    unsigned long value;
+    unsigned long long value;
 };
 
 typedef struct _virCPUarmModel virCPUarmModel;
@@ -267,7 +266,7 @@ virCPUarmMapFeatureParse(xmlXPathContextPtr ctxt G_GNUC_UNUSED,
 
 static virCPUarmVendor *
 virCPUarmVendorFindByID(virCPUarmMap *map,
-                        unsigned long vendor_id)
+                        unsigned long long vendor_id)
 {
     size_t i;
 
@@ -313,15 +312,13 @@ virCPUarmVendorParse(xmlXPathContextPtr ctxt,
         return -1;
     }
 
-    if (virXPathULongHex("string(@value)", ctxt, &vendor->value) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       "%s", _("Missing CPU vendor value"));
+    if (virXMLPropULongLong(ctxt->node, "value", 16, VIR_XML_PROP_REQUIRED,
+                            &vendor->value) < 0)
         return -1;
-    }
 
     if (virCPUarmVendorFindByID(map, vendor->value)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("CPU vendor value 0x%2lx already defined"),
+                       _("CPU vendor value 0x%2llx already defined"),
                        vendor->value);
         return -1;
     }
@@ -348,7 +345,7 @@ virCPUarmModelFind(virCPUarmMap *map,
 #if defined(__aarch64__)
 static virCPUarmModel *
 virCPUarmModelFindByPVR(virCPUarmMap *map,
-                        unsigned long pvr)
+                        unsigned long long pvr)
 {
     size_t i;
 
@@ -368,7 +365,8 @@ virCPUarmModelParse(xmlXPathContextPtr ctxt,
 {
     virCPUarmMap *map = data;
     g_autoptr(virCPUarmModel) model = NULL;
-    g_autofree char *vendor = NULL;
+    xmlNodePtr vendorNode = NULL;
+    xmlNodePtr pvrNode = NULL;
 
     model = g_new0(virCPUarmModel, 1);
     model->name = g_strdup(name);
@@ -380,14 +378,11 @@ virCPUarmModelParse(xmlXPathContextPtr ctxt,
         return -1;
     }
 
-    if (virXPathBoolean("boolean(./vendor)", ctxt)) {
-        vendor = virXPathString("string(./vendor/@name)", ctxt);
-        if (!vendor) {
-            virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Invalid vendor element in CPU model %s"),
-                           model->name);
+    if ((vendorNode = virXPathNode("./vendor", ctxt))) {
+        g_autofree char *vendor = NULL;
+
+        if (!(vendor = virXMLPropStringRequired(vendorNode, "name")))
             return -1;
-        }
 
         if (!(model->vendor = virCPUarmVendorFindByName(map, vendor))) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
@@ -397,19 +392,16 @@ virCPUarmModelParse(xmlXPathContextPtr ctxt,
         }
     }
 
-    if (!virXPathBoolean("boolean(./pvr)", ctxt)) {
+    if (!(pvrNode = virXPathNode("./pvr", ctxt))) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Missing PVR information for CPU model %s"),
                        model->name);
         return -1;
     }
 
-    if (virXPathULongHex("string(./pvr/@value)", ctxt, &model->data.pvr) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Missing or invalid PVR value in CPU model %s"),
-                       model->name);
+    if (virXMLPropULongLong(pvrNode, "value", 16, VIR_XML_PROP_REQUIRED,
+                            &model->data.pvr) < 0)
         return -1;
-    }
 
     VIR_APPEND_ELEMENT(map->models, map->nmodels, model);
 
@@ -458,7 +450,7 @@ virCPUarmUpdate(virCPUDef *guest,
                 const virCPUDef *host,
                 bool relative)
 {
-    g_autoptr(virCPUDef) updated = NULL;
+    g_autoptr(virCPUDef) updated = virCPUDefCopyWithoutModel(guest);
 
     if (!relative || guest->mode != VIR_CPU_MODE_HOST_MODEL)
         return 0;
@@ -469,12 +461,8 @@ virCPUarmUpdate(virCPUDef *guest,
         return -1;
     }
 
-    if (!(updated = virCPUDefCopyWithoutModel(guest)))
-        return -1;
-
     updated->mode = VIR_CPU_MODE_CUSTOM;
-    if (virCPUDefCopyModel(updated, host, true) < 0)
-        return -1;
+    virCPUDefCopyModel(updated, host, true);
 
     virCPUDefStealModel(guest, updated, false);
     guest->mode = VIR_CPU_MODE_CUSTOM;
@@ -647,7 +635,7 @@ virCPUarmDecode(virCPUDef *cpu,
 
     if (!(model = virCPUarmModelFindByPVR(map, cpuData->pvr))) {
         virReportError(VIR_ERR_OPERATION_FAILED,
-                       _("Cannot find CPU model with PVR 0x%03lx"),
+                       _("Cannot find CPU model with PVR 0x%03llx"),
                        cpuData->pvr);
         return -1;
     }
@@ -664,7 +652,7 @@ virCPUarmDecode(virCPUDef *cpu,
     if (cpuData->vendor_id &&
         !(vendor = virCPUarmVendorFindByID(map, cpuData->vendor_id))) {
         virReportError(VIR_ERR_OPERATION_FAILED,
-                       _("Cannot find CPU vendor with vendor id 0x%02lx"),
+                       _("Cannot find CPU vendor with vendor id 0x%02llx"),
                        cpuData->vendor_id);
         return -1;
     }
@@ -715,6 +703,7 @@ struct cpuArchDriver cpuDriverArm = {
 #endif
     .decode = NULL,
     .encode = NULL,
+    .getVendorForModel = NULL,
     .dataCopyNew = virCPUarmDataCopyNew,
     .dataFree = virCPUarmDataFree,
     .baseline = virCPUarmBaseline,

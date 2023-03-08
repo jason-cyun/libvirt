@@ -19,7 +19,9 @@
 #include <config.h>
 #include <math.h>
 
-#include "virnetdev.h"
+#define LIBVIRT_VIRNETDEVPRIV_H_ALLOW
+
+#include "virnetdevpriv.h"
 #include "viralloc.h"
 #include "virnetlink.h"
 #include "virmacaddr.h"
@@ -40,6 +42,9 @@
 #ifdef __linux__
 # include <linux/sockios.h>
 # include <linux/if_vlan.h>
+# include <linux/types.h>
+# include <linux/ethtool.h>
+# include <linux/devlink.h>
 # define VIR_NETDEV_FAMILY AF_UNIX
 #elif defined(WITH_STRUCT_IFREQ) && defined(AF_LOCAL)
 # define VIR_NETDEV_FAMILY AF_LOCAL
@@ -47,19 +52,11 @@
 # undef WITH_STRUCT_IFREQ
 #endif
 
-#if defined(SIOCETHTOOL) && defined(WITH_STRUCT_IFREQ)
-# include <linux/types.h>
-# include <linux/ethtool.h>
-#endif
-
 #if WITH_DECL_LINK_ADDR
 # include <sys/sockio.h>
 # include <net/if_dl.h>
 #endif
 
-#if WITH_LINUX_DEVLINK_H
-# include <linux/devlink.h>
-#endif
 
 #ifndef IFNAMSIZ
 # define IFNAMSIZ 16
@@ -87,7 +84,7 @@ VIR_LOG_INIT("util.netdev");
 #endif
 
 #define RESOURCE_FILE_LEN 4096
-#if WITH_DECL_ETHTOOL_GFEATURES
+#ifdef __linux__
 # define TX_UDP_TNL 25
 # define GFEATURES_SIZE 2
 # define FEATURE_WORD(blocks, index, field)  ((blocks)[(index) / 32U].field)
@@ -960,7 +957,7 @@ virNetDevGetMaster(const char *ifname G_GNUC_UNUSED,
 #endif /* defined(WITH_LIBNL) */
 
 
-#if defined(SIOCGIFVLAN) && defined(WITH_STRUCT_IFREQ) && WITH_DECL_GET_VLAN_VID_CMD
+#if __linux__
 int virNetDevGetVLanID(const char *ifname, int *vlanid)
 {
     struct vlan_ioctl_args vlanargs = {
@@ -990,7 +987,7 @@ int virNetDevGetVLanID(const char *ifname, int *vlanid)
     *vlanid = vlanargs.u.VID;
     return 0;
 }
-#else /* ! SIOCGIFVLAN */
+#else /* ! __linux__ */
 int virNetDevGetVLanID(const char *ifname G_GNUC_UNUSED,
                        int *vlanid G_GNUC_UNUSED)
 {
@@ -998,7 +995,7 @@ int virNetDevGetVLanID(const char *ifname G_GNUC_UNUSED,
                          _("Unable to get VLAN on this platform"));
     return -1;
 }
-#endif /* ! SIOCGIFVLAN */
+#endif /* ! __linux__ */
 
 
 /**
@@ -1509,16 +1506,15 @@ static struct nla_policy ifla_vfstats_policy[IFLA_VF_STATS_MAX+1] = {
     [IFLA_VF_STATS_MULTICAST]   = { .type = NLA_U64 },
 };
 
-
-static int
-virNetDevSetVfConfig(const char *ifname, int vf,
-                     const virMacAddr *macaddr, int vlanid,
-                     bool *allowRetry)
+int
+virNetDevSendVfSetLinkRequest(const char *ifname,
+                              int vfInfoType,
+                              const void *payload,
+                              const size_t payloadLen)
 {
     int rc = -1;
-    char macstr[VIR_MAC_STRING_BUFLEN];
     g_autofree struct nlmsghdr *resp = NULL;
-    struct nlmsgerr *err;
+    struct nlmsgerr *err = NULL;
     unsigned int recvbuflen = 0;
     struct nl_msg *nl_msg;
     struct nlattr *vfinfolist, *vfinfo;
@@ -1526,9 +1522,6 @@ virNetDevSetVfConfig(const char *ifname, int vf,
         .ifi_family = AF_UNSPEC,
         .ifi_index  = -1,
     };
-
-    if (!macaddr && vlanid < 0)
-        return -1;
 
     nl_msg = virNetlinkMsgNew(RTM_SETLINK, NLM_F_REQUEST);
 
@@ -1539,37 +1532,14 @@ virNetDevSetVfConfig(const char *ifname, int vf,
         nla_put(nl_msg, IFLA_IFNAME, strlen(ifname)+1, ifname) < 0)
         goto buffer_too_small;
 
-
     if (!(vfinfolist = nla_nest_start(nl_msg, IFLA_VFINFO_LIST)))
         goto buffer_too_small;
 
     if (!(vfinfo = nla_nest_start(nl_msg, IFLA_VF_INFO)))
         goto buffer_too_small;
 
-    if (macaddr) {
-        struct ifla_vf_mac ifla_vf_mac = {
-             .vf = vf,
-             .mac = { 0, },
-        };
-
-        virMacAddrGetRaw(macaddr, ifla_vf_mac.mac);
-
-        if (nla_put(nl_msg, IFLA_VF_MAC, sizeof(ifla_vf_mac),
-                    &ifla_vf_mac) < 0)
-            goto buffer_too_small;
-    }
-
-    if (vlanid >= 0) {
-        struct ifla_vf_vlan ifla_vf_vlan = {
-             .vf = vf,
-             .vlan = vlanid,
-             .qos = 0,
-        };
-
-        if (nla_put(nl_msg, IFLA_VF_VLAN, sizeof(ifla_vf_vlan),
-                    &ifla_vf_vlan) < 0)
-            goto buffer_too_small;
-    }
+    if (nla_put(nl_msg, vfInfoType, payloadLen, payload) < 0)
+        goto buffer_too_small;
 
     nla_nest_end(nl_msg, vfinfo);
     nla_nest_end(nl_msg, vfinfolist);
@@ -1586,44 +1556,16 @@ virNetDevSetVfConfig(const char *ifname, int vf,
         err = (struct nlmsgerr *)NLMSG_DATA(resp);
         if (resp->nlmsg_len < NLMSG_LENGTH(sizeof(*err)))
             goto malformed_resp;
-
-        /* if allowRetry is true and the error was EINVAL, then
-         * silently return a failure so the caller can retry with a
-         * different MAC address
-         */
-        if (err->error == -EINVAL && *allowRetry &&
-            macaddr && !virMacAddrCmp(macaddr, &zeroMAC)) {
-            goto cleanup;
-        } else if (err->error) {
-            /* other errors are permanent */
-            virReportSystemError(-err->error,
-                                 _("Cannot set interface MAC/vlanid to %s/%d "
-                                   "for ifname %s vf %d"),
-                                 (macaddr
-                                  ? virMacAddrFormat(macaddr, macstr)
-                                  : "(unchanged)"),
-                                 vlanid,
-                                 ifname ? ifname : "(unspecified)",
-                                 vf);
-            *allowRetry = false; /* no use retrying */
-            goto cleanup;
-        }
+        rc = err->error;
         break;
-
     case NLMSG_DONE:
+        rc = 0;
         break;
-
     default:
         goto malformed_resp;
     }
 
-    rc = 0;
  cleanup:
-    VIR_DEBUG("RTM_SETLINK %s vf %d MAC=%s vlanid=%d - %s",
-              ifname, vf,
-              macaddr ? virMacAddrFormat(macaddr, macstr) : "(unchanged)",
-              vlanid, rc < 0 ? "Fail" : "Success");
-
     nlmsg_free(nl_msg);
     return rc;
 
@@ -1636,6 +1578,111 @@ virNetDevSetVfConfig(const char *ifname, int vf,
     virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                    _("allocated netlink buffer is too small"));
     goto cleanup;
+}
+
+int
+virNetDevSetVfVlan(const char *ifname,
+                   int vf,
+                   const int *vlanid)
+{
+    int ret = -1;
+    struct ifla_vf_vlan ifla_vf_vlan = {
+        .vf = vf,
+        .vlan = 0,
+        .qos = 0,
+    };
+
+    /* If vlanid is NULL, assume it needs to be cleared. */
+    if (vlanid) {
+        /* VLAN ids 0 and 4095 are reserved per 802.1Q but are valid values. */
+        if ((*vlanid < 0 || *vlanid > 4095)) {
+            virReportError(ERANGE, _("vlanid out of range: %d"), *vlanid);
+            return -ERANGE;
+        }
+        ifla_vf_vlan.vlan = *vlanid;
+    }
+
+    ret = virNetDevSendVfSetLinkRequest(ifname, IFLA_VF_VLAN,
+                                        &ifla_vf_vlan, sizeof(ifla_vf_vlan));
+
+    /* If vlanid is NULL - we are attempting to implicitly clear an existing
+     * VLAN id.  An EPERM received at this stage is an indicator that the
+     * embedded switch is not exposed to this host and the network driver is
+     * not able to set a VLAN for a VF, whereas the Libvirt client has not
+     * explicitly configured a VLAN or requested it to be cleared via VLAN id
+     * 0. */
+    if (ret == -EPERM && vlanid == NULL) {
+        ret = 0;
+    } else if (ret < 0) {
+        virReportSystemError(-ret,
+                             _("Cannot set interface vlanid to %d for ifname %s vf %d"),
+                             ifla_vf_vlan.vlan, ifname ? ifname : "(unspecified)", vf);
+    }
+
+    VIR_DEBUG("RTM_SETLINK %s vf %d vlanid=%d - %s",
+              ifname, vf, ifla_vf_vlan.vlan, ret < 0 ? "Fail" : "Success");
+    return ret;
+}
+
+int
+virNetDevSetVfMac(const char *ifname, int vf,
+                  const virMacAddr *macaddr,
+                  bool *allowRetry)
+{
+    int ret = -1;
+    char macstr[VIR_MAC_STRING_BUFLEN];
+    struct ifla_vf_mac ifla_vf_mac = {
+        .vf = vf,
+        .mac = { 0, },
+    };
+
+    if (macaddr == NULL || allowRetry == NULL) {
+        virReportError(EINVAL,
+                       _("Invalid parameters macaddr=%p allowRetry=%p"),
+                       macaddr, allowRetry);
+        return -EINVAL;
+    }
+
+    virMacAddrGetRaw(macaddr, ifla_vf_mac.mac);
+
+    ret = virNetDevSendVfSetLinkRequest(ifname, IFLA_VF_MAC,
+                                        &ifla_vf_mac, sizeof(ifla_vf_mac));
+    if (ret == -EINVAL && *allowRetry && !virMacAddrCmp(macaddr, &zeroMAC)) {
+        /* if allowRetry is true and the error was EINVAL, then
+         * silently return a failure so the caller can retry with a
+         * different MAC address. */
+    } else if (ret < 0) {
+        /* other errors are permanent */
+        virReportSystemError(-ret,
+                             _("Cannot set interface MAC to %s for ifname %s vf %d"),
+                             macaddr ? virMacAddrFormat(macaddr, macstr) : "(unchanged)",
+                             ifname ? ifname : "(unspecified)",
+                             vf);
+        *allowRetry = false; /* don't use retrying */
+    }
+
+    VIR_DEBUG("RTM_SETLINK %s vf %d MAC=%s - %s",
+              ifname, vf,
+              macaddr ? virMacAddrFormat(macaddr, macstr) : "(unchanged)",
+              ret < 0 ? "Fail" : "Success");
+    return ret;
+}
+
+int
+virNetDevSetVfConfig(const char *ifname,
+                     int vf,
+                     const virMacAddr *macaddr,
+                     const int *vlanid,
+                     bool *allowRetry)
+{
+    int ret = -1;
+
+    if (macaddr &&
+        (ret = virNetDevSetVfMac(ifname, vf, macaddr, allowRetry)) < 0)
+        return ret;
+    if ((ret = virNetDevSetVfVlan(ifname, vf, vlanid)) < 0)
+        return ret;
+    return ret;
 }
 
 /**
@@ -1925,7 +1972,7 @@ virNetDevSaveNetConfig(const char *linkdev, int vf,
     if (!(fileStr = virJSONValueToString(configJSON, true)))
         return -1;
 
-    if (virFileWriteStr(filePath, fileStr, O_CREAT|O_TRUNC|O_WRONLY) < 0) {
+    if (virFileWriteStr(filePath, fileStr, 0600) < 0) {
         virReportSystemError(errno, _("Unable to preserve mac/vlan tag "
                                       "for device = %s, vf = %d"), linkdev, vf);
         return -1;
@@ -2163,7 +2210,7 @@ virNetDevSetNetConfig(const char *linkdev, int vf,
     const char *pfDevName = NULL;
     g_autofree char *pfDevOrig = NULL;
     g_autofree char *vfDevOrig = NULL;
-    int vlanTag = -1;
+    g_autofree int *vlanTag = NULL;
     g_autoptr(virPCIDevice) vfPCIDevice = NULL;
 
     if (vf >= 0) {
@@ -2222,10 +2269,17 @@ virNetDevSetNetConfig(const char *linkdev, int vf,
                 return -1;
             }
 
-            vlanTag = vlan->tag[0];
+            vlanTag = g_new0(int, 1);
+            *vlanTag = vlan->tag[0];
 
         } else if (setVlan) {
-            vlanTag = 0; /* assure any existing vlan tag is reset */
+            vlanTag = g_new0(int, 1);
+            /* Assure any existing vlan tag is reset. */
+            *vlanTag = 0;
+        } else {
+            /* Indicate that setting a VLAN has not been explicitly requested.
+             * This allows selected errors in clearing a VF VLAN to be ignored. */
+            vlanTag = NULL;
         }
     }
 
@@ -2307,7 +2361,7 @@ virNetDevSetNetConfig(const char *linkdev, int vf,
         }
     }
 
-    if (adminMAC || vlanTag >= 0) {
+    if (adminMAC || vlanTag) {
         /* Set vlanTag and admin MAC using an RTM_SETLINK request sent to
          * PFdevname+VF#, if mac != NULL this will set the "admin MAC" via
          * the PF, *not* the actual VF MAC - the admin MAC only takes
@@ -2389,6 +2443,50 @@ virNetDevVFInterfaceStats(virPCIDeviceAddress *vfAddr G_GNUC_UNUSED,
     virReportSystemError(ENOSYS, "%s",
                          _("Unable to get VF net device stats on this platform"));
     return -1;
+}
+
+int
+virNetDevSendVfSetLinkRequest(const char *ifname G_GNUC_UNUSED,
+                              int vfInfoType G_GNUC_UNUSED,
+                              const void *payload G_GNUC_UNUSED,
+                              const size_t payloadLen G_GNUC_UNUSED)
+{
+    virReportSystemError(ENOSYS, "%s",
+                         _("Unable to send a VF SETLINK request on this platform"));
+    return -ENOSYS;
+}
+
+int
+virNetDevSetVfVlan(const char *ifname G_GNUC_UNUSED,
+                   int vf G_GNUC_UNUSED,
+                   const int *vlanid G_GNUC_UNUSED)
+{
+    virReportSystemError(ENOSYS, "%s",
+                         _("Unable to set a VF VLAN on this platform"));
+    return -ENOSYS;
+}
+
+int
+virNetDevSetVfMac(const char *ifname G_GNUC_UNUSED,
+                  int vf G_GNUC_UNUSED,
+                  const virMacAddr *macaddr G_GNUC_UNUSED,
+                  bool *allowRetry G_GNUC_UNUSED)
+{
+    virReportSystemError(ENOSYS, "%s",
+                         _("Unable to set a VF MAC on this platform"));
+    return -ENOSYS;
+}
+
+int
+virNetDevSetVfConfig(const char *ifname G_GNUC_UNUSED,
+                     int vf G_GNUC_UNUSED,
+                     const virMacAddr *macaddr G_GNUC_UNUSED,
+                     const int *vlanid G_GNUC_UNUSED,
+                     bool *allowRetry G_GNUC_UNUSED)
+{
+    virReportSystemError(ENOSYS, "%s",
+                         _("Unable to set a VF config on this platform"));
+    return -ENOSYS;
 }
 
 
@@ -2848,15 +2946,14 @@ int virNetDevGetRxFilter(const char *ifname,
     ret = 0;
  cleanup:
     if (ret < 0) {
-        virNetDevRxFilterFree(fil);
-        fil = NULL;
+        g_clear_pointer(&fil, virNetDevRxFilterFree);
     }
 
     *filter = fil;
     return ret;
 }
 
-#if defined(SIOCETHTOOL) && defined(WITH_STRUCT_IFREQ)
+#if __linux__
 
 /**
  * virNetDevRDMAFeature
@@ -2984,32 +3081,18 @@ virNetDevGetEthtoolFeatures(const char *ifname,
         {ETHTOOL_GTXCSUM, VIR_NET_DEV_FEAT_GTXCSUM},
         {ETHTOOL_GSG, VIR_NET_DEV_FEAT_GSG},
         {ETHTOOL_GTSO, VIR_NET_DEV_FEAT_GTSO},
-# if WITH_DECL_ETHTOOL_GGSO
         {ETHTOOL_GGSO, VIR_NET_DEV_FEAT_GGSO},
-# endif
-# if WITH_DECL_ETHTOOL_GGRO
         {ETHTOOL_GGRO, VIR_NET_DEV_FEAT_GGRO},
-# endif
     };
 
-# if WITH_DECL_ETHTOOL_GFLAGS
     /* ethtool masks */
     struct virNetDevEthtoolFeatureCmd flags[] = {
-#  if WITH_DECL_ETH_FLAG_LRO
         {ETH_FLAG_LRO, VIR_NET_DEV_FEAT_LRO},
-#  endif
-#  if WITH_DECL_ETH_FLAG_TXVLAN
         {ETH_FLAG_RXVLAN, VIR_NET_DEV_FEAT_RXVLAN},
         {ETH_FLAG_TXVLAN, VIR_NET_DEV_FEAT_TXVLAN},
-#  endif
-#  if WITH_DECL_ETH_FLAG_NTUBLE
         {ETH_FLAG_NTUPLE, VIR_NET_DEV_FEAT_NTUPLE},
-#  endif
-#  if WITH_DECL_ETH_FLAG_RXHASH
         {ETH_FLAG_RXHASH, VIR_NET_DEV_FEAT_RXHASH},
-#  endif
     };
-# endif
 
     for (i = 0; i < G_N_ELEMENTS(ethtool_cmds); i++) {
         cmd.cmd = ethtool_cmds[i].cmd;
@@ -3017,7 +3100,6 @@ virNetDevGetEthtoolFeatures(const char *ifname,
             ignore_value(virBitmapSetBit(bitmap, ethtool_cmds[i].feat));
     }
 
-# if WITH_DECL_ETHTOOL_GFLAGS
     cmd.cmd = ETHTOOL_GFLAGS;
     if (virNetDevFeatureAvailable(ifname, fd, ifr, &cmd)) {
         for (i = 0; i < G_N_ELEMENTS(flags); i++) {
@@ -3025,11 +3107,10 @@ virNetDevGetEthtoolFeatures(const char *ifname,
                 ignore_value(virBitmapSetBit(bitmap, flags[i].feat));
         }
     }
-# endif
 }
 
 
-# if defined(WITH_LIBNL) && WITH_DECL_DEVLINK_CMD_ESWITCH_GET
+# if defined(WITH_LIBNL)
 
 /**
  * virNetDevGetFamilyId:
@@ -3108,7 +3189,7 @@ virNetDevSwitchdevFeature(const char *ifname,
     struct nl_msg *nl_msg = NULL;
     g_autofree struct nlmsghdr *resp = NULL;
     unsigned int recvbuflen;
-    struct nlattr *tb[DEVLINK_ATTR_MAX + 1] = {NULL, };
+    g_autofree struct nlattr **tb = g_new0(struct nlattr *, DEVLINK_ATTR_MAX + 1);
     g_autoptr(virPCIDevice) pci_device_ptr = NULL;
     struct genlmsghdr gmsgh = {
         .cmd = DEVLINK_CMD_ESWITCH_GET,
@@ -3181,7 +3262,6 @@ virNetDevSwitchdevFeature(const char *ifname G_GNUC_UNUSED,
 # endif
 
 
-# if WITH_DECL_ETHTOOL_GFEATURES
 /**
  * virNetDevGFeatureAvailable
  * This function checks for the availability of a network device gfeature
@@ -3222,19 +3302,8 @@ virNetDevGetEthtoolGFeatures(const char *ifname,
         ignore_value(virBitmapSetBit(bitmap, VIR_NET_DEV_FEAT_TXUDPTNL));
     return 0;
 }
-# else
-static int
-virNetDevGetEthtoolGFeatures(const char *ifname G_GNUC_UNUSED,
-                             virBitmap *bitmap G_GNUC_UNUSED,
-                             int fd G_GNUC_UNUSED,
-                             struct ifreq *ifr G_GNUC_UNUSED)
-{
-    return 0;
-}
-# endif
 
 
-# if WITH_DECL_ETHTOOL_SCOALESCE && WITH_DECL_ETHTOOL_GCOALESCE
 /**
  * virNetDevSetCoalesce:
  * @ifname: interface name to modify
@@ -3330,20 +3399,6 @@ int virNetDevSetCoalesce(const char *ifname,
 
     return 0;
 }
-# else
-int virNetDevSetCoalesce(const char *ifname,
-                         virNetDevCoalesce *coalesce,
-                         bool update)
-{
-    if (!coalesce && !update)
-        return 0;
-
-    virReportSystemError(ENOSYS,
-                         _("Cannot set coalesce info on interface '%s'"),
-                         ifname);
-    return -1;
-}
-# endif
 
 
 /**
@@ -3469,12 +3524,10 @@ virNetDevReserveName(const char *name)
     idstr = name + strlen(virNetDevGenNames[type].prefix);
 
     if (virStrToLong_ui(idstr, NULL, 10, &id) >= 0) {
-        virMutexLock(&virNetDevGenNames[type].mutex);
+        VIR_LOCK_GUARD lock = virLockGuardLock(&virNetDevGenNames[type].mutex);
 
         if (virNetDevGenNames[type].lastID < (int)id)
             virNetDevGenNames[type].lastID = id;
-
-        virMutexUnlock(&virNetDevGenNames[type].mutex);
     }
 }
 
@@ -3495,12 +3548,13 @@ virNetDevReserveName(const char *name)
  * Note: if string pointed by @ifname is NOT a template or NULL, leave
  * it unchanged and return it directly.
  *
- * Returns 0 on success, -1 on failure.
+ * Returns: 1 if @ifname already contains a valid name,
+ *          0 on success (@ifname was generated),
+ *         -1 on failure.
  */
 int
 virNetDevGenerateName(char **ifname, virNetDevGenNameType type)
 {
-    int id;
     const char *prefix = virNetDevGenNames[type].prefix;
     double maxIDd = pow(10, IFNAMSIZ - 1 - strlen(prefix));
     int maxID = INT_MAX;
@@ -3510,7 +3564,7 @@ virNetDevGenerateName(char **ifname, virNetDevGenNameType type)
     if (*ifname &&
         (strchr(*ifname, '%') != strrchr(*ifname, '%') ||
          strstr(*ifname, "%d") == NULL)) {
-        return 0;
+        return 1;
     }
 
     if (maxIDd <= (double)INT_MAX)
@@ -3518,16 +3572,15 @@ virNetDevGenerateName(char **ifname, virNetDevGenNameType type)
 
     do {
         g_autofree char *try = NULL;
+        int id = 0;
 
-        virMutexLock(&virNetDevGenNames[type].mutex);
+        VIR_WITH_MUTEX_LOCK_GUARD(&virNetDevGenNames[type].mutex) {
+            id = ++virNetDevGenNames[type].lastID;
 
-        id = ++virNetDevGenNames[type].lastID;
-
-        /* reset before overflow */
-        if (virNetDevGenNames[type].lastID >= maxID)
-            virNetDevGenNames[type].lastID = -1;
-
-        virMutexUnlock(&virNetDevGenNames[type].mutex);
+            /* reset before overflow */
+            if (virNetDevGenNames[type].lastID >= maxID)
+                virNetDevGenNames[type].lastID = -1;
+        }
 
         if (*ifname)
             try = g_strdup_printf(*ifname, id);

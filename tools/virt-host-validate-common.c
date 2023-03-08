@@ -56,7 +56,7 @@ void virHostMsgCheck(const char *prefix,
                      ...)
 {
     va_list args;
-    char *msg;
+    g_autofree char *msg = NULL;
 
     if (quiet)
         return;
@@ -66,7 +66,6 @@ void virHostMsgCheck(const char *prefix,
     va_end(args);
 
     fprintf(stdout, _("%6s: Checking %-60s: "), prefix, msg);
-    VIR_FREE(msg);
 }
 
 static bool virHostMsgWantEscape(void)
@@ -114,7 +113,7 @@ void virHostMsgFail(virHostValidateLevel level,
                     ...)
 {
     va_list args;
-    char *msg;
+    g_autofree char *msg = NULL;
 
     if (quiet)
         return;
@@ -129,7 +128,6 @@ void virHostMsgFail(virHostValidateLevel level,
     else
         fprintf(stdout, "%s (%s)\n",
                 _(failMessages[level]), msg);
-    VIR_FREE(msg);
 }
 
 
@@ -267,7 +265,7 @@ int virHostValidateLinuxKernel(const char *hvname,
         return VIR_HOST_VALIDATE_FAILURE(level);
     }
 
-    if (virParseVersionString(uts.release, &thisversion, true) < 0) {
+    if (virStringParseVersion(&thisversion, uts.release, true) < 0) {
         virHostMsgFail(level, "%s", hint);
         return VIR_HOST_VALIDATE_FAILURE(level);
     }
@@ -378,11 +376,17 @@ int virHostValidateIOMMU(const char *hvname,
          * devices (which is quite usual on s390x). If there are
          * no PCI devices the directory is still there but is
          * empty. */
-        if (!virDirOpen(&dir, "/sys/bus/pci/devices"))
-            return 0;
+        if (!virDirOpen(&dir, "/sys/bus/pci/devices")) {
+            virHostMsgFail(VIR_HOST_VALIDATE_NOTE,
+                           "Skipped - PCI support disabled");
+            return VIR_HOST_VALIDATE_FAILURE(VIR_HOST_VALIDATE_NOTE);
+        }
         rc = virDirRead(dir, &dent, NULL);
-        if (rc <= 0)
-            return 0;
+        if (rc <= 0) {
+            virHostMsgFail(VIR_HOST_VALIDATE_NOTE,
+                           "Skipped - No PCI devices are online");
+            return VIR_HOST_VALIDATE_FAILURE(VIR_HOST_VALIDATE_NOTE);
+        }
         virHostMsgPass();
     } else {
         virHostMsgFail(level,

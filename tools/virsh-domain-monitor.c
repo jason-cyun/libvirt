@@ -166,6 +166,7 @@ VIR_ENUM_IMPL(virshDomainRunningReason,
               N_("event wakeup"),
               N_("crashed"),
               N_("post-copy"),
+              N_("post-copy failed"),
 );
 
 VIR_ENUM_DECL(virshDomainBlockedReason);
@@ -1212,7 +1213,6 @@ cmdDominfo(vshControl *ctl, const vshCmd *cmd)
     virDomainInfo info;
     g_autoptr(virshDomain) dom = NULL;
     virSecurityModel secmodel;
-    virSecurityLabelPtr seclabel;
     int persistent = 0;
     bool ret = true;
     int autostart;
@@ -1300,6 +1300,7 @@ cmdDominfo(vshControl *ctl, const vshCmd *cmd)
     } else {
         /* Only print something if a security model is active */
         if (secmodel.model[0] != '\0') {
+            g_autofree virSecurityLabelPtr seclabel = NULL;
             vshPrint(ctl, "%-15s %s\n", _("Security model:"), secmodel.model);
             vshPrint(ctl, "%-15s %s\n", _("Security DOI:"), secmodel.doi);
 
@@ -1307,15 +1308,12 @@ cmdDominfo(vshControl *ctl, const vshCmd *cmd)
             seclabel = g_new0(virSecurityLabel, 1);
 
             if (virDomainGetSecurityLabel(dom, seclabel) == -1) {
-                VIR_FREE(seclabel);
                 return false;
             } else {
                 if (seclabel->label[0] != '\0')
                     vshPrint(ctl, "%-15s %s (%s)\n", _("Security label:"),
                              seclabel->label, seclabel->enforcing ? "enforcing" : "permissive");
             }
-
-            VIR_FREE(seclabel);
         }
     }
 
@@ -1740,8 +1738,7 @@ virshDomainListCollect(vshControl *ctl, unsigned int flags)
 
  remove_entry:
         /* the domain has to be removed as it failed one of the filters */
-        virshDomainFree(list->domains[i]);
-        list->domains[i] = NULL;
+        g_clear_pointer(&list->domains[i], virshDomainFree);
         deleted++;
     }
 
@@ -1762,8 +1759,7 @@ virshDomainListCollect(vshControl *ctl, unsigned int flags)
         VIR_FREE(names[i]);
 
     if (!success) {
-        virshDomainListFree(list);
-        list = NULL;
+        g_clear_pointer(&list, virshDomainListFree);
     }
 
     VIR_FREE(names);
@@ -2066,6 +2062,10 @@ static const vshCmdOptDef opts_domstats[] = {
      .type = VSH_OT_BOOL,
      .help = N_("report domain dirty rate information"),
     },
+    {.name = "vm",
+     .type = VSH_OT_BOOL,
+     .help = N_("report hypervisor-specific statistics"),
+    },
     {.name = "list-active",
      .type = VSH_OT_BOOL,
      .help = N_("list only active domains"),
@@ -2186,6 +2186,9 @@ cmdDomstats(vshControl *ctl, const vshCmd *cmd)
 
     if (vshCommandOptBool(cmd, "dirtyrate"))
         stats |= VIR_DOMAIN_STATS_DIRTYRATE;
+
+    if (vshCommandOptBool(cmd, "vm"))
+        stats |= VIR_DOMAIN_STATS_VM;
 
     if (vshCommandOptBool(cmd, "list-active"))
         flags |= VIR_CONNECT_GET_ALL_DOMAINS_STATS_ACTIVE;

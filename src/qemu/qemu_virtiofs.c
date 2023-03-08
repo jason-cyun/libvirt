@@ -132,8 +132,7 @@ qemuVirtioFSBuildCommandLine(virQEMUDriverConfig *cfg,
     g_autoptr(virCommand) cmd = NULL;
     g_auto(virBuffer) opts = VIR_BUFFER_INITIALIZER;
 
-    if (!(cmd = virCommandNew(fs->binary)))
-        return NULL;
+    cmd = virCommandNew(fs->binary);
 
     virCommandAddArgFormat(cmd, "--fd=%d", *fd);
     virCommandPassFD(cmd, *fd, VIR_COMMAND_PASS_FD_CLOSE_PARENT);
@@ -163,6 +162,10 @@ qemuVirtioFSBuildCommandLine(virQEMUDriverConfig *cfg,
         virBufferAddLit(&opts, ",no_posix_lock");
 
     virCommandAddArgBuffer(cmd, &opts);
+
+    if (fs->thread_pool_size >= 0)
+        virCommandAddArgFormat(cmd, "--thread-pool-size=%i", fs->thread_pool_size);
+
     if (cfg->virtiofsdDebug)
         virCommandAddArg(cmd, "-d");
 
@@ -175,6 +178,7 @@ qemuVirtioFSStart(virQEMUDriver *driver,
                   virDomainFSDef *fs)
 {
     g_autoptr(virQEMUDriverConfig) cfg = virQEMUDriverGetConfig(driver);
+    qemuDomainObjPrivate *priv = vm->privateData;
     g_autoptr(virCommand) cmd = NULL;
     g_autofree char *socket_path = NULL;
     g_autofree char *pidfile = NULL;
@@ -183,6 +187,13 @@ qemuVirtioFSStart(virQEMUDriver *driver,
     VIR_AUTOCLOSE fd = -1;
     VIR_AUTOCLOSE logfd = -1;
     int rc;
+
+    if (!virFileIsExecutable(fs->binary)) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("virtiofsd binary '%s' is not executable"),
+                       fs->binary);
+        return -1;
+    }
 
     if (!virFileExists(fs->src->path)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
@@ -240,6 +251,16 @@ qemuVirtioFSStart(virQEMUDriver *driver,
     virCommandSetErrorFD(cmd, &logfd);
     virCommandNonblockingFDs(cmd);
     virCommandDaemonize(cmd);
+
+    if (cfg->schedCore == QEMU_SCHED_CORE_FULL) {
+        pid_t cookie_pid = vm->pid;
+
+        if (cookie_pid <= 0)
+            cookie_pid = priv->schedCoreChildPID;
+
+        virCommandSetRunAmong(cmd, cookie_pid);
+    }
+
 
     if (qemuExtDeviceLogCommand(driver, vm, cmd, "virtiofsd") < 0)
         goto error;

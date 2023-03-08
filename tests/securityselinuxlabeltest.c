@@ -30,13 +30,11 @@
 #include "internal.h"
 #include "testutils.h"
 #include "testutilsqemu.h"
-#include "qemu/qemu_domain.h"
 #include "viralloc.h"
 #include "virerror.h"
 #include "virfile.h"
 #include "virlog.h"
 #include "security/security_manager.h"
-#include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -82,16 +80,13 @@ testUserXattrEnabled(void)
     return ret;
 }
 
-static int
+static void
 testSELinuxMungePath(char **path)
 {
-    char *tmp;
+    char *tmp = g_strdup_printf("%s/securityselinuxlabeldata%s", abs_builddir, *path);
 
-    tmp = g_strdup_printf("%s/securityselinuxlabeldata%s", abs_builddir, *path);
-
-    VIR_FREE(*path);
+    g_free(*path);
     *path = tmp;
-    return 0;
 }
 
 static int
@@ -154,7 +149,7 @@ testSELinuxLoadFileList(const char *testname,
 static virDomainDef *
 testSELinuxLoadDef(const char *testname)
 {
-    char *xmlfile = NULL;
+    g_autofree char *xmlfile = NULL;
     virDomainDef *def = NULL;
     size_t i;
 
@@ -163,15 +158,14 @@ testSELinuxLoadDef(const char *testname)
 
     if (!(def = virDomainDefParseFile(xmlfile, driver.xmlopt,
                                       NULL, 0)))
-        goto cleanup;
+        return NULL;
 
     for (i = 0; i < def->ndisks; i++) {
         if (def->disks[i]->src->type != VIR_STORAGE_TYPE_FILE &&
             def->disks[i]->src->type != VIR_STORAGE_TYPE_BLOCK)
             continue;
 
-        if (testSELinuxMungePath(&def->disks[i]->src->path) < 0)
-            goto cleanup;
+        testSELinuxMungePath(&def->disks[i]->src->path);
     }
 
     for (i = 0; i < def->nserials; i++) {
@@ -182,23 +176,17 @@ testSELinuxLoadDef(const char *testname)
             continue;
 
         if (def->serials[i]->source->type == VIR_DOMAIN_CHR_TYPE_UNIX) {
-            if (testSELinuxMungePath(&def->serials[i]->source->data.nix.path) < 0)
-                goto cleanup;
+            testSELinuxMungePath(&def->serials[i]->source->data.nix.path);
         } else {
-            if (testSELinuxMungePath(&def->serials[i]->source->data.file.path) < 0)
-                goto cleanup;
+            testSELinuxMungePath(&def->serials[i]->source->data.file.path);
         }
     }
 
-    if (def->os.kernel &&
-        testSELinuxMungePath(&def->os.kernel) < 0)
-        goto cleanup;
-    if (def->os.initrd &&
-        testSELinuxMungePath(&def->os.initrd) < 0)
-        goto cleanup;
+    if (def->os.kernel)
+        testSELinuxMungePath(&def->os.kernel);
+    if (def->os.initrd)
+        testSELinuxMungePath(&def->os.initrd);
 
- cleanup:
-    VIR_FREE(xmlfile);
     return def;
 }
 
@@ -334,8 +322,7 @@ mymain(void)
     if (qemuTestDriverInit(&driver) < 0)
         return EXIT_FAILURE;
 
-    if (!(qemuCaps = virQEMUCapsNew()))
-        return EXIT_FAILURE;
+    qemuCaps = virQEMUCapsNew();
 
     virQEMUCapsSet(qemuCaps, QEMU_CAPS_DEVICE_CIRRUS_VGA);
     virQEMUCapsSet(qemuCaps, QEMU_CAPS_VNC);

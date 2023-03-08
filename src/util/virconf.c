@@ -32,7 +32,6 @@
 #include "virlog.h"
 #include "viralloc.h"
 #include "virfile.h"
-#include "virstring.h"
 #include "configmake.h"
 
 #define VIR_FROM_THIS VIR_FROM_CONF
@@ -717,7 +716,7 @@ virConfParse(const char *filename, const char *content, int len,
 virConf *
 virConfReadFile(const char *filename, unsigned int flags)
 {
-    char *content;
+    g_autofree char *content = NULL;
     int len;
     virConf *conf;
 
@@ -732,8 +731,6 @@ virConfReadFile(const char *filename, unsigned int flags)
         return NULL;
 
     conf = virConfParse(filename, content, len, flags);
-
-    VIR_FREE(content);
 
     return conf;
 }
@@ -919,8 +916,7 @@ int virConfGetValueStringList(virConf *conf,
     if (!cval)
         return 0;
 
-    g_strfreev(*values);
-    *values = NULL;
+    g_clear_pointer(values, g_strfreev);
 
     switch (cval->type) {
     case VIR_CONF_LIST:
@@ -1323,13 +1319,22 @@ int virConfGetValueULLong(virConf *conf,
 int
 virConfSetValue(virConf *conf,
                 const char *setting,
-                virConfValue *value)
+                virConfValue **value)
 {
     virConfEntry *cur;
     virConfEntry *prev = NULL;
 
-    if (value && value->type == VIR_CONF_STRING && value->str == NULL) {
-        virConfFreeValue(value);
+    if (!value) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                       _("invalid use of conf API"));
+        return -1;
+    }
+
+    if (*value && (*value)->type == VIR_CONF_STRING && !(*value)->str) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("expecting a value for value of type %s"),
+                       virConfTypeToString(VIR_CONF_STRING));
+        g_clear_pointer(value, virConfFreeValue);
         return -1;
     }
 
@@ -1345,7 +1350,7 @@ virConfSetValue(virConf *conf,
         cur = g_new0(virConfEntry, 1);
         cur->comment = NULL;
         cur->name = g_strdup(setting);
-        cur->value = value;
+        cur->value = g_steal_pointer(value);
         if (prev) {
             cur->next = prev->next;
             prev->next = cur;
@@ -1355,7 +1360,7 @@ virConfSetValue(virConf *conf,
         }
     } else {
         virConfFreeValue(cur->value);
-        cur->value = value;
+        cur->value = g_steal_pointer(value);
     }
     return 0;
 }
@@ -1406,7 +1411,7 @@ virConfWriteFile(const char *filename, virConf *conf)
     virConfEntry *cur;
     int ret;
     int fd;
-    char *content;
+    g_autofree char *content = NULL;
     unsigned int use;
 
     if (conf == NULL)
@@ -1427,7 +1432,6 @@ virConfWriteFile(const char *filename, virConf *conf)
     use = virBufferUse(&buf);
     content = virBufferContentAndReset(&buf);
     ret = safewrite(fd, content, use);
-    VIR_FREE(content);
     VIR_FORCE_CLOSE(fd);
     if (ret != (int)use) {
         virConfError(NULL, VIR_ERR_WRITE_FAILED, _("failed to save content"));
@@ -1455,7 +1459,7 @@ virConfWriteMem(char *memory, int *len, virConf *conf)
 {
     g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
     virConfEntry *cur;
-    char *content;
+    g_autofree char *content = NULL;
     unsigned int use;
 
     if ((memory == NULL) || (len == NULL) || (*len <= 0) || (conf == NULL))
@@ -1472,11 +1476,9 @@ virConfWriteMem(char *memory, int *len, virConf *conf)
 
     if ((int)use >= *len) {
         *len = (int)use;
-        VIR_FREE(content);
         return -1;
     }
     memcpy(memory, content, use);
-    VIR_FREE(content);
     *len = use;
     return use;
 }
@@ -1499,26 +1501,20 @@ virConfLoadConfigPath(const char *name)
 int
 virConfLoadConfig(virConf **conf, const char *name)
 {
-    char *path = NULL;
-    int ret = -1;
+    g_autofree char *path = NULL;
 
     *conf = NULL;
 
     if (!(path = virConfLoadConfigPath(name)))
-        goto cleanup;
+        return -1;
 
     if (!virFileExists(path)) {
-        ret = 0;
-        goto cleanup;
+        return 0;
     }
 
     VIR_DEBUG("Loading config file '%s'", path);
     if (!(*conf = virConfReadFile(path, 0)))
-        goto cleanup;
+        return -1;
 
-    ret = 0;
-
- cleanup:
-    VIR_FREE(path);
-    return ret;
+    return 0;
 }

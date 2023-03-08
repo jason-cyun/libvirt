@@ -29,8 +29,6 @@
 #include "virfile.h"
 #include "virstring.h"
 #include "virerror.h"
-#include "viralloc.h"
-#include "virutil.h"
 
 #define VIR_FROM_THIS VIR_FROM_NETWORK
 
@@ -254,7 +252,6 @@ virLeaseNew(virJSONValue **lease_ret,
     if (virJSONValueObjectAppendNumberLong(lease_new, "expiry-time", expirytime) < 0)
         return -1;
 
-    *lease_ret = lease_new;
-    lease_new = NULL;
+    *lease_ret = g_steal_pointer(&lease_new);
     return 0;
 }

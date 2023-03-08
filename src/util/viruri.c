@@ -34,7 +34,7 @@
 
 VIR_LOG_INIT("util.uri");
 
-static int
+static void
 virURIParamAppend(virURI *uri,
                   const char *name,
                   const char *value)
@@ -52,7 +52,7 @@ virURIParamAppend(virURI *uri,
     uri->params[uri->paramsCount].ignore = false;
     uri->paramsCount++;
 
-    return 0;
+    return;
 }
 
 
@@ -113,8 +113,7 @@ virURIParseParams(virURI *uri)
         }
 
         /* Append to the parameter set. */
-        if (virURIParamAppend(uri, name, NULLSTR_EMPTY(value)) < 0)
-            return -1;
+        virURIParamAppend(uri, name, NULLSTR_EMPTY(value));
 
     next:
         query = end;
@@ -195,7 +194,7 @@ virURIParse(const char *uri)
  * Wrapper for xmlSaveUri
  *
  * This function constructs back everything that @ref virURIParse
- * changes after parsing
+ * changes after parsing. It aborts on error.
  *
  * @returns the constructed uri as a string
  */
@@ -366,13 +365,24 @@ virURIResolveAlias(virConf *conf, const char *alias, char **uri)
 }
 
 
+/**
+ * virURIGetParam:
+ * @uri: URI to get parameter from
+ * @name: name of the parameter
+ *
+ * For parsed @uri, find parameter with name @name and return its value. The
+ * string comparison is case insensitive, by design.
+ *
+ * Returns: a value on success, or
+ *          NULL on error (with error reported)
+ */
 const char *
 virURIGetParam(virURI *uri, const char *name)
 {
     size_t i;
 
     for (i = 0; i < uri->paramsCount; i++) {
-        if (STREQ(uri->params[i].name, name))
+        if (STRCASEEQ(uri->params[i].name, name))
             return uri->params[i].value;
     }
 
@@ -390,6 +400,8 @@ virURIGetParam(virURI *uri, const char *name)
  * scenario the socket might be proxied to a remote server even though the URI
  * looks like it is only local.
  *
+ * The "socket" parameter is looked for in case insensitive manner, by design.
+ *
  * Returns: true if the URI might be proxied to a remote server
  */
 bool
@@ -404,9 +416,27 @@ virURICheckUnixSocket(virURI *uri)
         return false;
 
     for (i = 0; i < uri->paramsCount; i++) {
-        if (STREQ(uri->params[i].name, "socket"))
+        if (STRCASEEQ(uri->params[i].name, "socket"))
             return true;
     }
 
     return false;
+}
+
+
+void
+virURIParamsSetIgnore(virURI *uri,
+                      bool ignore,
+                      const char *names[])
+{
+    size_t i;
+
+    for (i = 0; i < uri->paramsCount; i++) {
+        size_t j;
+
+        for (j = 0; names[j]; j++) {
+            if (STRCASEEQ(uri->params[i].name, names[j]))
+                uri->params[i].ignore = ignore;
+        }
+    }
 }

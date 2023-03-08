@@ -23,8 +23,6 @@
 #include <stdarg.h>
 
 #include "virbuffer.h"
-#include "virstring.h"
-#include "viralloc.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -552,7 +550,6 @@ virBufferURIEncodeString(virBuffer *buf, const char *str)
 void
 virBufferEscapeShell(virBuffer *buf, const char *str)
 {
-    int len;
     g_autofree char *escaped = NULL;
     char *out;
     const char *cur;
@@ -560,20 +557,18 @@ virBufferEscapeShell(virBuffer *buf, const char *str)
     if ((buf == NULL) || (str == NULL))
         return;
 
+    if (!*str) {
+        virBufferAddLit(buf, "''");
+        return;
+    }
+
     /* Only quote if str includes shell metacharacters. */
-    if (*str && !strpbrk(str, "\r\t\n !\"#$&'()*;<>?[\\]^`{|}~")) {
+    if (!strpbrk(str, "\r\t\n !\"#$&'()*;<>?[\\]^`{|}~")) {
         virBufferAdd(buf, str, -1);
         return;
     }
 
-    if (*str) {
-        len = strlen(str);
-
-        escaped = g_malloc0_n(len + 1, 4);
-    } else {
-        virBufferAddLit(buf, "''");
-        return;
-    }
+    escaped = g_malloc0_n(strlen(str) + 1, 4);
 
     cur = str;
     out = escaped;

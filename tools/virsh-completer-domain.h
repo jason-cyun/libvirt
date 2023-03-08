@@ -42,11 +42,6 @@ virshDomainDiskTargetCompleter(vshControl *ctl,
                                unsigned int flags);
 
 char **
-virshDomainEventNameCompleter(vshControl *ctl,
-                              const vshCmd *cmd,
-                              unsigned int flags);
-
-char **
 virshDomainInterfaceStateCompleter(vshControl *ctl,
                                    const vshCmd *cmd,
                                    unsigned int flags);
@@ -181,3 +176,12 @@ char **
 virshDomainBlockjobBaseTopCompleter(vshControl *ctl,
                                     const vshCmd *cmd,
                                     unsigned int flags);
+
+char **
+virshDomainNumatuneModeCompleter(vshControl *ctl,
+                                 const vshCmd *cmd,
+                                 unsigned int flags);
+char **
+virshDomainDirtyRateCalcModeCompleter(vshControl *ctl,
+                                      const vshCmd *cmd,
+                                      unsigned int flags);

@@ -26,7 +26,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <inttypes.h>
 #include <signal.h>
 
 #if WITH_READLINE
@@ -199,8 +198,7 @@ vshSaveLibvirtHelperError(void)
 void
 vshResetLibvirtError(void)
 {
-    virFreeError(last_error);
-    last_error = NULL;
+    g_clear_pointer(&last_error, virFreeError);
     virResetLastError();
 }
 
@@ -1377,8 +1375,7 @@ vshCommandParse(vshControl *ctl, vshCommandParser *parser, vshCmd **partial)
     const vshCmdDef *cmd = NULL;
 
     if (!partial) {
-        vshCommandFree(ctl->cmd);
-        ctl->cmd = NULL;
+        g_clear_pointer(&ctl->cmd, vshCommandFree);
     }
 
     while (1) {
@@ -1393,8 +1390,7 @@ vshCommandParse(vshControl *ctl, vshCommandParser *parser, vshCmd **partial)
         first = NULL;
 
         if (partial) {
-            vshCommandFree(*partial);
-            *partial = NULL;
+            g_clear_pointer(partial, vshCommandFree);
         }
 
         while (1) {
@@ -1605,8 +1601,7 @@ vshCommandParse(vshControl *ctl, vshCommandParser *parser, vshCmd **partial)
 
         *partial = tmp;
     } else {
-        vshCommandFree(ctl->cmd);
-        ctl->cmd = NULL;
+        g_clear_pointer(&ctl->cmd, vshCommandFree);
         vshCommandOptFree(first);
     }
     VIR_FREE(tkdata);
@@ -1867,6 +1862,7 @@ vshDebug(vshControl *ctl, int level, const char *format, ...)
     str = g_strdup_vprintf(format, ap);
     va_end(ap);
     fputs(str, stdout);
+    fflush(stdout);
 }
 
 void
@@ -1882,6 +1878,7 @@ vshPrintExtra(vshControl *ctl, const char *format, ...)
     str = g_strdup_vprintf(format, ap);
     va_end(ap);
     fputs(str, stdout);
+    fflush(stdout);
 }
 
 
@@ -1895,6 +1892,7 @@ vshPrint(vshControl *ctl G_GNUC_UNUSED, const char *format, ...)
     str = g_strdup_vprintf(format, ap);
     va_end(ap);
     fputs(str, stdout);
+    fflush(stdout);
 }
 
 
@@ -2022,10 +2020,10 @@ vshEventLoop(void *opaque)
     vshControl *ctl = opaque;
 
     while (1) {
-        bool quit;
-        virMutexLock(&ctl->lock);
-        quit = ctl->quit;
-        virMutexUnlock(&ctl->lock);
+        bool quit = false;
+        VIR_WITH_MUTEX_LOCK_GUARD(&ctl->lock) {
+            quit = ctl->quit;
+        }
 
         if (quit)
             break;
@@ -2382,34 +2380,47 @@ vshAskReedit(vshControl *ctl,
 #endif /* WIN32 */
 
 
+void
+vshEditUnlinkTempfile(char *file)
+{
+    if (!file)
+        return;
+
+    ignore_value(unlink(file));
+    g_free(file);
+}
+
+
 /* Common code for the edit / net-edit / pool-edit functions which follow. */
 char *
 vshEditWriteToTempFile(vshControl *ctl, const char *doc)
 {
-    g_autofree char *ret = NULL;
+    g_autofree char *filename = NULL;
+    g_autoptr(vshTempFile) ret = NULL;
     const char *tmpdir;
     VIR_AUTOCLOSE fd = -1;
 
     tmpdir = getenv("TMPDIR");
-    if (!tmpdir) tmpdir = "/tmp";
-    ret = g_strdup_printf("%s/virshXXXXXX.xml", tmpdir);
-    fd = g_mkstemp_full(ret, O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR);
+    if (!tmpdir)
+        tmpdir = "/tmp";
+    filename = g_strdup_printf("%s/virshXXXXXX.xml", tmpdir);
+    fd = g_mkstemp_full(filename, O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR);
     if (fd == -1) {
         vshError(ctl, _("g_mkstemp_full: failed to create temporary file: %s"),
                  g_strerror(errno));
         return NULL;
     }
 
+    ret = g_steal_pointer(&filename);
+
     if (safewrite(fd, doc, strlen(doc)) == -1) {
         vshError(ctl, _("write: %s: failed to write to temporary file: %s"),
                  ret, g_strerror(errno));
-        unlink(ret);
         return NULL;
     }
     if (VIR_CLOSE(fd) < 0) {
         vshError(ctl, _("close: %s: failed to write or close temporary file: %s"),
                  ret, g_strerror(errno));
-        unlink(ret);
         return NULL;
     }
 
@@ -2731,8 +2742,7 @@ vshReadlineParse(const char *text, int state)
         const vshCmdOptDef *opt = NULL;
         g_autofree char *line = g_strdup(rl_line_buffer);
 
-        g_strfreev(list);
-        list = NULL;
+        g_clear_pointer(&list, g_strfreev);
         list_index = 0;
 
         *(line + rl_point) = '\0';
@@ -2798,8 +2808,7 @@ vshReadlineParse(const char *text, int state)
 
  cleanup:
     if (!ret) {
-        g_strfreev(list);
-        list = NULL;
+        g_clear_pointer(&list, g_strfreev);
         list_index = 0;
     }
 
@@ -2931,6 +2940,7 @@ vshReadline(vshControl *ctl G_GNUC_UNUSED,
     int len;
 
     fputs(prompt, stdout);
+    fflush(stdout);
     r = fgets(line, sizeof(line), stdin);
     if (r == NULL) return NULL; /* EOF */
 
@@ -3360,7 +3370,6 @@ const vshCmdInfo info_complete[] = {
 bool
 cmdComplete(vshControl *ctl, const vshCmd *cmd)
 {
-    bool ret = false;
     const vshClientHooks *hooks = ctl->hooks;
     int stdin_fileno = STDIN_FILENO;
     const char *arg = "";
@@ -3370,7 +3379,7 @@ cmdComplete(vshControl *ctl, const vshCmd *cmd)
     g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
 
     if (vshCommandOptStringQuiet(ctl, cmd, "string", &arg) <= 0)
-        goto cleanup;
+        return false;
 
     /* This command is flagged VSH_CMD_FLAG_NOCONNECT because we
      * need to prevent auth hooks reading any input. Therefore, we
@@ -3378,7 +3387,7 @@ cmdComplete(vshControl *ctl, const vshCmd *cmd)
     VIR_FORCE_CLOSE(stdin_fileno);
 
     if (!(hooks && hooks->connHandler && hooks->connHandler(ctl)))
-        goto cleanup;
+        return false;
 
     while ((opt = vshCommandOptArgv(ctl, cmd, opt))) {
         if (virBufferUse(&buf) != 0)
@@ -3397,7 +3406,7 @@ cmdComplete(vshControl *ctl, const vshCmd *cmd)
     rl_point = strlen(rl_line_buffer);
 
     if (!(matches = vshReadlineCompletion(arg, 0, 0)))
-        goto cleanup;
+        return false;
 
     for (iter = matches; *iter; iter++) {
         if (iter == matches && matches[1])
@@ -3405,9 +3414,7 @@ cmdComplete(vshControl *ctl, const vshCmd *cmd)
         printf("%s\n", *iter);
     }
 
-    ret = true;
- cleanup:
-    return ret;
+    return true;
 }
 
 

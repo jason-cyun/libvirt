@@ -26,7 +26,6 @@
 #include "virfirewalld.h"
 #include "viralloc.h"
 #include "virerror.h"
-#include "virstring.h"
 #include "vircommand.h"
 #include "virlog.h"
 #include "virfile.h"
@@ -462,14 +461,14 @@ void virFirewallStartRollback(virFirewall *firewall,
 }
 
 
-static char *
-virFirewallRuleToString(virFirewallRule *rule)
+char *
+virFirewallRuleToString(const char *cmd,
+                        virFirewallRule *rule)
 {
-    const char *bin = virFirewallLayerCommandTypeToString(rule->layer);
     g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
     size_t i;
 
-    virBufferAdd(&buf, bin, -1);
+    virBufferAdd(&buf, cmd, -1);
     for (i = 0; i < rule->argsLen; i++) {
         virBufferAddLit(&buf, " ");
         virBufferAdd(&buf, rule->args[i], -1);
@@ -477,6 +476,7 @@ virFirewallRuleToString(virFirewallRule *rule)
 
     return virBufferContentAndReset(&buf);
 }
+
 
 static int
 virFirewallApplyRuleDirect(virFirewallRule *rule,
@@ -486,6 +486,7 @@ virFirewallApplyRuleDirect(virFirewallRule *rule,
     size_t i;
     const char *bin = virFirewallLayerCommandTypeToString(rule->layer);
     g_autoptr(virCommand) cmd = NULL;
+    g_autofree char *cmdStr = NULL;
     int status;
     g_autofree char *error = NULL;
 
@@ -501,6 +502,9 @@ virFirewallApplyRuleDirect(virFirewallRule *rule,
     for (i = 0; i < rule->argsLen; i++)
         virCommandAddArg(cmd, rule->args[i]);
 
+    cmdStr = virCommandToString(cmd, false);
+    VIR_INFO("Applying rule '%s'", NULLSTR(cmdStr));
+
     virCommandSetOutputBuffer(cmd, output);
     virCommandSetErrorBuffer(cmd, &error);
 
@@ -511,10 +515,9 @@ virFirewallApplyRuleDirect(virFirewallRule *rule,
         if (ignoreErrors) {
             VIR_DEBUG("Ignoring error running command");
         } else {
-            g_autofree char *args = virCommandToString(cmd, false);
             virReportError(VIR_ERR_INTERNAL_ERROR,
                            _("Failed to apply firewall rules %s: %s"),
-                           NULLSTR(args), NULLSTR(error));
+                           NULLSTR(cmdStr), NULLSTR(error));
             VIR_FREE(*output);
             return -1;
         }
@@ -524,25 +527,13 @@ virFirewallApplyRuleDirect(virFirewallRule *rule,
 }
 
 
-static int G_GNUC_UNUSED
-virFirewallApplyRuleFirewallD(virFirewallRule *rule,
-                              bool ignoreErrors,
-                              char **output)
-{
-    /* wrapper necessary because virFirewallRule is a private struct */
-    return virFirewallDApplyRule(rule->layer, rule->args, rule->argsLen, ignoreErrors, output);
-}
-
-
 static int
 virFirewallApplyRule(virFirewall *firewall,
                      virFirewallRule *rule,
                      bool ignoreErrors)
 {
     g_autofree char *output = NULL;
-    g_autofree char *str = virFirewallRuleToString(rule);
     g_auto(GStrv) lines = NULL;
-    VIR_INFO("Applying rule '%s'", NULLSTR(str));
 
     if (rule->ignoreErrors)
         ignoreErrors = rule->ignoreErrors;
@@ -613,9 +604,7 @@ int
 virFirewallApply(virFirewall *firewall)
 {
     size_t i, j;
-    int ret = -1;
-
-    virMutexLock(&ruleLock);
+    VIR_LOCK_GUARD lock = virLockGuardLock(&ruleLock);
 
     if (!firewall || firewall->err) {
         int err = EINVAL;
@@ -624,7 +613,7 @@ virFirewallApply(virFirewall *firewall)
             err = firewall->err;
 
         virReportSystemError(err, "%s", _("Unable to create rule"));
-        goto cleanup;
+        return -1;
     }
 
     VIR_DEBUG("Applying groups for %p", firewall);
@@ -657,13 +646,10 @@ virFirewallApply(virFirewall *firewall)
 
             virErrorRestore(&saved_error);
             VIR_DEBUG("Done rolling back groups for %p", firewall);
-            goto cleanup;
+            return -1;
         }
     }
     VIR_DEBUG("Done applying groups for %p", firewall);
 
-    ret = 0;
- cleanup:
-    virMutexUnlock(&ruleLock);
-    return ret;
+    return 0;
 }

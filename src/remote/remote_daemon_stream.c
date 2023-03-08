@@ -22,7 +22,6 @@
 #include <config.h>
 
 #include "remote_daemon_stream.h"
-#include "remote_daemon_dispatch.h"
 #include "viralloc.h"
 #include "virlog.h"
 #include "virnetserverclient.h"
@@ -119,8 +118,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
     virNetServerClient *client = opaque;
     daemonClientStream *stream;
     daemonClientPrivate *priv = virNetServerClientGetPrivateData(client);
-
-    virMutexLock(&priv->lock);
+    VIR_LOCK_GUARD lock = virLockGuardLock(&priv->lock);
 
     stream = priv->streams;
     while (stream) {
@@ -132,7 +130,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
     if (!stream) {
         VIR_WARN("event for client=%p stream st=%p, but missing stream state", client, st);
         virStreamEventRemoveCallback(st);
-        goto cleanup;
+        return;
     }
 
     VIR_DEBUG("st=%p events=%d EOF=%d closed=%d", st, events, stream->recvEOF, stream->closed);
@@ -142,7 +140,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
         if (daemonStreamHandleWrite(client, stream) < 0) {
             daemonRemoveClientStream(client, stream);
             virNetServerClientClose(client);
-            goto cleanup;
+            return;
         }
     }
 
@@ -152,7 +150,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
         if (daemonStreamHandleRead(client, stream) < 0) {
             daemonRemoveClientStream(client, stream);
             virNetServerClientClose(client);
-            goto cleanup;
+            return;
         }
         /* If we detected EOF during read processing,
          * then clear hangup/error conditions, since
@@ -177,7 +175,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
                 virNetMessageFree(msg);
                 daemonRemoveClientStream(client, stream);
                 virNetServerClientClose(client);
-                goto cleanup;
+                return;
             }
             break;
         case VIR_NET_ERROR:
@@ -187,7 +185,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
                 virNetMessageFree(msg);
                 daemonRemoveClientStream(client, stream);
                 virNetServerClientClose(client);
-                goto cleanup;
+                return;
             }
             break;
         }
@@ -206,7 +204,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
         if (!(msg = virNetMessageNew(false))) {
             daemonRemoveClientStream(client, stream);
             virNetServerClientClose(client);
-            goto cleanup;
+            return;
         }
         msg->cb = daemonStreamMessageFinished;
         msg->opaque = stream;
@@ -220,7 +218,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
             virNetMessageFree(msg);
             daemonRemoveClientStream(client, stream);
             virNetServerClientClose(client);
-            goto cleanup;
+            return;
         }
     }
 
@@ -263,7 +261,7 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
         daemonRemoveClientStream(client, stream);
         if (ret < 0)
             virNetServerClientClose(client);
-        goto cleanup;
+        return;
     }
 
     if (stream->closed) {
@@ -271,9 +269,6 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
     } else {
         daemonStreamUpdateEvents(stream);
     }
-
- cleanup:
-    virMutexUnlock(&priv->lock);
 }
 
 
@@ -342,10 +337,10 @@ daemonStreamFilter(virNetServerClient *client,
 
 
 /*
- * @conn: a connection object to associate the stream with
+ * @client: a locked client object
  * @header: the method call to associate with the stream
  *
- * Creates a new stream for this conn
+ * Creates a new stream for this client.
  *
  * Returns a new stream object, or NULL upon OOM
  */
@@ -445,7 +440,7 @@ int daemonAddClientStream(virNetServerClient *client,
 
     if (virStreamEventAddCallback(stream->st, 0,
                                   daemonStreamEvent, client,
-                                  virObjectFreeCallback) < 0)
+                                  virObjectUnref) < 0)
         return -1;
 
     virObjectRef(client);
@@ -460,13 +455,11 @@ int daemonAddClientStream(virNetServerClient *client,
     if (transmit)
         stream->tx = true;
 
-    virMutexLock(&priv->lock);
-    stream->next = priv->streams;
-    priv->streams = stream;
-
-    daemonStreamUpdateEvents(stream);
-
-    virMutexUnlock(&priv->lock);
+    VIR_WITH_MUTEX_LOCK_GUARD(&priv->lock) {
+        stream->next = priv->streams;
+        priv->streams = stream;
+        daemonStreamUpdateEvents(stream);
+    }
 
     return 0;
 }

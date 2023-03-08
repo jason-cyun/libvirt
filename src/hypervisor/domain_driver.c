@@ -375,7 +375,7 @@ virDomainDriverNodeDeviceReset(virNodeDevicePtr dev,
                                virHostdevManager *hostdevMgr)
 {
     g_autoptr(virPCIDevice) pci = NULL;
-    virPCIDeviceAddress devAddr;
+    virPCIDeviceAddress devAddr = { 0 };
     g_autoptr(virNodeDeviceDef) def = NULL;
     g_autofree char *xml = NULL;
     g_autoptr(virConnect) nodeconn = NULL;
@@ -395,8 +395,7 @@ virDomainDriverNodeDeviceReset(virNodeDevicePtr dev,
     if (!xml)
         return -1;
 
-    def = virNodeDeviceDefParseString(xml, EXISTING_DEVICE, NULL,
-                                      NULL, NULL);
+    def = virNodeDeviceDefParse(xml, NULL, EXISTING_DEVICE, NULL, NULL, NULL, false);
     if (!def)
         return -1;
 
@@ -421,7 +420,7 @@ virDomainDriverNodeDeviceReAttach(virNodeDevicePtr dev,
                                   virHostdevManager *hostdevMgr)
 {
     g_autoptr(virPCIDevice) pci = NULL;
-    virPCIDeviceAddress devAddr;
+    virPCIDeviceAddress devAddr = { 0 };
     g_autoptr(virNodeDeviceDef) def = NULL;
     g_autofree char *xml = NULL;
     g_autoptr(virConnect) nodeconn = NULL;
@@ -441,7 +440,7 @@ virDomainDriverNodeDeviceReAttach(virNodeDevicePtr dev,
     if (!xml)
         return -1;
 
-    def = virNodeDeviceDefParseString(xml, EXISTING_DEVICE, NULL, NULL, NULL);
+    def = virNodeDeviceDefParse(xml, NULL, EXISTING_DEVICE, NULL, NULL, NULL, false);
     if (!def)
         return -1;
 
@@ -466,7 +465,7 @@ virDomainDriverNodeDeviceDetachFlags(virNodeDevicePtr dev,
                                      const char *driverName)
 {
     g_autoptr(virPCIDevice) pci = NULL;
-    virPCIDeviceAddress devAddr;
+    virPCIDeviceAddress devAddr = { 0 };
     g_autoptr(virNodeDeviceDef) def = NULL;
     g_autofree char *xml = NULL;
     g_autoptr(virConnect) nodeconn = NULL;
@@ -489,7 +488,7 @@ virDomainDriverNodeDeviceDetachFlags(virNodeDevicePtr dev,
     if (!xml)
         return -1;
 
-    def = virNodeDeviceDefParseString(xml, EXISTING_DEVICE, NULL, NULL, NULL);
+    def = virNodeDeviceDefParse(xml, NULL, EXISTING_DEVICE, NULL, NULL, NULL, false);
     if (!def)
         return -1;
 

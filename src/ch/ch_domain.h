@@ -23,46 +23,55 @@
 #include "ch_conf.h"
 #include "ch_monitor.h"
 #include "virchrdev.h"
-
-/* Give up waiting for mutex after 30 seconds */
-#define CH_JOB_WAIT_TIME (1000ull * 30)
-
-/* Only 1 job is allowed at any time
- * A job includes *all* ch.so api, even those just querying
- * information, not merely actions */
-
-enum virCHDomainJob {
-    CH_JOB_NONE = 0,      /* Always set to 0 for easy if (jobActive) conditions */
-    CH_JOB_QUERY,         /* Doesn't change any state */
-    CH_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
-    CH_JOB_MODIFY,        /* May change state */
-    CH_JOB_LAST
-};
-VIR_ENUM_DECL(virCHDomainJob);
-
-
-struct virCHDomainJobObj {
-    virCond cond;                       /* Use to coordinate jobs */
-    enum virCHDomainJob active;        /* Currently running job */
-    int owner;                          /* Thread which set current job */
-};
+#include "vircgroup.h"
+#include "virdomainjob.h"
 
 
 typedef struct _virCHDomainObjPrivate virCHDomainObjPrivate;
 struct _virCHDomainObjPrivate {
-    struct virCHDomainJobObj job;
-
+    virChrdevs *chrdevs;
+    virCHDriver *driver;
     virCHMonitor *monitor;
-
-     virChrdevs *chrdevs;
+    char *machineName;
+    virBitmap *autoCpuset;
+    virBitmap *autoNodeset;
+    virCgroup *cgroup;
 };
+
+#define CH_DOMAIN_PRIVATE(vm) \
+    ((virCHDomainObjPrivate*)(vm)->privateData)
+
+virCHMonitor *virCHDomainGetMonitor(virDomainObj *vm);
+
+typedef struct _virCHDomainVcpuPrivate virCHDomainVcpuPrivate;
+struct _virCHDomainVcpuPrivate {
+    virObject parent;
+
+    pid_t tid; /* vcpu thread id */
+    virTristateBool halted;
+};
+
+#define CH_DOMAIN_VCPU_PRIVATE(vcpu) \
+    ((virCHDomainVcpuPrivate *) (vcpu)->privateData)
 
 extern virDomainXMLPrivateDataCallbacks virCHDriverPrivateDataCallbacks;
 extern virDomainDefParserConfig virCHDriverDomainDefParserConfig;
 
-int
-virCHDomainObjBeginJob(virDomainObj *obj, enum virCHDomainJob job)
-    G_GNUC_WARN_UNUSED_RESULT;
-
 void
-virCHDomainObjEndJob(virDomainObj *obj);
+virCHDomainRemoveInactive(virCHDriver *driver,
+                          virDomainObj *vm);
+
+int
+virCHDomainRefreshThreadInfo(virDomainObj *vm);
+
+pid_t
+virCHDomainGetVcpuPid(virDomainObj *vm,
+                      unsigned int vcpuid);
+bool
+virCHDomainHasVcpuPids(virDomainObj *vm);
+
+char *
+virCHDomainGetMachineName(virDomainObj *vm);
+
+virDomainObj *
+virCHDomainObjFromDomain(virDomainPtr domain);

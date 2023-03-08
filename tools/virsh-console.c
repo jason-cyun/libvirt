@@ -35,7 +35,6 @@
 # include "virsh-console.h"
 # include "virsh-util.h"
 # include "virlog.h"
-# include "virfile.h"
 # include "viralloc.h"
 # include "virthread.h"
 # include "virerror.h"
@@ -316,7 +315,7 @@ virConsoleEventOnStdout(int watch G_GNUC_UNUSED,
         con->streamToTerminal.offset) {
         ssize_t done;
         size_t avail;
-        done = write(fd,
+        done = write(fd, /* sc_avoid_write */
                      con->streamToTerminal.data,
                      con->streamToTerminal.offset);
         if (done < 0) {
@@ -452,7 +451,7 @@ virshRunConsole(vshControl *ctl,
                                              VIR_EVENT_HANDLE_READABLE,
                                              virConsoleEventOnStdin,
                                              con,
-                                             virObjectFreeCallback)) < 0) {
+                                             virObjectUnref)) < 0) {
         virObjectUnref(con);
         goto cleanup;
     }
@@ -462,7 +461,7 @@ virshRunConsole(vshControl *ctl,
                                               0,
                                               virConsoleEventOnStdout,
                                               con,
-                                              virObjectFreeCallback)) < 0) {
+                                              virObjectUnref)) < 0) {
         virObjectUnref(con);
         goto cleanup;
     }
@@ -472,7 +471,7 @@ virshRunConsole(vshControl *ctl,
                                   VIR_STREAM_EVENT_READABLE,
                                   virConsoleEventOnStream,
                                   con,
-                                  virObjectFreeCallback) < 0) {
+                                  virObjectUnref) < 0) {
         virObjectUnref(con);
         goto cleanup;
     }

@@ -21,7 +21,6 @@
 #include <dirent.h>
 
 #include "datatypes.h"
-#include "node_device_conf.h"
 #include "node_device_util.h"
 #include "virstorageobj.h"
 
@@ -66,15 +65,15 @@ struct _virStorageVolObjList {
     virObjectRWLockable parent;
 
     /* key string -> virStorageVolObj mapping
-     * for (1), lockless lookup-by-key */
+     * for (1), lookup-by-key */
     GHashTable *objsKey;
 
     /* name string -> virStorageVolObj mapping
-     * for (1), lockless lookup-by-name */
+     * for (1), lookup-by-name */
     GHashTable *objsName;
 
     /* path string -> virStorageVolObj mapping
-     * for (1), lockless lookup-by-path */
+     * for (1), lookup-by-path */
     GHashTable *objsPath;
 };
 
@@ -98,11 +97,11 @@ struct _virStoragePoolObjList {
     virObjectRWLockable parent;
 
     /* uuid string -> virStoragePoolObj mapping
-     * for (1), lockless lookup-by-uuid */
+     * for (1), lookup-by-uuid */
     GHashTable *objs;
 
     /* name string -> virStoragePoolObj mapping
-     * for (1), lockless lookup-by-name */
+     * for (1), lookup-by-name */
     GHashTable *objsName;
 };
 
@@ -125,28 +124,10 @@ VIR_ONCE_GLOBAL_INIT(virStorageVolObj);
 static virStorageVolObj *
 virStorageVolObjNew(void)
 {
-    virStorageVolObj *obj;
-
     if (virStorageVolObjInitialize() < 0)
         return NULL;
 
-    if (!(obj = virObjectLockableNew(virStorageVolObjClass)))
-        return NULL;
-
-    virObjectLock(obj);
-    return obj;
-}
-
-
-static void
-virStorageVolObjEndAPI(virStorageVolObj **obj)
-{
-    if (!*obj)
-        return;
-
-    virObjectUnlock(*obj);
-    virObjectUnref(*obj);
-    *obj = NULL;
+    return virObjectLockableNew(virStorageVolObjClass);
 }
 
 
@@ -170,9 +151,9 @@ virStorageVolObjListNew(void)
     if (!(vols = virObjectRWLockableNew(virStorageVolObjListClass)))
         return NULL;
 
-    vols->objsKey = virHashNew(virObjectFreeHashData);
-    vols->objsName = virHashNew(virObjectFreeHashData);
-    vols->objsPath = virHashNew(virObjectFreeHashData);
+    vols->objsKey = virHashNew(virObjectUnref);
+    vols->objsName = virHashNew(virObjectUnref);
+    vols->objsPath = virHashNew(virObjectUnref);
 
     return vols;
 }
@@ -233,8 +214,7 @@ virStoragePoolObjEndAPI(virStoragePoolObj **obj)
         return;
 
     virObjectUnlock(*obj);
-    virObjectUnref(*obj);
-    *obj = NULL;
+    g_clear_pointer(obj, virObjectUnref);
 }
 
 
@@ -398,8 +378,8 @@ virStoragePoolObjListNew(void)
     if (!(pools = virObjectRWLockableNew(virStoragePoolObjListClass)))
         return NULL;
 
-    pools->objs = virHashNew(virObjectFreeHashData);
-    pools->objsName = virHashNew(virObjectFreeHashData);
+    pools->objs = virHashNew(virObjectUnref);
+    pools->objsName = virHashNew(virObjectUnref);
 
     return pools;
 }
@@ -474,11 +454,11 @@ virStoragePoolObjListSearchCb(const void *payload,
     virStoragePoolObj *obj = (virStoragePoolObj *) payload;
     struct _virStoragePoolObjListSearchData *data =
         (struct _virStoragePoolObjListSearchData *)opaque;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(obj);
 
-    virObjectLock(obj);
     if (data->searcher(obj, data->opaque))
         return 1;
-    virObjectUnlock(obj);
+
     return 0;
 }
 
@@ -523,8 +503,8 @@ virStoragePoolObjRemove(virStoragePoolObjList *pools,
     virObjectUnlock(obj);
     virObjectRWLockWrite(pools);
     virObjectLock(obj);
-    virHashRemoveEntry(pools->objs, uuidstr);
-    virHashRemoveEntry(pools->objsName, obj->def->name);
+    g_hash_table_remove(pools->objs, uuidstr);
+    g_hash_table_remove(pools->objsName, obj->def->name);
     virObjectUnref(obj);
     virObjectRWUnlock(pools);
 }
@@ -623,9 +603,9 @@ virStoragePoolObjClearVols(virStoragePoolObj *obj)
     if (!obj->volumes)
         return;
 
-    virHashRemoveAll(obj->volumes->objsKey);
-    virHashRemoveAll(obj->volumes->objsName);
-    virHashRemoveAll(obj->volumes->objsPath);
+    g_hash_table_remove_all(obj->volumes->objsKey);
+    g_hash_table_remove_all(obj->volumes->objsName);
+    g_hash_table_remove_all(obj->volumes->objsPath);
 }
 
 
@@ -638,35 +618,35 @@ virStoragePoolObjAddVol(virStoragePoolObj *obj,
 
     virObjectRWLockWrite(volumes);
 
-    if (!(volobj = virStorageVolObjNew()))
-        goto error;
-
-    if (virHashAddEntry(volumes->objsKey, voldef->key, volobj) < 0)
-        goto error;
-    virObjectRef(volobj);
-
-    if (virHashAddEntry(volumes->objsName, voldef->name, volobj) < 0) {
-        virHashRemoveEntry(volumes->objsKey, voldef->key);
-        goto error;
+    if (!voldef->key || !voldef->name || !voldef->target.path ||
+        g_hash_table_contains(volumes->objsKey, voldef->key) ||
+        g_hash_table_contains(volumes->objsName, voldef->name) ||
+        g_hash_table_contains(volumes->objsPath, voldef->target.path)) {
+        virObjectRWUnlock(volumes);
+        return -1;
     }
-    virObjectRef(volobj);
 
-    if (virHashAddEntry(volumes->objsPath, voldef->target.path, volobj) < 0) {
-        virHashRemoveEntry(volumes->objsKey, voldef->key);
-        virHashRemoveEntry(volumes->objsName, voldef->name);
-        goto error;
+    if (!(volobj = virStorageVolObjNew())) {
+        virObjectRWUnlock(volumes);
+        return -1;
     }
-    virObjectRef(volobj);
 
-    volobj->voldef = voldef;
+    VIR_WITH_OBJECT_LOCK_GUARD(volobj) {
+        g_hash_table_insert(volumes->objsKey, g_strdup(voldef->key), volobj);
+        virObjectRef(volobj);
+
+        g_hash_table_insert(volumes->objsName, g_strdup(voldef->name), volobj);
+        virObjectRef(volobj);
+
+        g_hash_table_insert(volumes->objsPath, g_strdup(voldef->target.path), volobj);
+        virObjectRef(volobj);
+
+        volobj->voldef = voldef;
+    }
+
+    virObjectUnref(volobj);
     virObjectRWUnlock(volumes);
-    virStorageVolObjEndAPI(&volobj);
     return 0;
-
- error:
-    virStorageVolObjEndAPI(&volobj);
-    virObjectRWUnlock(volumes);
-    return -1;
 }
 
 
@@ -689,12 +669,12 @@ virStoragePoolObjRemoveVol(virStoragePoolObj *obj,
              voldef->name, obj->def->name);
 
     virObjectRef(volobj);
-    virObjectLock(volobj);
-    virHashRemoveEntry(volumes->objsKey, voldef->key);
-    virHashRemoveEntry(volumes->objsName, voldef->name);
-    virHashRemoveEntry(volumes->objsPath, voldef->target.path);
-    virStorageVolObjEndAPI(&volobj);
-
+    VIR_WITH_OBJECT_LOCK_GUARD(volobj) {
+        g_hash_table_remove(volumes->objsKey, voldef->key);
+        g_hash_table_remove(volumes->objsName, voldef->name);
+        g_hash_table_remove(volumes->objsPath, voldef->target.path);
+    }
+    virObjectUnref(volobj);
     virObjectRWUnlock(volumes);
 }
 
@@ -722,16 +702,14 @@ virStoragePoolObjForEachVolumeCb(void *payload,
                                  const char *name G_GNUC_UNUSED,
                                  void *opaque)
 {
-    int ret = 0;
     virStorageVolObj *volobj = payload;
     struct _virStoragePoolObjForEachVolData *data = opaque;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(volobj);
 
-    virObjectLock(volobj);
     if (data->iter(volobj->voldef, data->opaque) < 0)
-        ret = -1;
-    virObjectUnlock(volobj);
+        return -1;
 
-    return ret;
+    return 0;
 }
 
 
@@ -764,14 +742,12 @@ virStoragePoolObjSearchVolumeCb(const void *payload,
     virStorageVolObj *volobj = (virStorageVolObj *) payload;
     struct _virStoragePoolObjSearchVolData *data =
         (struct _virStoragePoolObjSearchVolData *) opaque;
-    int found = 0;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(volobj);
 
-    virObjectLock(volobj);
     if (data->iter(volobj->voldef, data->opaque))
-        found = 1;
-    virObjectUnlock(volobj);
+        return 1;
 
-    return found;
+    return 0;
 }
 
 
@@ -860,17 +836,12 @@ virStoragePoolObjNumOfVolumesCb(void *payload,
 {
     virStorageVolObj *volobj = payload;
     struct _virStorageVolObjCountData *data = opaque;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(volobj);
 
-    virObjectLock(volobj);
-
-    if (data->filter &&
-        !data->filter(data->conn, data->pooldef, volobj->voldef))
-        goto cleanup;
+    if (data->filter && !data->filter(data->conn, data->pooldef, volobj->voldef))
+        return 0;
 
     data->count++;
-
- cleanup:
-    virObjectUnlock(volobj);
     return 0;
 }
 
@@ -909,6 +880,7 @@ virStoragePoolObjVolumeGetNamesCb(void *payload,
 {
     virStorageVolObj *volobj = payload;
     struct _virStorageVolObjNameData *data = opaque;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(volobj);
 
     if (data->error)
         return 0;
@@ -916,19 +888,13 @@ virStoragePoolObjVolumeGetNamesCb(void *payload,
     if (data->maxnames >= 0 && data->nnames == data->maxnames)
         return 0;
 
-    virObjectLock(volobj);
-
-    if (data->filter &&
-        !data->filter(data->conn, data->pooldef, volobj->voldef))
-        goto cleanup;
+    if (data->filter && !data->filter(data->conn, data->pooldef, volobj->voldef))
+        return 0;
 
     if (data->names)
         data->names[data->nnames] = g_strdup(volobj->voldef->name);
 
     data->nnames++;
-
- cleanup:
-    virObjectUnlock(volobj);
     return 0;
 }
 
@@ -979,30 +945,25 @@ virStoragePoolObjVolumeListExportCallback(void *payload,
     virStorageVolObj *volobj = payload;
     virStoragePoolObjVolumeListExportData *data = opaque;
     virStorageVolPtr vol = NULL;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(volobj);
 
     if (data->error)
         return 0;
 
-    virObjectLock(volobj);
-
-    if (data->filter &&
-        !data->filter(data->conn, data->pooldef, volobj->voldef))
-        goto cleanup;
+    if (data->filter && !data->filter(data->conn, data->pooldef, volobj->voldef))
+        return 0;
 
     if (data->vols) {
         if (!(vol = virGetStorageVol(data->conn, data->pooldef->name,
                                      volobj->voldef->name, volobj->voldef->key,
                                      NULL, NULL))) {
             data->error = true;
-            goto cleanup;
+            return 0;
         }
         data->vols[data->nvols] = vol;
     }
 
     data->nvols++;
-
- cleanup:
-    virObjectUnlock(volobj);
     return 0;
 }
 
@@ -1127,9 +1088,8 @@ static int
 getSCSIHostNumber(virStorageAdapterSCSIHost *scsi_host,
                   unsigned int *hostnum)
 {
-    int ret = -1;
     unsigned int num;
-    char *name = NULL;
+    g_autofree char *name = NULL;
 
     if (scsi_host->has_parent) {
         virPCIDeviceAddress *addr = &scsi_host->parentaddr;
@@ -1140,20 +1100,17 @@ getSCSIHostNumber(virStorageAdapterSCSIHost *scsi_host,
                                                     addr->slot,
                                                     addr->function,
                                                     unique_id)))
-            goto cleanup;
+            return -1;
         if (virSCSIHostGetNumber(name, &num) < 0)
-            goto cleanup;
+            return -1;
     } else {
         if (virSCSIHostGetNumber(scsi_host->name, &num) < 0)
-            goto cleanup;
+            return -1;
     }
 
     *hostnum = num;
-    ret = 0;
 
- cleanup:
-    VIR_FREE(name);
-    return ret;
+    return 0;
 }
 
 
@@ -1186,9 +1143,9 @@ matchFCHostToSCSIHost(virStorageAdapterFCHost *fchost,
 {
     virConnectPtr conn = NULL;
     bool ret = false;
-    char *name = NULL;
-    char *scsi_host_name = NULL;
-    char *parent_name = NULL;
+    g_autofree char *name = NULL;
+    g_autofree char *scsi_host_name = NULL;
+    g_autofree char *parent_name = NULL;
 
     /* If we have a parent defined, get its hostnum, and compare to the
      * scsi_hostnum. If they are the same, then we have a match
@@ -1241,9 +1198,6 @@ matchFCHostToSCSIHost(virStorageAdapterFCHost *fchost,
      */
 
  cleanup:
-    VIR_FREE(name);
-    VIR_FREE(parent_name);
-    VIR_FREE(scsi_host_name);
     virConnectClose(conn);
     return ret;
 }
@@ -1447,13 +1401,11 @@ virStoragePoolObjSourceFindDuplicateCb(const void *payload,
         break;
 
     case VIR_STORAGE_POOL_ISCSI:
-    case VIR_STORAGE_POOL_ISCSI_DIRECT:
     case VIR_STORAGE_POOL_FS:
     case VIR_STORAGE_POOL_LOGICAL:
     case VIR_STORAGE_POOL_DISK:
     case VIR_STORAGE_POOL_ZFS:
         if ((data->def->type == VIR_STORAGE_POOL_ISCSI ||
-             data->def->type == VIR_STORAGE_POOL_ISCSI_DIRECT ||
              data->def->type == VIR_STORAGE_POOL_FS ||
              data->def->type == VIR_STORAGE_POOL_LOGICAL ||
              data->def->type == VIR_STORAGE_POOL_DISK ||
@@ -1481,6 +1433,7 @@ virStoragePoolObjSourceFindDuplicateCb(const void *payload,
             return 1;
         break;
 
+    case VIR_STORAGE_POOL_ISCSI_DIRECT:
     case VIR_STORAGE_POOL_RBD:
     case VIR_STORAGE_POOL_LAST:
         break;
@@ -1585,15 +1538,18 @@ virStoragePoolObjListAdd(virStoragePoolObjList *pools,
         goto error;
 
     virUUIDFormat((*def)->uuid, uuidstr);
-    if (virHashAddEntry(pools->objs, uuidstr, obj) < 0)
+
+    if (!(*def)->name ||
+        g_hash_table_contains(pools->objs, uuidstr) ||
+        g_hash_table_contains(pools->objsName, (*def)->name))
         goto error;
+
+    g_hash_table_insert(pools->objs, g_strdup(uuidstr), obj);
     virObjectRef(obj);
 
-    if (virHashAddEntry(pools->objsName, (*def)->name, obj) < 0) {
-        virHashRemoveEntry(pools->objs, uuidstr);
-        goto error;
-    }
+    g_hash_table_insert(pools->objsName, g_strdup((*def)->name), obj);
     virObjectRef(obj);
+
     obj->def = g_steal_pointer(def);
     virObjectRWUnlock(pools);
     return obj;
@@ -1614,7 +1570,9 @@ virStoragePoolObjLoad(virStoragePoolObjList *pools,
     virStoragePoolObj *obj;
     g_autoptr(virStoragePoolDef) def = NULL;
 
-    if (!(def = virStoragePoolDefParseFile(path)))
+    VIR_DEBUG("loading storage pool config XML '%s'", path);
+
+    if (!(def = virStoragePoolDefParse(NULL, path, 0)))
         return NULL;
 
     if (!virStringMatchesNameSuffix(file, def->name, ".xml")) {
@@ -1655,7 +1613,9 @@ virStoragePoolObjLoadState(virStoragePoolObjList *pools,
     if (!(stateFile = virFileBuildPath(stateDir, name, ".xml")))
         return NULL;
 
-    if (!(xml = virXMLParseCtxt(stateFile, NULL, _("(pool state)"), &ctxt)))
+    VIR_DEBUG("loading storage pool state XML '%s'", stateFile);
+
+    if (!(xml = virXMLParseFileCtxt(stateFile, &ctxt)))
         return NULL;
 
     if (!(node = virXPathNode("//pool", ctxt))) {
@@ -1732,27 +1692,15 @@ virStoragePoolObjLoadAllConfigs(virStoragePoolObjList *pools,
         return rc;
 
     while ((ret = virDirRead(dir, &entry, configDir)) > 0) {
-        char *path;
-        char *autostartLink;
+        g_autofree char *path = virFileBuildPath(configDir, entry->d_name, NULL);
+        g_autofree char *autostartLink = virFileBuildPath(autostartDir, entry->d_name, NULL);
         virStoragePoolObj *obj;
 
         if (!virStringHasSuffix(entry->d_name, ".xml"))
             continue;
 
-        if (!(path = virFileBuildPath(configDir, entry->d_name, NULL)))
-            continue;
-
-        if (!(autostartLink = virFileBuildPath(autostartDir, entry->d_name,
-                                               NULL))) {
-            VIR_FREE(path);
-            continue;
-        }
-
         obj = virStoragePoolObjLoad(pools, entry->d_name, path, autostartLink);
         virStoragePoolObjEndAPI(&obj);
-
-        VIR_FREE(path);
-        VIR_FREE(autostartLink);
     }
 
     return ret;
@@ -1823,19 +1771,15 @@ virStoragePoolObjNumOfStoragePoolsCb(void *payload,
 {
     virStoragePoolObj *obj = payload;
     struct _virStoragePoolCountData *data = opaque;
-
-    virObjectLock(obj);
+    VIR_LOCK_GUARD lock = virObjectLockGuard(obj);
 
     if (data->filter && !data->filter(data->conn, obj->def))
-        goto cleanup;
+        return 0;
 
     if (data->wantActive != virStoragePoolObjIsActive(obj))
-        goto cleanup;
+        return 0;
 
     data->count++;
-
- cleanup:
-    virObjectUnlock(obj);
     return 0;
 }
 
@@ -1875,6 +1819,7 @@ virStoragePoolObjGetNamesCb(void *payload,
 {
     virStoragePoolObj *obj = payload;
     struct _virStoragePoolNameData *data = opaque;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(obj);
 
     if (data->error)
         return 0;
@@ -1882,21 +1827,16 @@ virStoragePoolObjGetNamesCb(void *payload,
     if (data->maxnames >= 0 && data->nnames == data->maxnames)
         return 0;
 
-    virObjectLock(obj);
-
     if (data->filter && !data->filter(data->conn, obj->def))
-        goto cleanup;
+        return 0;
 
     if (data->wantActive != virStoragePoolObjIsActive(obj))
-        goto cleanup;
+        return 0;
 
     if (data->names)
         data->names[data->nnames] = g_strdup(obj->def->name);
 
     data->nnames++;
-
- cleanup:
-    virObjectUnlock(obj);
     return 0;
 }
 
@@ -2018,31 +1958,27 @@ virStoragePoolObjListExportCallback(void *payload,
     virStoragePoolObj *obj = payload;
     virStoragePoolObjListExportData *data = opaque;
     virStoragePoolPtr pool = NULL;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(obj);
 
     if (data->error)
         return 0;
 
-    virObjectLock(obj);
-
     if (data->filter && !data->filter(data->conn, obj->def))
-        goto cleanup;
+        return 0;
 
     if (!virStoragePoolObjMatch(obj, data->flags))
-        goto cleanup;
+        return 0;
 
     if (data->pools) {
         if (!(pool = virGetStoragePool(data->conn, obj->def->name,
                                        obj->def->uuid, NULL, NULL))) {
             data->error = true;
-            goto cleanup;
+            return 0;
         }
         data->pools[data->nPools] = pool;
     }
 
     data->nPools++;
-
- cleanup:
-    virObjectUnlock(obj);
     return 0;
 }
 

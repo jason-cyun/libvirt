@@ -17,20 +17,19 @@
  */
 #include <config.h>
 
-#if WITH_DECL_BPF_CGROUP_DEVICE
+#if __linux__
 # include <fcntl.h>
 # include <linux/bpf.h>
 # include <sys/stat.h>
 # include <sys/syscall.h>
 # include <sys/types.h>
-#endif /* !WITH_DECL_BPF_CGROUP_DEVICE */
+#endif /* __linux__ */
 
 #include "internal.h"
 
 #define LIBVIRT_VIRCGROUPPRIV_H_ALLOW
 #include "vircgrouppriv.h"
 
-#include "viralloc.h"
 #include "virbpf.h"
 #include "vircgroup.h"
 #include "vircgroupv2devices.h"
@@ -42,7 +41,7 @@ VIR_LOG_INIT("util.cgroup");
 
 #define VIR_FROM_THIS VIR_FROM_CGROUP
 
-#if WITH_DECL_BPF_CGROUP_DEVICE
+#ifdef __linux__
 bool
 virCgroupV2DevicesAvailable(virCgroup *group)
 {
@@ -584,7 +583,7 @@ virCgroupV2DevicesGetPerms(int perms,
 
     return ret;
 }
-#else /* !WITH_DECL_BPF_CGROUP_DEVICE */
+#else /* !__linux__ */
 bool
 virCgroupV2DevicesAvailable(virCgroup *group G_GNUC_UNUSED)
 {
@@ -635,7 +634,7 @@ virCgroupV2DevicesGetPerms(int perms G_GNUC_UNUSED,
 {
     return 0;
 }
-#endif /* !WITH_DECL_BPF_CGROUP_DEVICE */
+#endif /* !__linux__ */
 
 
 uint64_t

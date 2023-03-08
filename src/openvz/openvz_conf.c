@@ -34,13 +34,11 @@
 #include "openvz_conf.h"
 #include "openvz_util.h"
 #include "viruuid.h"
-#include "virbuffer.h"
 #include "viralloc.h"
 #include "virfile.h"
 #include "vircommand.h"
 #include "virstring.h"
 #include "virhostcpu.h"
-#include "virutil.h"
 
 #define VIR_FROM_THIS VIR_FROM_OPENVZ
 
@@ -86,7 +84,7 @@ openvzExtractVersionInfo(const char *cmdstr, int *retversion)
     if ((tmp = STRSKIP(tmp, "vzctl version ")) == NULL)
         return -1;
 
-    if (virParseVersionString(tmp, &version, true) < 0)
+    if (virStringParseVersion(&version, tmp, true) < 0)
         return -1;
 
     if (retversion)
@@ -529,7 +527,7 @@ int openvzLoadDomains(struct openvz_driver *driver)
         if (STREQ(status, "stopped")) {
             virDomainObjSetState(dom, VIR_DOMAIN_SHUTOFF,
                                  VIR_DOMAIN_SHUTOFF_UNKNOWN);
-            dom->pid = -1;
+            dom->pid = 0;
         } else {
             virDomainObjSetState(dom, VIR_DOMAIN_RUNNING,
                                  VIR_DOMAIN_RUNNING_UNKNOWN);
@@ -1064,5 +1062,5 @@ virDomainXMLOption *openvzXMLOption(struct openvz_driver *driver)
 {
     openvzDomainDefParserConfig.priv = driver;
     return virDomainXMLOptionNew(&openvzDomainDefParserConfig,
-                                 NULL, NULL, NULL, NULL);
+                                 NULL, NULL, NULL, NULL, NULL);
 }

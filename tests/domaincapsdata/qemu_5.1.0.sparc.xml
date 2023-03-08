@@ -105,6 +105,27 @@
       </enum>
     </filesystem>
     <tpm supported='no'/>
+    <redirdev supported='yes'>
+      <enum name='bus'>
+        <value>usb</value>
+      </enum>
+    </redirdev>
+    <channel supported='yes'>
+      <enum name='type'>
+        <value>pty</value>
+        <value>unix</value>
+        <value>spicevmc</value>
+      </enum>
+    </channel>
+    <crypto supported='yes'>
+      <enum name='model'/>
+      <enum name='type'>
+        <value>qemu</value>
+      </enum>
+      <enum name='backendModel'>
+        <value>builtin</value>
+      </enum>
+    </crypto>
   </devices>
   <features>
     <gic supported='no'/>
@@ -113,5 +134,6 @@
     <backingStoreInput supported='yes'/>
     <backup supported='no'/>
     <sev supported='no'/>
+    <sgx supported='no'/>
   </features>
 </domainCapabilities>

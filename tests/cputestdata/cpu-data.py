@@ -216,12 +216,19 @@ def gather_model(args):
             "id": "model-expansion"
         }])
 
+    version = 0, 0
     static_model = None
     for o in output:
         if o.get("id") == "model-expansion":
             static_model = o["return"]["model"]
+        if "QMP" in o:
+            version = o["QMP"]["version"]["qemu"]
+            version = version["major"], version["minor"]
 
     if static_model:
+        if version[0] > 6 or (version[0] == 6 and version[1] >= 1):
+            static_model["props"]["hv-passthrough"] = True
+
         return call_qemu(args.path_to_qemu, [
             {
                 "execute": "query-cpu-model-expansion",
@@ -438,12 +445,15 @@ def parseMap():
 
     cpuMap = dict()
     for f in xml.etree.ElementTree.parse(path).getroot().iter("feature"):
-        if f[0].tag not in ("cpuid", "msr"):
+        data = f.find("cpuid")
+        if data is None:
+            data = f.find("msr")
+        if data is None:
             continue
 
-        feature = {"type": f[0].tag}
-        for reg in _KEYS[f[0].tag] + _REGS[f[0].tag]:
-            feature[reg] = int(f[0].attrib.get(reg, "0"), 0)
+        feature = {"type": data.tag}
+        for reg in _KEYS[data.tag] + _REGS[data.tag]:
+            feature[reg] = int(data.attrib.get(reg, "0"), 0)
         cpuMap[f.attrib["name"]] = feature
     return cpuMap
 

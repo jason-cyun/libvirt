@@ -32,11 +32,9 @@
 #include "viralloc.h"
 #include "virerror.h"
 #include "virfile.h"
-#include "virhash.h"
 #include "virlog.h"
 #include "virobject.h"
 #include "virstoragefile.h"
-#include "virstring.h"
 #include "virutil.h"
 
 #define VIR_FROM_THIS VIR_FROM_STORAGE
@@ -324,6 +322,46 @@ virStorageSourceChainLookup(virStorageSource *chain,
 }
 
 
+/**
+ * virStorageSourceChainLookupBySource:
+ * @chain: chain top to look in
+ * @base: storage source to look for in @chain
+ * @parent: Filled with parent virStorageSource of the returned value if non-NULL.
+ *
+ * Looks up a storage source definition corresponding to @base in @chain.
+ *
+ * Returns virStorageSource withing chain or NULL if not found.
+ */
+virStorageSource *
+virStorageSourceChainLookupBySource(virStorageSource *chain,
+                                    virStorageSource *base,
+                                    virStorageSource **parent)
+{
+    virStorageSource *prev = NULL;
+
+    if (parent)
+        *parent = NULL;
+
+    while (virStorageSourceIsBacking(chain)) {
+        if (virStorageSourceIsSameLocation(chain, base))
+            break;
+
+        prev = chain;
+        chain = chain->backingStore;
+    }
+
+    if (!virStorageSourceIsBacking(chain)) {
+        virReportError(VIR_ERR_INVALID_ARG, "%s",
+                       _("could not find base disk source in disk source chain"));
+        return NULL;
+    }
+
+    if (parent)
+        *parent = prev;
+    return chain;
+}
+
+
 static virStorageSource *
 virStorageSourceNewFromBackingRelative(virStorageSource *parent,
                                        const char *rel)
@@ -420,8 +458,7 @@ virStorageSourceNewFromBackingAbsolute(const char *path,
          * also used in other places. For backing store detection the
          * authentication data would be invalid anyways, so we clear it */
         if (def->auth) {
-            virStorageAuthDefFree(def->auth);
-            def->auth = NULL;
+            g_clear_pointer(&def->auth, virStorageAuthDefFree);
         }
     }
 
@@ -808,7 +845,7 @@ static int
 virStorageSourceGetBackendForSupportCheck(const virStorageSource *src,
                                           virStorageFileBackend **backend)
 {
-    int actualType;
+    virStorageType actualType;
 
 
     if (!src) {
@@ -945,7 +982,7 @@ int
 virStorageSourceInitAs(virStorageSource *src,
                        uid_t uid, gid_t gid)
 {
-    int actualType = virStorageSourceGetActualType(src);
+    virStorageType actualType = virStorageSourceGetActualType(src);
     virStorageDriverData *drv = g_new0(virStorageDriverData, 1);
 
     src->drv = drv;
@@ -1266,6 +1303,21 @@ virStorageSourceGetMetadataRecurseReadHeader(virStorageSource *src,
 {
     int ret = -1;
     ssize_t len;
+
+    if (virStorageSourceIsFD(src)) {
+        if (!src->fdtuple) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("fd passed image source not initialized"));
+            return -1;
+        }
+
+        if ((len = virFileReadHeaderFD(src->fdtuple->fds[0],
+                                       VIR_STORAGE_MAX_HEADER, buf)) < 0)
+            return -1;
+
+        *headerLen = len;
+        return 0;
+    }
 
     if (virStorageSourceInitAs(src, uid, gid) < 0)
         return -1;

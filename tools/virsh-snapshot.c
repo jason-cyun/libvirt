@@ -31,7 +31,6 @@
 #include "viralloc.h"
 #include "virfile.h"
 #include "virsh-util.h"
-#include "virstring.h"
 #include "virxml.h"
 #include "conf/virdomainsnapshotobjlist.h"
 #include "vsh-table.h"
@@ -1213,8 +1212,8 @@ virshSnapshotListCollect(vshControl *ctl, virDomainPtr dom,
                            STRNEQ_NULLABLE(fromname,
                                            snaplist->snaps[i].parent)))) ||
                 (roots && snaplist->snaps[i].parent)) {
-                virshDomainSnapshotFree(snaplist->snaps[i].snap);
-                snaplist->snaps[i].snap = NULL;
+                g_clear_pointer(&snaplist->snaps[i].snap,
+                                virshDomainSnapshotFree);
                 VIR_FREE(snaplist->snaps[i].parent);
                 deleted++;
             }
@@ -1241,8 +1240,8 @@ virshSnapshotListCollect(vshControl *ctl, virDomainPtr dom,
         for (i = 0; i < count; i++) {
             if (i == start_index || !snaplist->snaps[i].parent) {
                 VIR_FREE(names[i]);
-                virshDomainSnapshotFree(snaplist->snaps[i].snap);
-                snaplist->snaps[i].snap = NULL;
+                g_clear_pointer(&snaplist->snaps[i].snap,
+                                virshDomainSnapshotFree);
                 VIR_FREE(snaplist->snaps[i].parent);
                 deleted++;
             } else if (STREQ(snaplist->snaps[i].parent, fromname)) {
@@ -1279,8 +1278,8 @@ virshSnapshotListCollect(vshControl *ctl, virDomainPtr dom,
                 if (!found_parent) {
                     changed = true;
                     VIR_FREE(names[i]);
-                    virshDomainSnapshotFree(snaplist->snaps[i].snap);
-                    snaplist->snaps[i].snap = NULL;
+                    g_clear_pointer(&snaplist->snaps[i].snap,
+                                    virshDomainSnapshotFree);
                     VIR_FREE(snaplist->snaps[i].parent);
                     deleted++;
                 }
@@ -1292,18 +1291,17 @@ virshSnapshotListCollect(vshControl *ctl, virDomainPtr dom,
     if (filter_fallback) {
         /* Older API didn't filter on status or location, but the
          * information is available in domain XML.  */
-        if (!(orig_flags & VIR_DOMAIN_SNAPSHOT_FILTERS_STATUS))
-            orig_flags |= VIR_DOMAIN_SNAPSHOT_FILTERS_STATUS;
-        if (!(orig_flags & VIR_DOMAIN_SNAPSHOT_FILTERS_LOCATION))
-            orig_flags |= VIR_DOMAIN_SNAPSHOT_FILTERS_LOCATION;
+        orig_flags |= VIR_DOMAIN_SNAPSHOT_FILTERS_STATUS;
+        orig_flags |= VIR_DOMAIN_SNAPSHOT_FILTERS_LOCATION;
+
         for (i = 0; i < snaplist->nsnaps; i++) {
             switch (virshSnapshotFilter(ctl, snaplist->snaps[i].snap,
                                         orig_flags)) {
             case 1:
                 break;
             case 0:
-                virshDomainSnapshotFree(snaplist->snaps[i].snap);
-                snaplist->snaps[i].snap = NULL;
+                g_clear_pointer(&snaplist->snaps[i].snap,
+                                virshDomainSnapshotFree);
                 VIR_FREE(snaplist->snaps[i].parent);
                 deleted++;
                 break;
@@ -1609,6 +1607,16 @@ static const vshCmdOptDef opts_snapshot_dumpxml[] = {
      .type = VSH_OT_BOOL,
      .help = N_("include security sensitive information in XML dump")
     },
+    {.name = "xpath",
+     .type = VSH_OT_STRING,
+     .flags = VSH_OFLAG_REQ_OPT,
+     .completer = virshCompleteEmpty,
+     .help = N_("xpath expression to filter the XML document")
+    },
+    {.name = "wrap",
+     .type = VSH_OT_BOOL,
+     .help = N_("wrap xpath results in an common root element"),
+    },
     {.name = NULL}
 };
 
@@ -1620,6 +1628,8 @@ cmdSnapshotDumpXML(vshControl *ctl, const vshCmd *cmd)
     g_autoptr(virshDomainSnapshot) snapshot = NULL;
     g_autofree char *xml = NULL;
     unsigned int flags = 0;
+    bool wrap = vshCommandOptBool(cmd, "wrap");
+    const char *xpath = NULL;
 
     if (vshCommandOptBool(cmd, "security-info"))
         flags |= VIR_DOMAIN_XML_SECURE;
@@ -1633,11 +1643,13 @@ cmdSnapshotDumpXML(vshControl *ctl, const vshCmd *cmd)
     if (!(snapshot = virDomainSnapshotLookupByName(dom, name, 0)))
         return false;
 
+    if (vshCommandOptStringQuiet(ctl, cmd, "xpath", &xpath) < 0)
+        return false;
+
     if (!(xml = virDomainSnapshotGetXMLDesc(snapshot, flags)))
         return false;
 
-    vshPrint(ctl, "%s", xml);
-    return true;
+    return virshDumpXML(ctl, xml, "domain-snapshot", xpath, wrap);
 }
 
 /*
@@ -1725,6 +1737,10 @@ static const vshCmdOptDef opts_snapshot_revert[] = {
      .type = VSH_OT_BOOL,
      .help = N_("try harder on risky reverts")
     },
+    {.name = "reset-nvram",
+     .type = VSH_OT_BOOL,
+     .help = N_("re-initialize NVRAM from its pristine template")
+    },
     {.name = NULL}
 };
 
@@ -1742,6 +1758,8 @@ cmdDomainSnapshotRevert(vshControl *ctl, const vshCmd *cmd)
         flags |= VIR_DOMAIN_SNAPSHOT_REVERT_RUNNING;
     if (vshCommandOptBool(cmd, "paused"))
         flags |= VIR_DOMAIN_SNAPSHOT_REVERT_PAUSED;
+    if (vshCommandOptBool(cmd, "reset-nvram"))
+        flags |= VIR_DOMAIN_SNAPSHOT_REVERT_RESET_NVRAM;
     /* We want virsh snapshot-revert --force to work even when talking
      * to older servers that did the unsafe revert by default but
      * reject the flag, so we probe without the flag, and only use it
@@ -1765,6 +1783,10 @@ cmdDomainSnapshotRevert(vshControl *ctl, const vshCmd *cmd)
         result = virDomainRevertToSnapshot(snapshot, flags);
     }
 
+    if (result < 0)
+        vshError(ctl, _("Failed to revert snapshot %s"), name);
+    else
+        vshPrintExtra(ctl, _("Domain snapshot %s reverted\n"), name);
     return result >= 0;
 }
 

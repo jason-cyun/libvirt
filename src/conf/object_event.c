@@ -22,16 +22,12 @@
 
 #include <config.h>
 
-#include "domain_event.h"
-#include "network_event.h"
 #include "object_event.h"
 #include "object_event_private.h"
 #include "virlog.h"
-#include "datatypes.h"
 #include "viralloc.h"
 #include "virerror.h"
 #include "virobject.h"
-#include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -880,7 +876,7 @@ virObjectEventStateRegisterID(virConnectPtr conn,
         if ((state->timer = virEventAddTimeout(-1,
                                                virObjectEventTimer,
                                                state,
-                                               virObjectFreeCallback)) < 0) {
+                                               virObjectUnref)) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("could not initialize domain event timer"));
             goto cleanup;

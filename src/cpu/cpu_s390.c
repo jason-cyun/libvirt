@@ -21,8 +21,6 @@
 
 #include <config.h>
 
-#include "viralloc.h"
-#include "virstring.h"
 #include "cpu.h"
 
 
@@ -46,7 +44,7 @@ virCPUs390Update(virCPUDef *guest,
                  const virCPUDef *host,
                  bool relative)
 {
-    g_autoptr(virCPUDef) updated = NULL;
+    g_autoptr(virCPUDef) updated = virCPUDefCopyWithoutModel(guest);
     size_t i;
 
     if (!relative)
@@ -70,12 +68,8 @@ virCPUs390Update(virCPUDef *guest,
         return -1;
     }
 
-    if (!(updated = virCPUDefCopyWithoutModel(guest)))
-        return -1;
-
     updated->mode = VIR_CPU_MODE_CUSTOM;
-    if (virCPUDefCopyModel(updated, host, true) < 0)
-        return -1;
+    virCPUDefCopyModel(updated, host, true);
 
     for (i = 0; i < guest->nfeatures; i++) {
        if (virCPUDefUpdateFeature(updated,
@@ -111,6 +105,16 @@ virCPUs390ValidateFeatures(virCPUDef *cpu)
 }
 
 
+static const char *
+virCPUs390GetVendorForModel(const char *modelName)
+{
+    if (STRPREFIX(modelName, "z") || STRPREFIX(modelName, "gen"))
+        return "IBM";
+
+    return NULL;
+}
+
+
 struct cpuArchDriver cpuDriverS390 = {
     .name = "s390",
     .arch = archs,
@@ -121,4 +125,5 @@ struct cpuArchDriver cpuDriverS390 = {
     .baseline   = NULL,
     .update     = virCPUs390Update,
     .validateFeatures = virCPUs390ValidateFeatures,
+    .getVendorForModel = virCPUs390GetVendorForModel,
 };

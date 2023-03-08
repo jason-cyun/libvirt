@@ -28,7 +28,6 @@
 #include "snapshot_conf.h"
 #include "virauth.h"
 #include "viralloc.h"
-#include "virfile.h"
 #include "virlog.h"
 #include "viruuid.h"
 #include "vmx.h"
@@ -1018,9 +1017,25 @@ esxConnectSupportsFeature(virConnectPtr conn, int feature)
 {
     esxPrivate *priv = conn->privateData;
     esxVI_Boolean supportsVMotion = esxVI_Boolean_Undefined;
+    int supported;
+
+    if (virDriverFeatureIsGlobal(feature, &supported))
+        return supported;
 
     switch ((virDrvFeature) feature) {
-      case VIR_DRV_FEATURE_MIGRATION_V1:
+    case VIR_DRV_FEATURE_REMOTE:
+    case VIR_DRV_FEATURE_PROGRAM_KEEPALIVE:
+    case VIR_DRV_FEATURE_REMOTE_CLOSE_CALLBACK:
+    case VIR_DRV_FEATURE_REMOTE_EVENT_CALLBACK:
+    case VIR_DRV_FEATURE_TYPED_PARAM_STRING:
+    case VIR_DRV_FEATURE_NETWORK_UPDATE_HAS_CORRECT_ORDER:
+    case VIR_DRV_FEATURE_FD_PASSING:
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                       _("Global feature %d should have already been handled"),
+                       feature);
+        return -1;
+
+    case VIR_DRV_FEATURE_MIGRATION_V1:
         supportsVMotion = esxSupportsVMotion(priv);
 
         if (supportsVMotion == esxVI_Boolean_Undefined)
@@ -1030,10 +1045,6 @@ esxConnectSupportsFeature(virConnectPtr conn, int feature)
         return priv->vCenter &&
                supportsVMotion == esxVI_Boolean_True ? 1 : 0;
 
-    case VIR_DRV_FEATURE_NETWORK_UPDATE_HAS_CORRECT_ORDER:
-        return 1;
-
-    case VIR_DRV_FEATURE_FD_PASSING:
     case VIR_DRV_FEATURE_MIGRATE_CHANGE_PROTECTION:
     case VIR_DRV_FEATURE_MIGRATION_DIRECT:
     case VIR_DRV_FEATURE_MIGRATION_OFFLINE:
@@ -1041,11 +1052,6 @@ esxConnectSupportsFeature(virConnectPtr conn, int feature)
     case VIR_DRV_FEATURE_MIGRATION_PARAMS:
     case VIR_DRV_FEATURE_MIGRATION_V2:
     case VIR_DRV_FEATURE_MIGRATION_V3:
-    case VIR_DRV_FEATURE_PROGRAM_KEEPALIVE:
-    case VIR_DRV_FEATURE_REMOTE:
-    case VIR_DRV_FEATURE_REMOTE_CLOSE_CALLBACK:
-    case VIR_DRV_FEATURE_REMOTE_EVENT_CALLBACK:
-    case VIR_DRV_FEATURE_TYPED_PARAM_STRING:
     case VIR_DRV_FEATURE_XML_MIGRATABLE:
     default:
         return 0;
@@ -3652,7 +3658,7 @@ esxDomainMigratePerform(virDomainPtr domain,
 {
     int result = -1;
     esxPrivate *priv = domain->conn->privateData;
-    virURI *parsedUri = NULL;
+    g_autoptr(virURI) parsedUri = NULL;
     char *saveptr;
     char *path_resourcePool;
     char *path_hostSystem;
@@ -3773,7 +3779,6 @@ esxDomainMigratePerform(virDomainPtr domain,
     result = 0;
 
  cleanup:
-    virURIFree(parsedUri);
     esxVI_ObjectContent_Free(&virtualMachine);
     esxVI_Event_Free(&eventList);
     esxVI_ManagedObjectReference_Free(&task);

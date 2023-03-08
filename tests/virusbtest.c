@@ -18,9 +18,7 @@
 
 #include <config.h>
 
-#include "viralloc.h"
 #include "virerror.h"
-#include "virfile.h"
 #include "virusb.h"
 
 #include "testutils.h"
@@ -171,8 +169,7 @@ testUSBList(const void *opaque G_GNUC_UNUSED)
         dev = NULL;
     }
 
-    virObjectUnref(devlist);
-    devlist = NULL;
+    g_clear_pointer(&devlist, virObjectUnref);
 
     ndevs = virUSBDeviceListCount(list);
     if (testCheckNdevs("After first loop", ndevs, EXPECTED_NDEVS_ONE) < 0)
@@ -210,8 +207,7 @@ testUSBList(const void *opaque G_GNUC_UNUSED)
     }
 
     virUSBDeviceListDel(list, dev);
-    virUSBDeviceFree(dev);
-    dev = NULL;
+    g_clear_pointer(&dev, virUSBDeviceFree);
 
     if (testCheckNdevs("After deleting one",
                        virUSBDeviceListCount(list),

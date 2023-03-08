@@ -56,10 +56,10 @@ VIR_LOG_INIT("bhyve.bhyve_process");
 
 static void
 bhyveProcessAutoDestroy(virDomainObj *vm,
-                        virConnectPtr conn G_GNUC_UNUSED,
-                        void *opaque)
+                        virConnectPtr conn G_GNUC_UNUSED)
 {
-    struct _bhyveConn *driver = opaque;
+    bhyveDomainObjPrivate *priv = vm->privateData;
+    struct _bhyveConn *driver = priv->driver;
 
     virBhyveProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED);
 
@@ -268,10 +268,8 @@ virBhyveProcessStart(virConnectPtr conn,
     if (bhyveProcessStartHook(vm, VIR_HOOK_BHYVE_OP_PREPARE) < 0)
         return -1;
 
-    if (flags & VIR_BHYVE_PROCESS_START_AUTODESTROY &&
-        virCloseCallbacksSet(driver->closeCallbacks, vm,
-                             conn, bhyveProcessAutoDestroy) < 0)
-        return -1;
+    if (flags & VIR_BHYVE_PROCESS_START_AUTODESTROY)
+        virCloseCallbacksDomainAdd(vm, conn, bhyveProcessAutoDestroy);
 
     if (bhyveProcessPrepareDomain(driver, vm, flags) < 0)
         return -1;
@@ -293,7 +291,7 @@ virBhyveProcessStop(struct _bhyveConn *driver,
         return 0;
     }
 
-    if (vm->pid <= 0) {
+    if (vm->pid == 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Invalid PID %d for VM"),
                        (int)vm->pid);
@@ -325,11 +323,10 @@ virBhyveProcessStop(struct _bhyveConn *driver,
 
     ret = 0;
 
-    virCloseCallbacksUnset(driver->closeCallbacks, vm,
-                           bhyveProcessAutoDestroy);
+    virCloseCallbacksDomainRemove(vm, NULL, bhyveProcessAutoDestroy);
 
     virDomainObjSetState(vm, VIR_DOMAIN_SHUTOFF, reason);
-    vm->pid = -1;
+    vm->pid = 0;
     vm->def->id = -1;
 
     bhyveProcessStopHook(vm, VIR_HOOK_BHYVE_OP_RELEASE);
@@ -344,7 +341,7 @@ virBhyveProcessStop(struct _bhyveConn *driver,
 int
 virBhyveProcessShutdown(virDomainObj *vm)
 {
-    if (vm->pid <= 0) {
+    if (vm->pid == 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Invalid PID %d for VM"),
                        (int)vm->pid);
@@ -433,7 +430,7 @@ virBhyveProcessReconnect(virDomainObj *vm,
     if (!virDomainObjIsActive(vm))
         return 0;
 
-    if (!vm->pid)
+    if (vm->pid == 0)
         return 0;
 
     virObjectLock(vm);

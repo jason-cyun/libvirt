@@ -25,21 +25,14 @@
 
 #include "virebtables.h"
 #include "internal.h"
-#include "capabilities.h"
-#include "network_conf.h"
 #include "domain_conf.h"
 #include "checkpoint_conf.h"
 #include "snapshot_conf.h"
 #include "domain_event.h"
 #include "virthread.h"
 #include "security/security_manager.h"
-#include "virpci.h"
-#include "virusb.h"
-#include "virscsi.h"
 #include "cpu_conf.h"
-#include "driver.h"
 #include "virportallocator.h"
-#include "vircommand.h"
 #include "virthreadpool.h"
 #include "locking/lock_manager.h"
 #include "qemu_capabilities.h"
@@ -50,6 +43,17 @@
 #include "virfirmware.h"
 
 #define QEMU_DRIVER_NAME "QEMU"
+
+typedef enum {
+    QEMU_SCHED_CORE_NONE = 0,
+    QEMU_SCHED_CORE_VCPUS,
+    QEMU_SCHED_CORE_EMULATOR,
+    QEMU_SCHED_CORE_FULL,
+
+    QEMU_SCHED_CORE_LAST
+} virQEMUSchedCore;
+
+VIR_ENUM_DECL(virQEMUSchedCore);
 
 typedef struct _virQEMUDriver virQEMUDriver;
 
@@ -91,6 +95,7 @@ struct _virQEMUDriverConfig {
     char *stateDir;
     char *swtpmStateDir;
     char *slirpStateDir;
+    char *passtStateDir;
     char *dbusStateDir;
     /* These two directories are ones QEMU processes use (so must match
      * the QEMU user/group */
@@ -223,6 +228,8 @@ struct _virQEMUDriverConfig {
     char **capabilityfilters;
 
     char *deprecationBehavior;
+
+    virQEMUSchedCore schedCore;
 };
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virQEMUDriverConfig, virObjectUnref);
@@ -251,6 +258,7 @@ struct _virQEMUDriver {
     /* Immutable values */
     bool privileged;
     char *embeddedRoot;
+    bool hostFips; /* FIPS mode is enabled on the host */
 
     /* Immutable pointers. Caller must provide locking */
     virStateInhibitCallback inhibitCallback;
@@ -292,9 +300,6 @@ struct _virQEMUDriver {
 
     virHostdevManager *hostdevMgr;
 
-    /* Immutable pointer. Unsafe APIs. XXX */
-    GHashTable *sharedDevices;
-
     /* Immutable pointer, immutable object */
     virPortAllocatorRange *remotePorts;
 
@@ -309,9 +314,6 @@ struct _virQEMUDriver {
 
     /* Immutable pointer. lockless access */
     virLockManagerPlugin *lockManager;
-
-    /* Immutable pointer, self-clocking APIs */
-    virCloseCallbacks *closeCallbacks;
 
     /* Immutable pointer, self-locking APIs */
     virHashAtomic *migrationErrors;
@@ -344,40 +346,6 @@ virQEMUDriverGetDomainCapabilities(virQEMUDriver *driver,
                                    virArch arch,
                                    virDomainVirtType virttype);
 
-typedef struct _qemuSharedDeviceEntry qemuSharedDeviceEntry;
-
-bool qemuSharedDeviceEntryDomainExists(qemuSharedDeviceEntry *entry,
-                                       const char *name,
-                                       int *idx)
-    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2);
-
-char *qemuGetSharedDeviceKey(const char *disk_path)
-    ATTRIBUTE_NONNULL(1);
-
-void qemuSharedDeviceEntryFree(void *payload);
-
-int qemuAddSharedDisk(virQEMUDriver *driver,
-                      virDomainDiskDef *disk,
-                      const char *name)
-    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(3);
-
-int qemuAddSharedDevice(virQEMUDriver *driver,
-                        virDomainDeviceDef *dev,
-                        const char *name)
-    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(3);
-
-int qemuRemoveSharedDevice(virQEMUDriver *driver,
-                           virDomainDeviceDef *dev,
-                           const char *name)
-    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(3);
-
-int qemuRemoveSharedDisk(virQEMUDriver *driver,
-                         virDomainDiskDef *disk,
-                         const char *name)
-    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(3);
-
-int qemuSetUnprivSGIO(virDomainDeviceDef *dev);
-
 int qemuDriverAllocateID(virQEMUDriver *driver);
 virDomainXMLOption *virQEMUDriverCreateXMLConf(virQEMUDriver *driver,
                                                  const char *defsecmodel);
@@ -402,3 +370,6 @@ int qemuGetMemoryBackingPath(virQEMUDriver *driver,
                              const virDomainDef *def,
                              const char *alias,
                              char **memPath);
+
+int qemuHugepageMakeBasedir(virQEMUDriver *driver,
+                            virHugeTLBFS *hugepage);

@@ -26,7 +26,6 @@
 #include <selinux/label.h>
 
 #include "security_driver.h"
-#include "security_selinux.h"
 #include "security_util.h"
 #include "virerror.h"
 #include "viralloc.h"
@@ -36,7 +35,6 @@
 #include "virusb.h"
 #include "virscsi.h"
 #include "virscsivhost.h"
-#include "virstoragefile.h"
 #include "virfile.h"
 #include "virhash.h"
 #include "virrandom.h"
@@ -528,7 +526,7 @@ static char *
 virSecuritySELinuxContextAddRange(char *src,
                                   char *dst)
 {
-    char *str = NULL;
+    const char *str = NULL;
     char *ret = NULL;
     context_t srccon = NULL;
     context_t dstcon = NULL;
@@ -569,7 +567,7 @@ virSecuritySELinuxGenNewContext(const char *basecontext,
 {
     context_t context = NULL;
     char *ret = NULL;
-    char *str;
+    const char *str;
     char *ourSecContext = NULL;
     context_t ourContext = NULL;
 
@@ -687,8 +685,7 @@ virSecuritySELinuxLXCInitialize(virSecurityManager *mgr)
     return 0;
 
  error:
-    selabel_close(data->label_handle);
-    data->label_handle = NULL;
+    g_clear_pointer(&data->label_handle, selabel_close);
     VIR_FREE(data->domain_context);
     VIR_FREE(data->file_context);
     VIR_FREE(data->content_context);
@@ -758,8 +755,7 @@ virSecuritySELinuxQEMUInitialize(virSecurityManager *mgr)
     return 0;
 
  error:
-    selabel_close(data->label_handle);
-    data->label_handle = NULL;
+    g_clear_pointer(&data->label_handle, selabel_close);
     VIR_FREE(data->domain_context);
     VIR_FREE(data->alt_domain_context);
     VIR_FREE(data->file_context);
@@ -1265,22 +1261,9 @@ virSecuritySELinuxSetFileconImpl(const char *path,
          * boolean tunables to allow it ...
          */
         VIR_WARNINGS_NO_WLOGICALOP_EQUAL_EXPR
-        if (setfilecon_errno != EOPNOTSUPP && setfilecon_errno != ENOTSUP &&
-            setfilecon_errno != EROFS) {
+        if (setfilecon_errno == EOPNOTSUPP || setfilecon_errno == ENOTSUP ||
+            setfilecon_errno == EROFS) {
         VIR_WARNINGS_RESET
-            /* However, don't claim error if SELinux is in Enforcing mode and
-             * we are running as unprivileged user and we really did see EPERM.
-             * Otherwise we want to return error if SELinux is Enforcing. */
-            if (security_getenforce() == 1 &&
-                (setfilecon_errno != EPERM || privileged)) {
-                virReportSystemError(setfilecon_errno,
-                                     _("unable to set security context '%s' on '%s'"),
-                                     tcon, path);
-                return -1;
-            }
-            VIR_WARN("unable to set security context '%s' on '%s' (errno %d)",
-                     tcon, path, setfilecon_errno);
-        } else {
             const char *msg;
             if (virFileIsSharedFSType(path, VIR_FILE_SHFS_NFS) == 1 &&
                 security_get_boolean_active("virt_use_nfs") != 1) {
@@ -1294,6 +1277,21 @@ virSecuritySELinuxSetFileconImpl(const char *path,
                 VIR_INFO("Setting security context '%s' on '%s' not supported",
                          tcon, path);
             }
+        } else {
+            /* However, don't claim error if SELinux is in Enforcing mode and
+             * we are running as unprivileged user and we really did see EPERM.
+             * Otherwise we want to return error if SELinux is Enforcing, or we
+             * saw ENOENT regardless of SELinux mode. */
+            if (setfilecon_errno == ENOENT ||
+                (security_getenforce() == 1 &&
+                 (setfilecon_errno != EPERM || privileged))) {
+                virReportSystemError(setfilecon_errno,
+                                     _("unable to set security context '%s' on '%s'"),
+                                     tcon, path);
+                return -1;
+            }
+            VIR_WARN("unable to set security context '%s' on '%s' (errno %d)",
+                     tcon, path, setfilecon_errno);
         }
 
         return 1;
@@ -1581,6 +1579,18 @@ virSecuritySELinuxSetMemoryLabel(virSecurityManager *mgr,
             return -1;
         break;
 
+    case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
+        seclabel = virDomainDefGetSecurityLabelDef(def, SECURITY_SELINUX_NAME);
+        if (!seclabel || !seclabel->relabel)
+            return 0;
+
+        if (virSecuritySELinuxSetFilecon(mgr, DEV_SGX_VEPC,
+                                         seclabel->imagelabel, true) < 0 ||
+            virSecuritySELinuxSetFilecon(mgr, DEV_SGX_PROVISION,
+                                         seclabel->imagelabel, true) < 0)
+            return -1;
+        break;
+
     case VIR_DOMAIN_MEMORY_MODEL_NONE:
     case VIR_DOMAIN_MEMORY_MODEL_DIMM:
     case VIR_DOMAIN_MEMORY_MODEL_VIRTIO_MEM:
@@ -1608,6 +1618,16 @@ virSecuritySELinuxRestoreMemoryLabel(virSecurityManager *mgr,
             return 0;
 
         ret = virSecuritySELinuxRestoreFileLabel(mgr, mem->nvdimmPath, true);
+        break;
+
+    case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
+        seclabel = virDomainDefGetSecurityLabelDef(def, SECURITY_SELINUX_NAME);
+        if (!seclabel || !seclabel->relabel)
+            return 0;
+
+        ret = virSecuritySELinuxRestoreFileLabel(mgr, DEV_SGX_VEPC, true);
+        if (virSecuritySELinuxRestoreFileLabel(mgr, DEV_SGX_PROVISION, true) < 0)
+            ret = -1;
         break;
 
     case VIR_DOMAIN_MEMORY_MODEL_DIMM:
@@ -1662,6 +1682,7 @@ virSecuritySELinuxSetTPMFileLabel(virSecurityManager *mgr,
         if (rc < 0)
             return -1;
         break;
+    case VIR_DOMAIN_TPM_TYPE_EXTERNAL:
     case VIR_DOMAIN_TPM_TYPE_LAST:
         break;
     }
@@ -1697,6 +1718,7 @@ virSecuritySELinuxRestoreTPMFileLabelInt(virSecurityManager *mgr,
         break;
     case VIR_DOMAIN_TPM_TYPE_EMULATOR:
         /* swtpm will have removed the Unix socket upon termination */
+    case VIR_DOMAIN_TPM_TYPE_EXTERNAL:
     case VIR_DOMAIN_TPM_TYPE_LAST:
         break;
     }
@@ -1741,6 +1763,19 @@ virSecuritySELinuxRestoreImageLabelSingle(virSecurityManager *mgr,
     if (src->readonly || src->shared)
         return 0;
 
+    if (virStorageSourceIsFD(src)) {
+        if (migrated)
+            return 0;
+
+        if (!src->fdtuple ||
+            !src->fdtuple->selinuxLabel ||
+            src->fdtuple->nfds == 0)
+            return 0;
+
+        ignore_value(virSecuritySELinuxFSetFilecon(src->fdtuple->fds[0],
+                                                   src->fdtuple->selinuxLabel));
+        return 0;
+    }
 
     /* If we have a shared FS and are doing migration, we must not change
      * ownership, because that kills access on the destination host which is
@@ -1822,7 +1857,11 @@ virSecuritySELinuxSetImageLabelInternal(virSecurityManager *mgr,
     const char *path = src->path;
     int ret;
 
-    if (!src->path || !virStorageSourceIsLocalStorage(src))
+    /* Special case NVMe. Per virStorageSourceIsLocalStorage() it's
+     * considered not local, but we still want the code below to set
+     * label on VFIO group. */
+    if (src->type != VIR_STORAGE_TYPE_NVME &&
+        (!src->path || !virStorageSourceIsLocalStorage(src)))
         return 0;
 
     secdef = virDomainDefGetSecurityLabelDef(def, SECURITY_SELINUX_NAME);
@@ -1884,7 +1923,24 @@ virSecuritySELinuxSetImageLabelInternal(virSecurityManager *mgr,
         path = vfioGroupDev;
     }
 
-    ret = virSecuritySELinuxSetFilecon(mgr, path, use_label, remember);
+    if (virStorageSourceIsFD(src)) {
+        /* We can only really do labelling when we have the FD as the path
+         * may not be accessible for us */
+        if (!src->fdtuple || src->fdtuple->nfds == 0)
+            return 0;
+
+        /* force a writable label for the image if requested */
+        if (src->fdtuple->writable && secdef->imagelabel)
+            use_label = secdef->imagelabel;
+
+        /* store the existing selinux label for the image */
+        if (!src->fdtuple->selinuxLabel)
+            fgetfilecon_raw(src->fdtuple->fds[0], &src->fdtuple->selinuxLabel);
+
+        ret = virSecuritySELinuxFSetFilecon(src->fdtuple->fds[0], use_label);
+    } else {
+        ret = virSecuritySELinuxSetFilecon(mgr, path, use_label, remember);
+    }
 
     if (ret == 1 && !disk_seclabel) {
         /* If we failed to set a label, but virt_use_nfs let us
@@ -2545,7 +2601,12 @@ virSecuritySELinuxSetChardevLabel(virSecurityManager *mgr,
         break;
 
     case VIR_DOMAIN_CHR_TYPE_UNIX:
-        if (!dev_source->data.nix.listen) {
+        if (!dev_source->data.nix.listen ||
+            (dev_source->data.nix.path &&
+             virFileExists(dev_source->data.nix.path))) {
+            /* Also label mode='bind' sockets if they exist,
+             * e.g. because they were created by libvirt
+             * and passed via FD */
             if (virSecuritySELinuxSetFilecon(mgr,
                                              dev_source->data.nix.path,
                                              imagelabel,
@@ -2622,7 +2683,7 @@ virSecuritySELinuxRestoreChardevLabel(virSecurityManager *mgr,
     case VIR_DOMAIN_CHR_TYPE_UNIX:
         if (!dev_source->data.nix.listen) {
             if (virSecuritySELinuxRestoreFileLabel(mgr,
-                                                   dev_source->data.file.path,
+                                                   dev_source->data.nix.path,
                                                    true) < 0)
                 goto done;
         }
@@ -2807,9 +2868,11 @@ virSecuritySELinuxRestoreAllLabel(virSecurityManager *mgr,
             rc = -1;
     }
 
-    if (def->os.loader && def->os.loader->nvram &&
-        virSecuritySELinuxRestoreFileLabel(mgr, def->os.loader->nvram, true) < 0)
-        rc = -1;
+    if (def->os.loader && def->os.loader->nvram) {
+        if (virSecuritySELinuxRestoreImageLabelInt(mgr, def, def->os.loader->nvram,
+                                                   migrated) < 0)
+            rc = -1;
+    }
 
     if (def->os.kernel &&
         virSecuritySELinuxRestoreFileLabel(mgr, def->os.kernel, true) < 0)
@@ -3211,13 +3274,12 @@ virSecuritySELinuxSetAllLabel(virSecurityManager *mgr,
             return -1;
     }
 
-    /* This is different than kernel or initrd. The nvram store
-     * is really a disk, qemu can read and write to it. */
-    if (def->os.loader && def->os.loader->nvram &&
-        secdef && secdef->imagelabel &&
-        virSecuritySELinuxSetFilecon(mgr, def->os.loader->nvram,
-                                     secdef->imagelabel, true) < 0)
-        return -1;
+    if (def->os.loader && def->os.loader->nvram) {
+        if (virSecuritySELinuxSetImageLabel(mgr, def, def->os.loader->nvram,
+                                            VIR_SECURITY_DOMAIN_IMAGE_LABEL_BACKING_CHAIN |
+                                            VIR_SECURITY_DOMAIN_IMAGE_PARENT_CHAIN_TOP) < 0)
+            return -1;
+    }
 
     if (def->os.kernel &&
         virSecuritySELinuxSetFilecon(mgr, def->os.kernel,
@@ -3518,7 +3580,8 @@ virSecuritySELinuxRestoreFileLabels(virSecurityManager *mgr,
 
 static int
 virSecuritySELinuxSetTPMLabels(virSecurityManager *mgr,
-                               virDomainDef *def)
+                               virDomainDef *def,
+                               bool setTPMStateLabel)
 {
     int ret = 0;
     size_t i;
@@ -3532,13 +3595,18 @@ virSecuritySELinuxSetTPMLabels(virSecurityManager *mgr,
         if (def->tpms[i]->type != VIR_DOMAIN_TPM_TYPE_EMULATOR)
             continue;
 
-        ret = virSecuritySELinuxSetFileLabels(
-            mgr, def->tpms[i]->data.emulator.storagepath,
-            seclabel);
-        if (ret == 0 && def->tpms[i]->data.emulator.logfile)
-            ret = virSecuritySELinuxSetFileLabels(
-                mgr, def->tpms[i]->data.emulator.logfile,
-                seclabel);
+        if (setTPMStateLabel) {
+            ret = virSecuritySELinuxSetFileLabels(mgr,
+                                                  def->tpms[i]->data.emulator.storagepath,
+                                                  seclabel);
+        }
+
+        if (ret == 0 &&
+            def->tpms[i]->data.emulator.logfile) {
+            ret = virSecuritySELinuxSetFileLabels(mgr,
+                                                  def->tpms[i]->data.emulator.logfile,
+                                                  seclabel);
+        }
     }
 
     return ret;
@@ -3547,7 +3615,8 @@ virSecuritySELinuxSetTPMLabels(virSecurityManager *mgr,
 
 static int
 virSecuritySELinuxRestoreTPMLabels(virSecurityManager *mgr,
-                                   virDomainDef *def)
+                                   virDomainDef *def,
+                                   bool restoreTPMStateLabel)
 {
     int ret = 0;
     size_t i;
@@ -3556,11 +3625,16 @@ virSecuritySELinuxRestoreTPMLabels(virSecurityManager *mgr,
         if (def->tpms[i]->type != VIR_DOMAIN_TPM_TYPE_EMULATOR)
             continue;
 
-        ret = virSecuritySELinuxRestoreFileLabels(
-            mgr, def->tpms[i]->data.emulator.storagepath);
-        if (ret == 0 && def->tpms[i]->data.emulator.logfile)
-            ret = virSecuritySELinuxRestoreFileLabels(
-                mgr, def->tpms[i]->data.emulator.logfile);
+        if (restoreTPMStateLabel) {
+            ret = virSecuritySELinuxRestoreFileLabels(mgr,
+                                                      def->tpms[i]->data.emulator.storagepath);
+        }
+
+        if (ret == 0 &&
+            def->tpms[i]->data.emulator.logfile) {
+            ret = virSecuritySELinuxRestoreFileLabels(mgr,
+                                                      def->tpms[i]->data.emulator.logfile);
+        }
     }
 
     return ret;

@@ -20,10 +20,12 @@
 #include <dlfcn.h>
 
 #include "internal.h"
-#include "viralloc.h"
 #include "virjson.h"
 #include "qemu/qemu_monitor.h"
 #include "qemu/qemu_monitor_json.h"
+
+#define LIBVIRT_QEMU_MONITOR_PRIV_H_ALLOW
+#include "qemu/qemu_monitor_priv.h"
 
 #define REAL_SYM(realFunc) \
     do { \

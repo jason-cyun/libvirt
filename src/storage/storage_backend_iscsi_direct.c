@@ -27,14 +27,12 @@
 #include "virsecret.h"
 #include "storage_backend_iscsi_direct.h"
 #include "storage_util.h"
-#include "viralloc.h"
 #include "virerror.h"
 #include "viridentity.h"
 #include "virlog.h"
 #include "virobject.h"
 #include "virstring.h"
 #include "virtime.h"
-#include "viruuid.h"
 #include "virsecureerase.h"
 
 #define VIR_FROM_THIS VIR_FROM_STORAGE
@@ -93,8 +91,7 @@ virStorageBackendISCSIDirectSetAuth(struct iscsi_context *iscsi,
     size_t secret_size;
     g_autofree char *secret_str = NULL;
     virStorageAuthDef *authdef = source->auth;
-    int ret = -1;
-    virConnectPtr conn = NULL;
+    g_autoptr(virConnect) conn = NULL;
     VIR_IDENTITY_AUTORESTORE virIdentity *oldident = NULL;
 
     if (!authdef || authdef->authType == VIR_STORAGE_AUTH_TYPE_NONE)
@@ -106,38 +103,34 @@ virStorageBackendISCSIDirectSetAuth(struct iscsi_context *iscsi,
     if (authdef->authType != VIR_STORAGE_AUTH_TYPE_CHAP) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
                        _("iscsi-direct pool only supports 'chap' auth type"));
-        return ret;
+        return -1;
     }
 
     if (!(oldident = virIdentityElevateCurrent()))
         return -1;
 
     if (!(conn = virGetConnectSecret()))
-        return ret;
+        return -1;
 
     if (virSecretGetSecretString(conn, &authdef->seclookupdef,
                                  VIR_SECRET_USAGE_TYPE_ISCSI,
                                  &secret_value, &secret_size) < 0)
-        goto cleanup;
+        return -1;
 
-    secret_str = g_new0(char, secret_size + 1);
-    memcpy(secret_str, secret_value, secret_size);
+    secret_str = g_strndup((char *)secret_value, secret_size);
     virSecureErase(secret_value, secret_size);
-    secret_str[secret_size] = '\0';
 
     if (iscsi_set_initiator_username_pwd(iscsi,
                                          authdef->username, secret_str) < 0) {
+        virSecureErase(secret_str, secret_size);
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Failed to set credential: %s"),
                        iscsi_get_error(iscsi));
-        goto cleanup;
+        return -1;
     }
-
-    ret = 0;
- cleanup:
     virSecureErase(secret_str, secret_size);
-    virObjectUnref(conn);
-    return ret;
+
+    return 0;
 }
 
 static int
@@ -272,8 +265,7 @@ virISCSIDirectGetVolumeCapacity(struct iscsi_context *iscsi,
     if (inq->device_type == SCSI_INQUIRY_PERIPHERAL_DEVICE_TYPE_DIRECT_ACCESS) {
         struct scsi_readcapacity16 *rc16 = NULL;
 
-        scsi_free_scsi_task(task);
-        task = NULL;
+        g_clear_pointer(&task, scsi_free_scsi_task);
 
         if (!(task = iscsi_readcapacity16_sync(iscsi, lun)) ||
             task->status != SCSI_STATUS_GOOD) {

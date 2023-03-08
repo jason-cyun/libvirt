@@ -77,6 +77,7 @@ static const vshCmdInfo info_domcapabilities[] = {
 static const vshCmdOptDef opts_domcapabilities[] = {
     {.name = "virttype",
      .type = VSH_OT_STRING,
+     .completer = virshDomainVirtTypeCompleter,
      .help = N_("virtualization type (/domain/@type)"),
     },
     {.name = "emulatorbin",
@@ -85,6 +86,7 @@ static const vshCmdOptDef opts_domcapabilities[] = {
     },
     {.name = "arch",
      .type = VSH_OT_STRING,
+     .completer = virshArchCompleter,
      .help = N_("domain architecture (/domain/os/type/@arch)"),
     },
     {.name = "machine",
@@ -488,7 +490,7 @@ cmdAllocpages(vshControl *ctl, const vshCmd *cmd)
     if (cellno && vshCommandOptInt(ctl, cmd, "cellno", &startCell) < 0)
         return false;
 
-    if (vshCommandOptScaledInt(ctl, cmd, "pagesize", &tmp, 1024, UINT_MAX) < 0)
+    if (vshCommandOptScaledInt(ctl, cmd, "pagesize", &tmp, 1024, UINT_MAX * 1024ULL) < 0)
         return false;
     pageSizes[0] = VIR_DIV_UP(tmp, 1024);
 
@@ -559,6 +561,7 @@ static const vshCmdInfo info_maxvcpus[] = {
 static const vshCmdOptDef opts_maxvcpus[] = {
     {.name = "type",
      .type = VSH_OT_STRING,
+     .completer = virshDomainVirtTypeCompleter,
      .help = N_("domain type")
     },
     {.name = NULL}
@@ -1195,7 +1198,6 @@ static bool
 cmdCPUCompare(vshControl *ctl, const vshCmd *cmd)
 {
     const char *from = NULL;
-    bool ret = false;
     int result;
     g_auto(GStrv) cpus = NULL;
     unsigned int flags = 0;
@@ -1219,7 +1221,7 @@ cmdCPUCompare(vshControl *ctl, const vshCmd *cmd)
     case VIR_CPU_COMPARE_INCOMPATIBLE:
         vshPrint(ctl, _("CPU described in %s is incompatible with host CPU\n"),
                  from);
-        goto cleanup;
+        return false;
         break;
 
     case VIR_CPU_COMPARE_IDENTICAL:
@@ -1235,13 +1237,10 @@ cmdCPUCompare(vshControl *ctl, const vshCmd *cmd)
     case VIR_CPU_COMPARE_ERROR:
     default:
         vshError(ctl, _("Failed to compare host CPU with %s"), from);
-        goto cleanup;
+        return false;
     }
 
-    ret = true;
-
- cleanup:
-    return ret;
+    return true;
 }
 
 /*
@@ -1314,6 +1313,7 @@ static const vshCmdInfo info_cpu_models[] = {
 static const vshCmdOptDef opts_cpu_models[] = {
     {.name = "arch",
      .type = VSH_OT_DATA,
+     .completer = virshArchCompleter,
      .flags = VSH_OFLAG_REQ,
      .help = N_("architecture")
     },
@@ -1581,6 +1581,7 @@ static const vshCmdOptDef opts_hypervisor_cpu_compare[] = {
     VIRSH_COMMON_OPT_FILE(N_("file containing an XML CPU description")),
     {.name = "virttype",
      .type = VSH_OT_STRING,
+     .completer = virshDomainVirtTypeCompleter,
      .help = N_("virtualization type (/domain/@type)"),
     },
     {.name = "emulator",
@@ -1589,6 +1590,7 @@ static const vshCmdOptDef opts_hypervisor_cpu_compare[] = {
     },
     {.name = "arch",
      .type = VSH_OT_STRING,
+     .completer = virshArchCompleter,
      .help = N_("CPU architecture (/domain/os/type/@arch)"),
     },
     {.name = "machine",
@@ -1615,7 +1617,6 @@ cmdHypervisorCPUCompare(vshControl *ctl,
     const char *emulator = NULL;
     const char *arch = NULL;
     const char *machine = NULL;
-    bool ret = false;
     int result;
     g_auto(GStrv) cpus = NULL;
     unsigned int flags = 0;
@@ -1646,7 +1647,7 @@ cmdHypervisorCPUCompare(vshControl *ctl,
                  _("CPU described in %s is incompatible with the CPU provided "
                    "by hypervisor on the host\n"),
                  from);
-        goto cleanup;
+        return false;
         break;
 
     case VIR_CPU_COMPARE_IDENTICAL:
@@ -1666,13 +1667,10 @@ cmdHypervisorCPUCompare(vshControl *ctl,
     case VIR_CPU_COMPARE_ERROR:
     default:
         vshError(ctl, _("Failed to compare hypervisor CPU with %s"), from);
-        goto cleanup;
+        return false;
     }
 
-    ret = true;
-
- cleanup:
-    return ret;
+    return true;
 }
 
 
@@ -1691,9 +1689,11 @@ static const vshCmdInfo info_hypervisor_cpu_baseline[] = {
 };
 
 static const vshCmdOptDef opts_hypervisor_cpu_baseline[] = {
-    VIRSH_COMMON_OPT_FILE(N_("file containing XML CPU descriptions")),
+    VIRSH_COMMON_OPT_FILE_FULL(N_("file containing XML CPU descriptions"),
+                               false),
     {.name = "virttype",
      .type = VSH_OT_STRING,
+     .completer = virshDomainVirtTypeCompleter,
      .help = N_("virtualization type (/domain/@type)"),
     },
     {.name = "emulator",
@@ -1702,6 +1702,7 @@ static const vshCmdOptDef opts_hypervisor_cpu_baseline[] = {
     },
     {.name = "arch",
      .type = VSH_OT_STRING,
+     .completer = virshArchCompleter,
      .help = N_("CPU architecture (/domain/os/type/@arch)"),
     },
     {.name = "machine",
@@ -1716,6 +1717,12 @@ static const vshCmdOptDef opts_hypervisor_cpu_baseline[] = {
      .type = VSH_OT_BOOL,
      .help = N_("Do not include features that block migration")
     },
+    {.name = "model",
+     .type = VSH_OT_STRING,
+     .completer = virshCPUModelCompleter,
+     .help = N_("Shortcut for calling the command with a single CPU model "
+                "and no additional features")
+    },
     {.name = NULL}
 };
 
@@ -1728,6 +1735,7 @@ cmdHypervisorCPUBaseline(vshControl *ctl,
     const char *emulator = NULL;
     const char *arch = NULL;
     const char *machine = NULL;
+    const char *model = NULL;
     bool ret = false;
     g_autofree char *result = NULL;
     g_auto(GStrv) list = NULL;
@@ -1743,11 +1751,19 @@ cmdHypervisorCPUBaseline(vshControl *ctl,
         vshCommandOptStringReq(ctl, cmd, "virttype", &virttype) < 0 ||
         vshCommandOptStringReq(ctl, cmd, "emulator", &emulator) < 0 ||
         vshCommandOptStringReq(ctl, cmd, "arch", &arch) < 0 ||
-        vshCommandOptStringReq(ctl, cmd, "machine", &machine) < 0)
+        vshCommandOptStringReq(ctl, cmd, "machine", &machine) < 0 ||
+        vshCommandOptStringReq(ctl, cmd, "model", &model) < 0)
         return false;
 
-    if (!(list = vshExtractCPUDefXMLs(ctl, from)))
-        return false;
+    VSH_ALTERNATIVE_OPTIONS_EXPR("file", from, "model", model);
+
+    if (from) {
+        if (!(list = vshExtractCPUDefXMLs(ctl, from)))
+            return false;
+    } else {
+        list = g_new0(char *, 2);
+        list[0] = g_strdup_printf("<cpu><model>%s</model></cpu>", model);
+    }
 
     result = virConnectBaselineHypervisorCPU(priv->conn, emulator, arch,
                                              machine, virttype,

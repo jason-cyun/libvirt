@@ -389,6 +389,7 @@ qemuDomainPrimeVirtioDeviceAddresses(virDomainDef *def,
         case VIR_DOMAIN_MEMORY_MODEL_NONE:
         case VIR_DOMAIN_MEMORY_MODEL_DIMM:
         case VIR_DOMAIN_MEMORY_MODEL_NVDIMM:
+        case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
         case VIR_DOMAIN_MEMORY_MODEL_LAST:
             break;
         }
@@ -403,6 +404,12 @@ qemuDomainPrimeVirtioDeviceAddresses(virDomainDef *def,
             def->vsock->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_NONE) {
             def->vsock->info.type = type;
         }
+    }
+
+    for (i = 0; i < def->ncryptos; i++) {
+        /* All <crypto> devices accepted by the qemu driver are virtio */
+        if (def->cryptos[i]->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_NONE)
+            def->cryptos[i]->info.type = type;
     }
 }
 
@@ -420,8 +427,7 @@ qemuDomainAssignS390Addresses(virDomainDef *def,
     int ret = -1;
     virDomainCCWAddressSet *addrs = NULL;
 
-    if (qemuDomainIsS390CCW(def) &&
-        virQEMUCapsGet(qemuCaps, QEMU_CAPS_CCW)) {
+    if (qemuDomainIsS390CCW(def)) {
         if (virQEMUCapsGet(qemuCaps, QEMU_CAPS_DEVICE_VFIO_CCW))
             qemuDomainPrimeVfioDeviceAddresses(def, VIR_DOMAIN_DEVICE_ADDRESS_TYPE_CCW);
 
@@ -544,6 +550,7 @@ qemuDomainDeviceSupportZPCI(virDomainDeviceDef *device)
     case VIR_DOMAIN_DEVICE_IOMMU:
     case VIR_DOMAIN_DEVICE_VSOCK:
     case VIR_DOMAIN_DEVICE_AUDIO:
+    case VIR_DOMAIN_DEVICE_CRYPTO:
         break;
 
     case VIR_DOMAIN_DEVICE_NONE:
@@ -705,7 +712,7 @@ qemuDomainDeviceCalculatePCIConnectFlags(virDomainDeviceDef *dev,
         case VIR_DOMAIN_FS_DRIVER_TYPE_PATH:
         case VIR_DOMAIN_FS_DRIVER_TYPE_HANDLE:
             /* these drivers are handled by virtio-9p-pci */
-            switch ((virDomainFSModel) dev->data.fs->model) {
+            switch (dev->data.fs->model) {
             case VIR_DOMAIN_FS_MODEL_VIRTIO_TRANSITIONAL:
                 /* Transitional devices only work in conventional PCI slots */
                 return pciFlags;
@@ -925,6 +932,7 @@ qemuDomainDeviceCalculatePCIConnectFlags(virDomainDeviceDef *dev,
 
         case VIR_DOMAIN_WATCHDOG_MODEL_IB700:
         case VIR_DOMAIN_WATCHDOG_MODEL_DIAG288:
+        case VIR_DOMAIN_WATCHDOG_MODEL_ITCO:
         case VIR_DOMAIN_WATCHDOG_MODEL_LAST:
             return 0;
         }
@@ -995,9 +1003,23 @@ qemuDomainDeviceCalculatePCIConnectFlags(virDomainDeviceDef *dev,
         case VIR_DOMAIN_CHR_SERIAL_TARGET_TYPE_SPAPR_VIO:
         case VIR_DOMAIN_CHR_SERIAL_TARGET_TYPE_SYSTEM:
         case VIR_DOMAIN_CHR_SERIAL_TARGET_TYPE_SCLP:
+        case VIR_DOMAIN_CHR_SERIAL_TARGET_TYPE_ISA_DEBUG:
         case VIR_DOMAIN_CHR_SERIAL_TARGET_TYPE_NONE:
         case VIR_DOMAIN_CHR_SERIAL_TARGET_TYPE_LAST:
             return 0;
+        }
+        break;
+
+    case VIR_DOMAIN_DEVICE_IOMMU:
+        switch (dev->data.iommu->model) {
+            case VIR_DOMAIN_IOMMU_MODEL_VIRTIO:
+                return virtioFlags | VIR_PCI_CONNECT_INTEGRATED;
+
+            case VIR_DOMAIN_IOMMU_MODEL_INTEL:
+            case VIR_DOMAIN_IOMMU_MODEL_SMMUV3:
+            case VIR_DOMAIN_IOMMU_MODEL_LAST:
+                /* These are not PCI devices */
+                return 0;
         }
         break;
 
@@ -1025,7 +1047,32 @@ qemuDomainDeviceCalculatePCIConnectFlags(virDomainDeviceDef *dev,
         case VIR_DOMAIN_MEMORY_MODEL_NONE:
         case VIR_DOMAIN_MEMORY_MODEL_DIMM:
         case VIR_DOMAIN_MEMORY_MODEL_NVDIMM:
+        case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
         case VIR_DOMAIN_MEMORY_MODEL_LAST:
+            return 0;
+        }
+        break;
+
+    case VIR_DOMAIN_DEVICE_CRYPTO:
+        switch (dev->data.crypto->model) {
+        case VIR_DOMAIN_CRYPTO_MODEL_VIRTIO:
+            return pciFlags;
+        case VIR_DOMAIN_CRYPTO_MODEL_LAST:
+            return 0;
+        }
+        break;
+
+    case VIR_DOMAIN_DEVICE_PANIC:
+        switch ((virDomainPanicModel) dev->data.panic->model) {
+        case VIR_DOMAIN_PANIC_MODEL_PVPANIC:
+            return pciFlags | VIR_PCI_CONNECT_INTEGRATED;
+
+        case VIR_DOMAIN_PANIC_MODEL_DEFAULT:
+        case VIR_DOMAIN_PANIC_MODEL_ISA:
+        case VIR_DOMAIN_PANIC_MODEL_PSERIES:
+        case VIR_DOMAIN_PANIC_MODEL_HYPERV:
+        case VIR_DOMAIN_PANIC_MODEL_S390:
+        case VIR_DOMAIN_PANIC_MODEL_LAST:
             return 0;
         }
         break;
@@ -1033,14 +1080,12 @@ qemuDomainDeviceCalculatePCIConnectFlags(virDomainDeviceDef *dev,
         /* These devices don't ever connect with PCI */
     case VIR_DOMAIN_DEVICE_NVRAM:
     case VIR_DOMAIN_DEVICE_TPM:
-    case VIR_DOMAIN_DEVICE_PANIC:
     case VIR_DOMAIN_DEVICE_HUB:
     case VIR_DOMAIN_DEVICE_REDIRDEV:
     case VIR_DOMAIN_DEVICE_SMARTCARD:
         /* These devices don't even have a DeviceInfo */
     case VIR_DOMAIN_DEVICE_LEASE:
     case VIR_DOMAIN_DEVICE_GRAPHICS:
-    case VIR_DOMAIN_DEVICE_IOMMU:
     case VIR_DOMAIN_DEVICE_AUDIO:
     case VIR_DOMAIN_DEVICE_LAST:
     case VIR_DOMAIN_DEVICE_NONE:
@@ -1085,7 +1130,7 @@ qemuDomainFillDevicePCIConnectFlagsIterInit(virDomainDef *def,
                            VIR_PCI_CONNECT_AUTOASSIGN);
     }
 
-    if (virQEMUCapsGet(qemuCaps, QEMU_CAPS_VIRTIO_PCI_DISABLE_LEGACY)) {
+    if (virQEMUCapsGet(qemuCaps, QEMU_CAPS_VIRTIO_PCI_TRANSITIONAL)) {
         data->virtioFlags = data->pcieFlags;
     } else {
         data->virtioFlags = (VIR_PCI_CONNECT_TYPE_PCI_DEVICE |
@@ -1742,7 +1787,7 @@ qemuDomainValidateDevicePCISlotsPIIX3(virDomainDef *def,
                                       virDomainPCIAddressSet *addrs)
 {
     size_t i;
-    virPCIDeviceAddress tmp_addr;
+    virPCIDeviceAddress tmp_addr = { 0 };
     g_autofree char *addrStr = NULL;
     virDomainPCIConnectFlags flags = (VIR_PCI_CONNECT_AUTOASSIGN
                                       | VIR_PCI_CONNECT_TYPE_PCI_DEVICE);
@@ -1852,7 +1897,7 @@ qemuDomainValidateDevicePCISlotsQ35(virDomainDef *def,
                                     virDomainPCIAddressSet *addrs)
 {
     size_t i;
-    virPCIDeviceAddress tmp_addr;
+    virPCIDeviceAddress tmp_addr = { 0 };
     g_autofree char *addrStr = NULL;
     virDomainPCIConnectFlags flags = VIR_PCI_CONNECT_TYPE_PCIE_DEVICE;
 
@@ -2312,10 +2357,10 @@ qemuDomainAssignDevicePCISlots(virDomainDef *def,
     }
 
     /* A watchdog - check if it is a PCI device */
-    if (def->watchdog &&
-        def->watchdog->model == VIR_DOMAIN_WATCHDOG_MODEL_I6300ESB &&
-        virDeviceInfoPCIAddressIsWanted(&def->watchdog->info)) {
-        if (qemuDomainPCIAddressReserveNextAddr(addrs, &def->watchdog->info) < 0)
+    for (i = 0; i < def->nwatchdogs; i++) {
+        if (def->watchdogs[i]->model == VIR_DOMAIN_WATCHDOG_MODEL_I6300ESB &&
+            virDeviceInfoPCIAddressIsWanted(&def->watchdogs[i]->info) &&
+            qemuDomainPCIAddressReserveNextAddr(addrs, &def->watchdogs[i]->info) < 0)
             return -1;
     }
 
@@ -2368,6 +2413,25 @@ qemuDomainAssignDevicePCISlots(virDomainDef *def,
         /* Nada - none are PCI based (yet) */
     }
 
+    if (def->iommu) {
+        virDomainIOMMUDef *iommu = def->iommu;
+
+        switch (iommu->model) {
+        case VIR_DOMAIN_IOMMU_MODEL_VIRTIO:
+            if (virDeviceInfoPCIAddressIsWanted(&iommu->info) &&
+                qemuDomainPCIAddressReserveNextAddr(addrs, &iommu->info) < 0) {
+                return -1;
+            }
+            break;
+
+        case VIR_DOMAIN_IOMMU_MODEL_INTEL:
+        case VIR_DOMAIN_IOMMU_MODEL_SMMUV3:
+        case VIR_DOMAIN_IOMMU_MODEL_LAST:
+            /* These are not PCI devices */
+            break;
+        }
+    }
+
     if (def->vsock &&
         virDeviceInfoPCIAddressIsWanted(&def->vsock->info)) {
 
@@ -2389,7 +2453,36 @@ qemuDomainAssignDevicePCISlots(virDomainDef *def,
         case VIR_DOMAIN_MEMORY_MODEL_NONE:
         case VIR_DOMAIN_MEMORY_MODEL_DIMM:
         case VIR_DOMAIN_MEMORY_MODEL_NVDIMM:
+        case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
         case VIR_DOMAIN_MEMORY_MODEL_LAST:
+            break;
+        }
+    }
+
+    /* the qemu driver only accepts virtio crypto devices */
+    for (i = 0; i < def->ncryptos; i++) {
+        if (!virDeviceInfoPCIAddressIsWanted(&def->cryptos[i]->info))
+            continue;
+
+        if (qemuDomainPCIAddressReserveNextAddr(addrs, &def->cryptos[i]->info) < 0)
+            return -1;
+    }
+
+    for (i = 0; i < def->npanics; i++) {
+        virDomainPanicDef *panic = def->panics[i];
+
+        switch (panic->model) {
+        case VIR_DOMAIN_PANIC_MODEL_PVPANIC:
+            if (virDeviceInfoPCIAddressIsWanted(&panic->info) &&
+                qemuDomainPCIAddressReserveNextAddr(addrs, &panic->info) < 0)
+                return -1;
+            break;
+        case VIR_DOMAIN_PANIC_MODEL_DEFAULT:
+        case VIR_DOMAIN_PANIC_MODEL_ISA:
+        case VIR_DOMAIN_PANIC_MODEL_PSERIES:
+        case VIR_DOMAIN_PANIC_MODEL_HYPERV:
+        case VIR_DOMAIN_PANIC_MODEL_S390:
+        case VIR_DOMAIN_PANIC_MODEL_LAST:
             break;
         }
     }
@@ -2737,8 +2830,7 @@ qemuDomainAssignPCIAddresses(virDomainDef *def,
         }
 
         nbuses = addrs->nbuses;
-        virDomainPCIAddressSetFree(addrs);
-        addrs = NULL;
+        g_clear_pointer(&addrs, virDomainPCIAddressSetFree);
     }
 
     if (!(addrs = qemuDomainPCIAddressSetCreate(def, qemuCaps, nbuses, false)))
@@ -3050,6 +3142,7 @@ qemuDomainAssignMemoryDeviceSlot(virDomainObj *vm,
         return qemuDomainEnsurePCIAddress(vm, &dev);
         break;
 
+    case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
     case VIR_DOMAIN_MEMORY_MODEL_NONE:
     case VIR_DOMAIN_MEMORY_MODEL_LAST:
         break;
@@ -3076,6 +3169,7 @@ qemuDomainReleaseMemoryDeviceSlot(virDomainObj *vm,
         qemuDomainReleaseDeviceAddress(vm, &mem->info);
         break;
 
+    case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
     case VIR_DOMAIN_MEMORY_MODEL_NONE:
     case VIR_DOMAIN_MEMORY_MODEL_LAST:
         break;
@@ -3109,6 +3203,7 @@ qemuDomainAssignMemorySlots(virDomainDef *def)
         case VIR_DOMAIN_MEMORY_MODEL_VIRTIO_MEM:
             /* handled in qemuDomainAssignPCIAddresses() */
             break;
+        case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
         case VIR_DOMAIN_MEMORY_MODEL_NONE:
         case VIR_DOMAIN_MEMORY_MODEL_LAST:
             break;
@@ -3258,13 +3353,11 @@ qemuDomainEnsureVirtioAddress(bool *releaseAddr,
                               virDomainDeviceDef *dev)
 {
     virDomainDeviceInfo *info = virDomainDeviceGetInfo(dev);
-    qemuDomainObjPrivate *priv = vm->privateData;
     virDomainCCWAddressSet *ccwaddrs = NULL;
     int ret = -1;
 
     if (!info->type) {
-        if (qemuDomainIsS390CCW(vm->def) &&
-            virQEMUCapsGet(priv->qemuCaps, QEMU_CAPS_CCW))
+        if (qemuDomainIsS390CCW(vm->def))
             info->type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_CCW;
     }
 

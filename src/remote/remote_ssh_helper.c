@@ -63,8 +63,7 @@ virRemoteSSHHelperShutdown(virRemoteSSHHelper *proxy)
     if (proxy->sock) {
         virNetSocketRemoveIOCallback(proxy->sock);
         virNetSocketClose(proxy->sock);
-        virObjectUnref(proxy->sock);
-        proxy->sock = NULL;
+        g_clear_pointer(&proxy->sock, virObjectUnref);
     }
     VIR_FREE(proxy->sockToTerminal.data);
     VIR_FREE(proxy->terminalToSock.data);
@@ -256,7 +255,7 @@ virRemoteSSHHelperEventOnStdout(int watch G_GNUC_UNUSED,
     if (events & VIR_EVENT_HANDLE_WRITABLE &&
         proxy->sockToTerminal.offset) {
         ssize_t done;
-        done = write(fd,
+        done = write(fd, /* sc_avoid_write */
                      proxy->sockToTerminal.data,
                      proxy->sockToTerminal.offset);
         if (done < 0) {
@@ -355,6 +354,8 @@ int main(int argc, char **argv)
     g_autoptr(virURI) uri = NULL;
     g_autofree char *driver = NULL;
     remoteDriverTransport transport;
+    int mode = REMOTE_DRIVER_MODE_AUTO;
+    const char *mode_str = NULL;
     gboolean version = false;
     gboolean readonly = false;
     g_autofree char *sock_path = NULL;
@@ -368,6 +369,7 @@ int main(int argc, char **argv)
         { NULL, '\0', 0, 0, NULL, NULL, NULL }
     };
     unsigned int flags;
+    size_t i;
 
     context = g_option_context_new("URI - libvirt socket proxy");
     g_option_context_set_summary(context,
@@ -402,7 +404,8 @@ int main(int argc, char **argv)
     virFileActivateDirOverrideForProg(argv[0]);
 
     /* Initialize the log system */
-    virLogSetFromEnv();
+    if (virLogSetFromEnv() < 0)
+        exit(EXIT_FAILURE);
 
     uri_str = argv[1];
     VIR_DEBUG("Using URI %s", uri_str);
@@ -429,11 +432,30 @@ int main(int argc, char **argv)
     if (readonly)
         flags |= REMOTE_DRIVER_OPEN_RO;
 
-    sock_path = remoteGetUNIXSocket(transport,
-                                    REMOTE_DRIVER_MODE_AUTO,
-                                    driver,
-                                    flags,
-                                    &daemon_path);
+    for (i = 0; i < uri->paramsCount; i++) {
+        virURIParam *var = &uri->params[i];
+
+        if (STRCASEEQ(var->name, "mode")) {
+            mode_str = var->value;
+            continue;
+        } else if (STRCASEEQ(var->name, "socket")) {
+            sock_path = g_strdup(var->value);
+            continue;
+        }
+    }
+
+    if (mode_str &&
+        (mode = remoteDriverModeTypeFromString(mode_str)) < 0) {
+        g_printerr(_("%s: unknown remote mode '%s'"), argv[0], mode_str);
+        exit(EXIT_FAILURE);
+    }
+
+    if (!sock_path &&
+        !(sock_path = remoteGetUNIXSocket(transport, mode,
+                                          driver, flags, &daemon_path))) {
+        g_printerr(_("%s: failed to generate UNIX socket path"), argv[0]);
+        exit(EXIT_FAILURE);
+    }
 
     if (virNetSocketNewConnectUNIX(sock_path, daemon_path, &sock) < 0) {
         g_printerr(_("%s: cannot connect to '%s': %s\n"),

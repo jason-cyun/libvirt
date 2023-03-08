@@ -141,9 +141,10 @@ testQemuMigrationCookieParse(const void *opaque)
     g_auto(virBuffer) actual = VIR_BUFFER_INITIALIZER;
 
     if (!(data->cookie = qemuMigrationCookieParse(&driver,
+                                                  data->vm,
                                                   data->vm->def,
                                                   NULL,
-                                                  priv,
+                                                  priv->qemuCaps,
                                                   data->xmlstr,
                                                   data->xmlstrlen,
                                                   data->cookieParseFlags))) {
@@ -333,7 +334,7 @@ testQemuMigrationCookieBlockDirtyBitmaps(const void *opaque)
 
     qemuMigrationParamsSetBlockDirtyBitmapMapping(migParams, &migParamsBitmaps);
 
-    if (!(paramsOut = qemuMigrationParamsToJSON(migParams)) ||
+    if (!(paramsOut = qemuMigrationParamsToJSON(migParams, false)) ||
         !(actualJSON = virJSONValueToString(paramsOut, true)))
         return -1;
 
@@ -411,8 +412,6 @@ mymain(void)
 
     if (qemuTestDriverInit(&driver) < 0)
         return EXIT_FAILURE;
-
-    driver.privileged = true;
 
     if (!(conn = virGetConnect()))
         goto cleanup;

@@ -28,7 +28,6 @@
 #include "virerror.h"
 #include "virlog.h"
 #include "virstring.h"
-#include "virutil.h"
 #include "virbuffer.h"
 #include "virenum.h"
 #include "virbitmap.h"
@@ -121,6 +120,7 @@ virJSONValueGetType(const virJSONValue *value)
  *
  * I: signed long integer value
  * J: signed long integer value, error if negative
+ * K: signed long integer value, omitted if negative
  * Z: signed long integer value, omitted if zero
  * Y: signed long integer value, omitted if zero, error if negative
  *
@@ -228,6 +228,7 @@ virJSONValueObjectAddVArgs(virJSONValue **objptr,
 
         case 'Z':
         case 'Y':
+        case 'K':
         case 'J':
         case 'I': {
             long long val = va_arg(args, long long);
@@ -240,6 +241,9 @@ virJSONValueObjectAddVArgs(virJSONValue **objptr,
             }
 
             if (!val && (type == 'Z' || type == 'Y'))
+                continue;
+
+            if (val < 0 && type == 'K')
                 continue;
 
             rc = virJSONValueObjectAppendNumberLong(obj, key, val);
@@ -412,7 +416,7 @@ virJSONValueHashFree(void *opaque)
 
 
 virJSONValue *
-virJSONValueNewString(const char *data)
+virJSONValueNewString(char *data)
 {
     virJSONValue *val;
 
@@ -422,25 +426,7 @@ virJSONValueNewString(const char *data)
     val = g_new0(virJSONValue, 1);
 
     val->type = VIR_JSON_TYPE_STRING;
-    val->data.string = g_strdup(data);
-
-    return val;
-}
-
-
-virJSONValue *
-virJSONValueNewStringLen(const char *data,
-                         size_t length)
-{
-    virJSONValue *val;
-
-    if (!data)
-        return virJSONValueNewNull();
-
-    val = g_new0(virJSONValue, 1);
-
-    val->type = VIR_JSON_TYPE_STRING;
-    val->data.string = g_strndup(data, length);
+    val->data.string = data;
 
     return val;
 }
@@ -608,12 +594,9 @@ virJSONValueObjectInsertString(virJSONValue *object,
                                const char *value,
                                bool prepend)
 {
-    virJSONValue *jvalue = virJSONValueNewString(value);
-    if (!jvalue)
-        return -1;
-    if (virJSONValueObjectInsert(object, key, &jvalue, prepend) < 0)
-        return -1;
-    return 0;
+    g_autoptr(virJSONValue) jvalue = virJSONValueNewString(g_strdup(value));
+
+    return virJSONValueObjectInsert(object, key, &jvalue, prepend);
 }
 
 
@@ -623,23 +606,6 @@ virJSONValueObjectAppendString(virJSONValue *object,
                                const char *value)
 {
     return virJSONValueObjectInsertString(object, key, value, false);
-}
-
-
-int
-virJSONValueObjectAppendStringPrintf(virJSONValue *object,
-                                     const char *key,
-                                     const char *fmt,
-                                     ...)
-{
-    va_list ap;
-    g_autofree char *str = NULL;
-
-    va_start(ap, fmt);
-    str = g_strdup_vprintf(fmt, ap);
-    va_end(ap);
-
-    return virJSONValueObjectInsertString(object, key, str, false);
 }
 
 
@@ -775,7 +741,7 @@ int
 virJSONValueArrayAppendString(virJSONValue *object,
                               const char *value)
 {
-    g_autoptr(virJSONValue) jvalue = virJSONValueNewString(value);
+    g_autoptr(virJSONValue) jvalue = virJSONValueNewString(g_strdup(value));
 
     if (virJSONValueArrayAppend(object, &jvalue) < 0)
         return -1;
@@ -815,21 +781,21 @@ virJSONValueArrayConcat(virJSONValue *a,
 }
 
 
-int
+bool
 virJSONValueObjectHasKey(virJSONValue *object,
                          const char *key)
 {
     size_t i;
 
     if (object->type != VIR_JSON_TYPE_OBJECT)
-        return -1;
+        return false;
 
     for (i = 0; i < object->data.object.npairs; i++) {
         if (STREQ(object->data.object.pairs[i].key, key))
-            return 1;
+            return true;
     }
 
-    return 0;
+    return false;
 }
 
 
@@ -1157,13 +1123,6 @@ virJSONValueGetBoolean(virJSONValue *val,
 }
 
 
-bool
-virJSONValueIsNull(virJSONValue *val)
-{
-    return val->type == VIR_JSON_TYPE_NULL;
-}
-
-
 const char *
 virJSONValueObjectGetString(virJSONValue *object,
                             const char *key)
@@ -1174,6 +1133,26 @@ virJSONValueObjectGetString(virJSONValue *object,
         return NULL;
 
     return virJSONValueGetString(val);
+}
+
+
+void
+virJSONValueObjectReplaceValue(virJSONValue *object,
+                               const char *key,
+                               virJSONValue **newval)
+{
+    size_t i;
+
+    if (object->type != VIR_JSON_TYPE_OBJECT ||
+        !*newval)
+        return;
+
+    for (i = 0; i < object->data.object.npairs; i++) {
+        if (STREQ(object->data.object.pairs[i].key, key)) {
+            virJSONValueFree(object->data.object.pairs[i].value);
+            object->data.object.pairs[i].value = g_steal_pointer(newval);
+        }
+    }
 }
 
 
@@ -1317,59 +1296,35 @@ virJSONValueObjectStealObject(virJSONValue *object,
 }
 
 
-int
-virJSONValueObjectIsNull(virJSONValue *object,
-                         const char *key)
-{
-    virJSONValue *val = virJSONValueObjectGet(object, key);
-
-    if (!val)
-        return -1;
-
-    return virJSONValueIsNull(val);
-}
-
+/**
+ * virJSONValueArrayToStringList:
+ * @data: a JSON array containing strings to convert
+ *
+ * Converts @data a JSON array containing strings to a NULL-terminated string
+ * list. @data must be a JSON array. In case @data is doesn't contain only
+ * strings an error is reported.
+ */
 char **
-virJSONValueObjectGetStringArray(virJSONValue *object, const char *key)
+virJSONValueArrayToStringList(virJSONValue *data)
 {
-    g_auto(GStrv) ret = NULL;
-    virJSONValue *data;
-    size_t n;
+    size_t n = virJSONValueArraySize(data);
+    g_auto(GStrv) ret = g_new0(char *, n + 1);
     size_t i;
 
-    data = virJSONValueObjectGetArray(object, key);
-    if (!data) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("%s is missing or not an array"),
-                       key);
-        return NULL;
-    }
-
-    n = virJSONValueArraySize(data);
-    ret = g_new0(char *, n + 1);
     for (i = 0; i < n; i++) {
         virJSONValue *child = virJSONValueArrayGet(data, i);
-        const char *tmp;
 
-        if (!child) {
-            virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("%s array element is missing item %zu"),
-                           key, i);
+        if (!child ||
+            !(ret[i] = g_strdup(virJSONValueGetString(child)))) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("JSON string array contains non-string element"));
             return NULL;
         }
-
-        if (!(tmp = virJSONValueGetString(child))) {
-            virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("%s array element does not contain a string"),
-                           key);
-            return NULL;
-        }
-
-        ret[i] = g_strdup(tmp);
     }
 
     return g_steal_pointer(&ret);
 }
+
 
 /**
  * virJSONValueObjectForeachKeyValue:
@@ -1438,7 +1393,7 @@ virJSONValueCopy(const virJSONValue *in)
 
     /* No need to error out in the following cases */
     case VIR_JSON_TYPE_STRING:
-        out = virJSONValueNewString(in->data.string);
+        out = virJSONValueNewString(g_strdup(in->data.string));
         break;
     case VIR_JSON_TYPE_NUMBER:
         out = virJSONValueNewNumber(g_strdup(in->data.number));
@@ -1561,8 +1516,7 @@ virJSONParserHandleString(void *ctx,
                           size_t stringLen)
 {
     virJSONParser *parser = ctx;
-    g_autoptr(virJSONValue) value = virJSONValueNewStringLen((const char *)stringVal,
-                                                             stringLen);
+    g_autoptr(virJSONValue) value = virJSONValueNewString(g_strndup((const char *)stringVal, stringLen));
 
     VIR_DEBUG("parser=%p str=%p", parser, (const char *)stringVal);
 

@@ -23,12 +23,9 @@
 
 #include <sys/stat.h>
 
-#include "datatypes.h"
 #include "virerror.h"
-#include "viralloc.h"
 #include "internal.h"
 #include "storage_backend.h"
-#include "storage_source_conf.h"
 #include "virlog.h"
 #include "virmodule.h"
 #include "virfile.h"
@@ -57,9 +54,6 @@
 #endif
 #if WITH_STORAGE_RBD
 # include "storage_backend_rbd.h"
-#endif
-#if WITH_STORAGE_SHEEPDOG
-# include "storage_backend_sheepdog.h"
 #endif
 #if WITH_STORAGE_GLUSTER
 # include "storage_backend_gluster.h"
@@ -131,9 +125,6 @@ virStorageBackendDriversRegister(bool allbackends G_GNUC_UNUSED)
 #endif
 #if WITH_STORAGE_RBD
     VIR_STORAGE_BACKEND_REGISTER(virStorageBackendRBDRegister, "rbd");
-#endif
-#if WITH_STORAGE_SHEEPDOG
-    VIR_STORAGE_BACKEND_REGISTER(virStorageBackendSheepdogRegister, "sheepdog");
 #endif
 #if WITH_STORAGE_GLUSTER
     VIR_STORAGE_BACKEND_REGISTER(virStorageBackendGlusterRegister, "gluster");

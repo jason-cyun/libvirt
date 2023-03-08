@@ -13,43 +13,48 @@ docs_assets = [
   'favicon.ico',
   'favicon-16x16.png',
   'favicon-32x32.png',
-  'generic.css',
-  'libvirt.css',
-  'libvirt-daemon-arch.png',
-  'libvirt-driver-arch.png',
-  'libvirt-object-model.png',
-  'libvirt-virConnect-example.png',
-  'main.css',
   'manifest.json',
-  'migration-managed-direct.png',
-  'migration-managed-p2p.png',
-  'migration-native.png',
-  'migration-tunnel.png',
-  'migration-unmanaged-direct.png',
-  'mobile.css',
   'mstile-150x150.png',
-  'node.gif',
 ]
 
 docs_html_in_files = [
-  '404',
+  'index',
+]
+
+docs_rst_files = [
+  'aclpolkit',
+  'advanced-tests',
+  'api',
+  'api_extension',
+  'apps',
+  'auditlog',
+  'auth',
+  'best-practices',
+  'bindings',
   'bugs',
   'cgroups',
+  'ci',
+  'ci-dashboard',
+  'ci-runners',
+  'coding-style',
+  'committer-guidelines',
+  'compiling',
   'contact',
   'contribute',
   'csharp',
+  'daemons',
   'dbus',
-  'devguide',
   'docs',
   'downloads',
   'drivers',
   'drvbhyve',
+  'drvch',
   'drvesx',
   'drvhyperv',
   'drvlxc',
   'drvnodedev',
   'drvopenvz',
-  'drvremote',
+  'drvqemu',
   'drvsecret',
   'drvtest',
   'drvvbox',
@@ -58,75 +63,54 @@ docs_html_in_files = [
   'drvxen',
   'errors',
   'firewall',
-  'formatcaps',
-  'formatdomaincaps',
   'format',
+  'formatbackup',
+  'formatcaps',
+  'formatcheckpoint',
+  'formatdomain',
+  'formatdomaincaps',
   'formatnetwork',
   'formatnetworkport',
   'formatnode',
   'formatnwfilter',
   'formatsecret',
   'formatsnapshot',
+  'formatstorage',
   'formatstoragecaps',
   'formatstorageencryption',
-  'formatstorage',
+  'glib-adoption',
   'goals',
+  'golang',
   'governance',
+  'hacking',
   'hooks',
-  'index',
-  'internals',
+  'issue-handling',
   'java',
+  'libvirt-go',
+  'libvirt-go-xml',
   'logging',
+  'macos',
+  'migration',
+  'newreposetup',
   'nss',
+  'pci-addresses',
   'pci-hotplug',
   'php',
+  'platforms',
+  'programming-languages',
   'python',
   'remote',
   'securityprocess',
   'storage',
   'strategy',
-  'support',
-  'testapi',
-  'testsuites',
-  'testtck',
-  'tlscerts',
-  'uri',
-  'virshcmdref',
-  'windows',
-]
-
-docs_rst_files = [
-  'aclpolkit',
-  'advanced-tests',
-  'api_extension',
-  'api',
-  'apps',
-  'auditlog',
-  'auth',
-  'bindings',
-  'best-practices',
-  'ci',
-  'coding-style',
-  'committer-guidelines',
-  'compiling',
-  'daemons',
-  'developer-tooling',
-  'drvqemu',
-  'drvch',
-  'formatbackup',
-  'formatcheckpoint',
-  'formatdomain',
-  'glib-adoption',
-  'hacking',
-  'libvirt-go',
-  'libvirt-go-xml',
-  'migration',
-  'newreposetup',
-  'pci-addresses',
-  'platforms',
-  'programming-languages',
   'styleguide',
   'submitting-patches',
+  'support',
+  'testapi',
+  'testing',
+  'testtck',
+  'uri',
+  'windows',
 ]
 
 # list of web targets to build for docs/web rule
@@ -146,11 +130,10 @@ aclperms_gen = custom_target(
 )
 
 docs_timestamp = run_command(
-  python3_prog, meson_timestamp_prog.path(), env: runutf8
+  python3_prog, meson_timestamp_prog.full_path(), env: runutf8, check: true,
 ).stdout().strip()
 
 site_xsl = files('site.xsl')
-subsite_xsl = files('subsite.xsl')
 page_xsl = files('page.xsl')
 newapi_xsl = files('newapi.xsl')
 
@@ -177,6 +160,9 @@ docs_api_generated = custom_target(
     libvirt_lxc_sources,
     admin_sources,
     util_public_sources,
+    meson.project_source_root() / 'src' / 'remote' / 'remote_protocol.x',
+    meson.project_source_root() / 'src' / 'remote' / 'qemu_protocol.x',
+    meson.project_source_root() / 'src' / 'remote' / 'lxc_protocol.x',
   ],
 )
 
@@ -184,6 +170,47 @@ docs_api_xml = docs_api_generated[0]
 docs_lxc_api_xml = docs_api_generated[1]
 docs_qemu_api_xml = docs_api_generated[2]
 docs_admin_api_xml = docs_api_generated[3]
+
+docs_programs_groups = [
+  { 'name': 'rst2html5', 'prog': [ 'rst2html5', 'rst2html5.py', 'rst2html5-3' ] },
+  { 'name': 'rst2man', 'prog': [ 'rst2man', 'rst2man.py', 'rst2man-3' ] },
+]
+
+foreach item : docs_programs_groups
+  prog = find_program(item.get('prog'), dirs: libvirt_sbin_path)
+  varname = item.get('name').underscorify()
+  conf.set_quoted(varname.to_upper(), prog.full_path())
+  set_variable('@0@_prog'.format(varname), prog)
+endforeach
+
+# There are two versions of rst2html5 in the wild: one is the version
+# coming from the docutils package, and the other is the one coming
+# from the rst2html5 package. These versions are subtly different,
+# and the libvirt documentation can only be successfully generated
+# using the docutils version. Every now and then, users will report
+# build failures that can be traced back to having the wrong version
+# installed.
+#
+# The only reliable way to tell the two binaries apart seems to be
+# looking look at their version information: the docutils version
+# will report
+#
+#   rst2html5 (Docutils ..., Python ..., on ...)
+#
+# whereas the rst2html5 version will report
+#
+#   rst2html5 ... (Docutils ..., Python ..., on ...)
+#
+# with the additional bit of information being the version number for
+# the rst2html5 package itself.
+#
+# Use this knowledge to detect the version that we know doesn't work
+# for building libvirt and reject it
+rst2html5_version = run_command(rst2html5_prog, '--version', check: true)
+rst2html5_version = rst2html5_version.stdout().split(' ')
+if rst2html5_version[1] != '(Docutils'
+  error('Please uninstall the rst2html5 package and install the docutils package')
+endif
 
 docs_rst2html5_gen = generator(
   rst2html5_prog,
@@ -195,7 +222,6 @@ docs_rst2html5_gen = generator(
 
 # html_xslt_gen config
 
-html_xslt_gen_xslt = site_xsl
 html_xslt_gen_install_dir = docs_html_dir
 
 html_xslt_gen = []
@@ -228,6 +254,13 @@ html_xslt_gen += {
   'depends': aclperms_gen,
 }
 
+html_xslt_gen += {
+  'name': '404',
+  'file': docs_rst2html5_gen.process('404.rst'),
+  'source': 'docs' / '404.rst',
+  'href_base': '/',
+}
+
 hvsupport_html_in = custom_target(
   'hvsupport.html.in',
   output: 'hvsupport.html.in',
@@ -235,8 +268,8 @@ hvsupport_html_in = custom_target(
     meson_python_prog,
     python3_prog,
     hvsupport_prog,
-    meson.source_root(),
-    meson.build_root(),
+    meson.project_source_root(),
+    meson.project_build_root(),
   ],
   capture: true,
   depend_files: [
@@ -254,7 +287,7 @@ html_xslt_gen += {
   'file': hvsupport_html_in,
 }
 
-news_html_in = docs_rst2html5_gen.process(meson.source_root() / 'NEWS.rst')
+news_html_in = docs_rst2html5_gen.process(meson.project_source_root() / 'NEWS.rst')
 html_xslt_gen += {
   'name': 'news',
   'file': news_html_in,
@@ -277,10 +310,11 @@ foreach data : html_xslt_gen
     command: [
       xsltproc_prog,
       '--stringparam', 'pagesrc', data.get('source', ''),
-      '--stringparam', 'builddir', meson.build_root(),
+      '--stringparam', 'builddir', meson.project_build_root(),
       '--stringparam', 'timestamp', docs_timestamp,
+      '--stringparam', 'href_base', data.get('href_base', ''),
       '--nonet',
-      html_xslt_gen_xslt,
+      site_xsl,
       '@INPUT@',
     ],
     depends: data.get('depends', []),
@@ -298,16 +332,15 @@ html_xslt_gen = []
 
 # --- end of XSLT processing ---
 
+subdir('css')
 subdir('fonts')
 subdir('go')
 subdir('html')
-subdir('internals')
+subdir('images')
 subdir('js')
 subdir('kbase')
 subdir('logos')
 subdir('manpages')
-subdir('schemas')
-
 
 foreach file : docs_assets
   # This hack enables us to view the web pages
@@ -320,8 +353,19 @@ endforeach
 run_target(
   'install-web',
   command: [
-    meson_python_prog, python3_prog.path(), meson_install_web_prog.path(),
+    meson_python_prog, python3_prog.full_path(), meson_install_web_prog.full_path(),
     install_web_files,
   ],
   depends: install_web_deps,
+)
+
+test(
+  'check-html-references',
+  python3_prog,
+  args: [
+    check_html_references_prog.full_path(),
+    '--webroot',
+    meson.project_build_root() / 'docs'
+  ],
+  env: runutf8,
 )

@@ -28,7 +28,7 @@
 #include "virlog.h"
 #include "virfile.h"
 #include "virutil.h"
-#include "virstring.h"
+#include "virsecureerase.h"
 
 #define VIR_FROM_THIS VIR_FROM_RPC
 
@@ -48,7 +48,7 @@ virNetMessage *virNetMessageNew(bool tracked)
 
 
 void
-virNetMessageClearPayload(virNetMessage *msg)
+virNetMessageClearFDs(virNetMessage *msg)
 {
     size_t i;
 
@@ -58,7 +58,15 @@ virNetMessageClearPayload(virNetMessage *msg)
     msg->donefds = 0;
     msg->nfds = 0;
     VIR_FREE(msg->fds);
+}
 
+
+void
+virNetMessageClearPayload(virNetMessage *msg)
+{
+    virNetMessageClearFDs(msg);
+
+    virSecureErase(msg->buffer, msg->bufferLength);
     msg->bufferOffset = 0;
     msg->bufferLength = 0;
     VIR_FREE(msg->buffer);
@@ -417,7 +425,7 @@ int virNetMessageDecodePayload(virNetMessage *msg,
     }
 
     /* Get the length stored in buffer. */
-    msg->bufferLength += xdr_getpos(&xdr);
+    msg->bufferOffset += xdr_getpos(&xdr);
     xdr_destroy(&xdr);
     return 0;
 
@@ -427,6 +435,15 @@ int virNetMessageDecodePayload(virNetMessage *msg,
 }
 
 
+/**
+ * virNetMessageEncodePayloadRaw:
+ * @msg: message to encode payload into
+ * @data: data to encode into @msg
+ * @len: length of @data
+ *
+ * Encodes message payload. If @data is NULL or @len is 0 an empty message is
+ * encoded.
+ */
 int virNetMessageEncodePayloadRaw(virNetMessage *msg,
                                   const char *data,
                                   size_t len)
@@ -434,54 +451,31 @@ int virNetMessageEncodePayloadRaw(virNetMessage *msg,
     XDR xdr;
     unsigned int msglen;
 
-    /* If the message buffer is too small for the payload increase it accordingly. */
-    if ((msg->bufferLength - msg->bufferOffset) < len) {
-        if ((msg->bufferOffset + len) >
-            (VIR_NET_MESSAGE_MAX + VIR_NET_MESSAGE_LEN_MAX)) {
-            virReportError(VIR_ERR_RPC,
-                           _("Stream data too long to send "
-                             "(%zu bytes needed, %zu bytes available)"),
-                           len,
-                           VIR_NET_MESSAGE_MAX +
-                           VIR_NET_MESSAGE_LEN_MAX -
-                           msg->bufferOffset);
-            return -1;
+    if (data && len > 0) {
+        /* If the message buffer is too small for the payload increase it accordingly. */
+        if ((msg->bufferLength - msg->bufferOffset) < len) {
+            if ((msg->bufferOffset + len) >
+                (VIR_NET_MESSAGE_MAX + VIR_NET_MESSAGE_LEN_MAX)) {
+                virReportError(VIR_ERR_RPC,
+                               _("Stream data too long to send "
+                                 "(%zu bytes needed, %zu bytes available)"),
+                               len,
+                               VIR_NET_MESSAGE_MAX +
+                               VIR_NET_MESSAGE_LEN_MAX -
+                               msg->bufferOffset);
+                return -1;
+            }
+
+            msg->bufferLength = msg->bufferOffset + len;
+
+            VIR_REALLOC_N(msg->buffer, msg->bufferLength);
+
+            VIR_DEBUG("Increased message buffer length = %zu", msg->bufferLength);
         }
 
-        msg->bufferLength = msg->bufferOffset + len;
-
-        VIR_REALLOC_N(msg->buffer, msg->bufferLength);
-
-        VIR_DEBUG("Increased message buffer length = %zu", msg->bufferLength);
+        memcpy(msg->buffer + msg->bufferOffset, data, len);
+        msg->bufferOffset += len;
     }
-
-    memcpy(msg->buffer + msg->bufferOffset, data, len);
-    msg->bufferOffset += len;
-
-    /* Re-encode the length word. */
-    VIR_DEBUG("Encode length as %zu", msg->bufferOffset);
-    xdrmem_create(&xdr, msg->buffer, VIR_NET_MESSAGE_HEADER_XDR_LEN, XDR_ENCODE);
-    msglen = msg->bufferOffset;
-    if (!xdr_u_int(&xdr, &msglen)) {
-        virReportError(VIR_ERR_RPC, "%s", _("Unable to encode message length"));
-        goto error;
-    }
-    xdr_destroy(&xdr);
-
-    msg->bufferLength = msg->bufferOffset;
-    msg->bufferOffset = 0;
-    return 0;
-
- error:
-    xdr_destroy(&xdr);
-    return -1;
-}
-
-
-int virNetMessageEncodePayloadEmpty(virNetMessage *msg)
-{
-    XDR xdr;
-    unsigned int msglen;
 
     /* Re-encode the length word. */
     VIR_DEBUG("Encode length as %zu", msg->bufferOffset);

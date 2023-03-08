@@ -34,9 +34,13 @@
 VIR_LOG_INIT("bhyve.bhyve_domain");
 
 static void *
-bhyveDomainObjPrivateAlloc(void *opaque G_GNUC_UNUSED)
+bhyveDomainObjPrivateAlloc(void *opaque)
 {
-    return g_new0(bhyveDomainObjPrivate, 1);
+    bhyveDomainObjPrivate *priv = g_new0(bhyveDomainObjPrivate, 1);
+
+    priv->driver = opaque;
+
+    return priv;
 }
 
 static void
@@ -213,11 +217,18 @@ bhyveDomainDefAssignAddresses(virDomainDef *def,
 virDomainXMLOption *
 virBhyveDriverCreateXMLConf(struct _bhyveConn *driver)
 {
+    virDomainXMLOption *ret = NULL;
+
     virBhyveDriverDomainDefParserConfig.priv = driver;
-    return virDomainXMLOptionNew(&virBhyveDriverDomainDefParserConfig,
-                                 &virBhyveDriverPrivateDataCallbacks,
-                                 &virBhyveDriverDomainXMLNamespace,
-                                 NULL, NULL);
+
+    ret = virDomainXMLOptionNew(&virBhyveDriverDomainDefParserConfig,
+                                &virBhyveDriverPrivateDataCallbacks,
+                                &virBhyveDriverDomainXMLNamespace,
+                                NULL, NULL, NULL);
+
+    virDomainXMLOptionSetCloseCallbackAlloc(ret, virCloseCallbacksDomainAlloc);
+
+    return ret;
 }
 
 

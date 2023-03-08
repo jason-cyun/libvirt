@@ -179,8 +179,7 @@ getJobResultHelper(PRL_HANDLE job, unsigned int timeout, PRL_HANDLE *result,
         ret = PrlJob_GetResult(job, result);
         if (PRL_FAILED(ret)) {
             logPrlErrorHelper(ret, filename, funcname, linenr);
-            PrlHandle_Free(*result);
-            *result = NULL;
+            g_clear_pointer(result, PrlHandle_Free);
             goto cleanup;
         }
 
@@ -1131,26 +1130,25 @@ prlsdkGetSerialInfo(PRL_HANDLE serialPort, virDomainChrDef *chr)
     PRL_RESULT pret;
     PRL_UINT32 serialPortIndex;
     PRL_UINT32 emulatedType;
-    char *friendlyName = NULL;
+    g_autofree char *friendlyName = NULL;
     PRL_SERIAL_PORT_SOCKET_OPERATION_MODE socket_mode;
-    char *uristr = NULL;
-    virURI *uri = NULL;
-    int ret = -1;
+    g_autofree char *uristr = NULL;
+    g_autoptr(virURI) uri = NULL;
 
     chr->deviceType = VIR_DOMAIN_CHR_DEVICE_TYPE_SERIAL;
     pret = PrlVmDev_GetIndex(serialPort, &serialPortIndex);
-    prlsdkCheckRetGoto(pret, cleanup);
+    prlsdkCheckRetExit(pret, -1);
     chr->target.port = serialPortIndex;
 
     pret = PrlVmDev_GetEmulatedType(serialPort, &emulatedType);
-    prlsdkCheckRetGoto(pret, cleanup);
+    prlsdkCheckRetExit(pret, -1);
 
     if (!(friendlyName = prlsdkGetStringParamVar(PrlVmDev_GetFriendlyName,
                                                  serialPort)))
-        goto cleanup;
+        return -1;
 
     pret = PrlVmDevSerial_GetSocketMode(serialPort, &socket_mode);
-    prlsdkCheckRetGoto(pret, cleanup);
+    prlsdkCheckRetExit(pret, -1);
 
     switch (emulatedType) {
     case PDT_USE_OUTPUT_FILE:
@@ -1170,7 +1168,7 @@ prlsdkGetSerialInfo(PRL_HANDLE serialPort, virDomainChrDef *chr)
         chr->source->type = VIR_DOMAIN_CHR_TYPE_TCP;
         uristr = g_strdup_printf("tcp://%s", friendlyName);
         if (!(uri = virURIParse(uristr)))
-            goto cleanup;
+            return -1;
         chr->source->data.tcp.host = g_strdup(uri->server);
         chr->source->data.tcp.service = g_strdup_printf("%d", uri->port);
         chr->source->data.tcp.listen = socket_mode == PSP_SERIAL_SOCKET_SERVER;
@@ -1179,7 +1177,7 @@ prlsdkGetSerialInfo(PRL_HANDLE serialPort, virDomainChrDef *chr)
         chr->source->type = VIR_DOMAIN_CHR_TYPE_UDP;
         uristr = g_strdup_printf("udp://%s", friendlyName);
         if (!(uri = virURIParse(uristr)))
-            goto cleanup;
+            return -1;
         chr->source->data.udp.bindHost = g_strdup(uri->server);
         chr->source->data.udp.bindService = g_strdup_printf("%d", uri->port);
         chr->source->data.udp.connectHost = g_strdup(uri->server);
@@ -1188,18 +1186,10 @@ prlsdkGetSerialInfo(PRL_HANDLE serialPort, virDomainChrDef *chr)
     default:
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Unknown serial type: %X"), emulatedType);
-        goto cleanup;
-        break;
+        return -1;
     }
 
-    ret = 0;
-
- cleanup:
-    VIR_FREE(friendlyName);
-    VIR_FREE(uristr);
-    virURIFree(uri);
-
-    return ret;
+    return 0;
 }
 
 
@@ -3564,7 +3554,32 @@ prlsdkAttachDevice(struct _vzDriver *driver,
             return -1;
 
         break;
-    default:
+
+    case VIR_DOMAIN_DEVICE_LEASE:
+    case VIR_DOMAIN_DEVICE_FS:
+    case VIR_DOMAIN_DEVICE_INPUT:
+    case VIR_DOMAIN_DEVICE_SOUND:
+    case VIR_DOMAIN_DEVICE_VIDEO:
+    case VIR_DOMAIN_DEVICE_HOSTDEV:
+    case VIR_DOMAIN_DEVICE_WATCHDOG:
+    case VIR_DOMAIN_DEVICE_CONTROLLER:
+    case VIR_DOMAIN_DEVICE_HUB:
+    case VIR_DOMAIN_DEVICE_REDIRDEV:
+    case VIR_DOMAIN_DEVICE_NONE:
+    case VIR_DOMAIN_DEVICE_SMARTCARD:
+    case VIR_DOMAIN_DEVICE_CHR:
+    case VIR_DOMAIN_DEVICE_MEMBALLOON:
+    case VIR_DOMAIN_DEVICE_NVRAM:
+    case VIR_DOMAIN_DEVICE_SHMEM:
+    case VIR_DOMAIN_DEVICE_TPM:
+    case VIR_DOMAIN_DEVICE_PANIC:
+    case VIR_DOMAIN_DEVICE_LAST:
+    case VIR_DOMAIN_DEVICE_RNG:
+    case VIR_DOMAIN_DEVICE_MEMORY:
+    case VIR_DOMAIN_DEVICE_IOMMU:
+    case VIR_DOMAIN_DEVICE_VSOCK:
+    case VIR_DOMAIN_DEVICE_AUDIO:
+    case VIR_DOMAIN_DEVICE_CRYPTO:
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("attaching device type '%s' is unsupported"),
                        virDomainDeviceTypeToString(dev->type));
@@ -3629,7 +3644,32 @@ prlsdkDetachDevice(struct _vzDriver *driver G_GNUC_UNUSED,
             goto cleanup;
 
         break;
-    default:
+
+    case VIR_DOMAIN_DEVICE_LEASE:
+    case VIR_DOMAIN_DEVICE_FS:
+    case VIR_DOMAIN_DEVICE_INPUT:
+    case VIR_DOMAIN_DEVICE_SOUND:
+    case VIR_DOMAIN_DEVICE_VIDEO:
+    case VIR_DOMAIN_DEVICE_HOSTDEV:
+    case VIR_DOMAIN_DEVICE_WATCHDOG:
+    case VIR_DOMAIN_DEVICE_CONTROLLER:
+    case VIR_DOMAIN_DEVICE_HUB:
+    case VIR_DOMAIN_DEVICE_REDIRDEV:
+    case VIR_DOMAIN_DEVICE_NONE:
+    case VIR_DOMAIN_DEVICE_SMARTCARD:
+    case VIR_DOMAIN_DEVICE_CHR:
+    case VIR_DOMAIN_DEVICE_MEMBALLOON:
+    case VIR_DOMAIN_DEVICE_NVRAM:
+    case VIR_DOMAIN_DEVICE_SHMEM:
+    case VIR_DOMAIN_DEVICE_TPM:
+    case VIR_DOMAIN_DEVICE_PANIC:
+    case VIR_DOMAIN_DEVICE_LAST:
+    case VIR_DOMAIN_DEVICE_RNG:
+    case VIR_DOMAIN_DEVICE_MEMORY:
+    case VIR_DOMAIN_DEVICE_IOMMU:
+    case VIR_DOMAIN_DEVICE_VSOCK:
+    case VIR_DOMAIN_DEVICE_AUDIO:
+    case VIR_DOMAIN_DEVICE_CRYPTO:
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("detaching device type '%s' is unsupported"),
                        virDomainDeviceTypeToString(dev->type));
@@ -3684,7 +3724,32 @@ prlsdkUpdateDevice(struct _vzDriver *driver,
             return -1;
 
         break;
-    default:
+
+    case VIR_DOMAIN_DEVICE_LEASE:
+    case VIR_DOMAIN_DEVICE_FS:
+    case VIR_DOMAIN_DEVICE_INPUT:
+    case VIR_DOMAIN_DEVICE_SOUND:
+    case VIR_DOMAIN_DEVICE_VIDEO:
+    case VIR_DOMAIN_DEVICE_HOSTDEV:
+    case VIR_DOMAIN_DEVICE_WATCHDOG:
+    case VIR_DOMAIN_DEVICE_CONTROLLER:
+    case VIR_DOMAIN_DEVICE_HUB:
+    case VIR_DOMAIN_DEVICE_REDIRDEV:
+    case VIR_DOMAIN_DEVICE_NONE:
+    case VIR_DOMAIN_DEVICE_SMARTCARD:
+    case VIR_DOMAIN_DEVICE_CHR:
+    case VIR_DOMAIN_DEVICE_MEMBALLOON:
+    case VIR_DOMAIN_DEVICE_NVRAM:
+    case VIR_DOMAIN_DEVICE_SHMEM:
+    case VIR_DOMAIN_DEVICE_TPM:
+    case VIR_DOMAIN_DEVICE_PANIC:
+    case VIR_DOMAIN_DEVICE_LAST:
+    case VIR_DOMAIN_DEVICE_RNG:
+    case VIR_DOMAIN_DEVICE_MEMORY:
+    case VIR_DOMAIN_DEVICE_IOMMU:
+    case VIR_DOMAIN_DEVICE_VSOCK:
+    case VIR_DOMAIN_DEVICE_AUDIO:
+    case VIR_DOMAIN_DEVICE_CRYPTO:
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("updating device type '%s' is unsupported"),
                        virDomainDeviceTypeToString(dev->type));
@@ -3799,7 +3864,7 @@ prlsdkSetBootOrderVm(PRL_HANDLE sdkdom, virDomainDef *def)
     for (i = 0; i < def->os.nBootDevs; ++i) {
         virType = def->os.bootDevs[i];
 
-        switch ((int)virType) {
+        switch (virType) {
         case VIR_DOMAIN_BOOT_CDROM:
             sdkType = PDE_OPTICAL_DISK;
             break;
@@ -3809,6 +3874,8 @@ prlsdkSetBootOrderVm(PRL_HANDLE sdkdom, virDomainDef *def)
         case VIR_DOMAIN_BOOT_NET:
             sdkType = PDE_GENERIC_NETWORK_ADAPTER;
             break;
+        case VIR_DOMAIN_BOOT_FLOPPY:
+        case VIR_DOMAIN_BOOT_LAST:
         default:
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("Unsupported boot device type: '%s'"),
@@ -4574,7 +4641,6 @@ prlsdkParseSnapshotTree(const char *treexml)
     virDomainSnapshotObjList *ret = NULL;
     g_autoptr(xmlDoc) xml = NULL;
     g_autoptr(xmlXPathContext) ctxt = NULL;
-    xmlNodePtr root;
     xmlNodePtr *nodes = NULL;
     virDomainSnapshotDef *def = NULL;
     virDomainMomentObj *snapshot;
@@ -4589,20 +4655,9 @@ prlsdkParseSnapshotTree(const char *treexml)
     if (*treexml == '\0')
         return snapshots;
 
-    if (!(xml = virXMLParse(NULL, treexml, _("(snapshot_tree)"), NULL, false)))
+    if (!(xml = virXMLParse(NULL, treexml, _("(snapshot_tree)"),
+                            "ParallelsSavedStates", &ctxt, NULL, false)))
         goto cleanup;
-
-    root = xmlDocGetRootElement(xml);
-    if (!virXMLNodeNameEqual(root, "ParallelsSavedStates")) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unexpected root element: '%s'"), root->name);
-        goto cleanup;
-    }
-
-    if (!(ctxt = virXMLXPathContextNew(xml)))
-        goto cleanup;
-
-    ctxt->node = root;
 
     if ((n = virXPathNodeSet("//SavedStateItem", ctxt, &nodes)) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -4611,7 +4666,7 @@ prlsdkParseSnapshotTree(const char *treexml)
     }
 
     for (i = 0; i < n; i++) {
-        if (nodes[i]->parent == root)
+        if (nodes[i]->parent == xmlDocGetRootElement(xml))
             continue;
 
         def = g_new0(virDomainSnapshotDef, 1);
@@ -4639,7 +4694,7 @@ prlsdkParseSnapshotTree(const char *treexml)
 
         def->parent.description = virXPathString("string(./Description)", ctxt);
 
-        def->memory = VIR_DOMAIN_SNAPSHOT_LOCATION_NONE;
+        def->memory = VIR_DOMAIN_SNAPSHOT_LOCATION_NO;
         xmlstr = virXPathString("string(./@state)", ctxt);
         if (!xmlstr) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -4661,9 +4716,8 @@ prlsdkParseSnapshotTree(const char *treexml)
         }
         VIR_FREE(xmlstr);
 
-        if (!(snapshot = virDomainSnapshotAssignDef(snapshots, def)))
+        if (!(snapshot = virDomainSnapshotAssignDef(snapshots, &def)))
             goto cleanup;
-        def = NULL;
 
         xmlstr = virXPathString("string(./@current)", ctxt);
         if (xmlstr && STREQ("yes", xmlstr)) {

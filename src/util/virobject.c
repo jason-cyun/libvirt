@@ -24,11 +24,9 @@
 #define VIR_PARENT_REQUIRED /* empty, to allow virObject to have no parent */
 #include "virobject.h"
 #include "virthread.h"
-#include "viralloc.h"
 #include "virerror.h"
 #include "virlog.h"
 #include "virprobe.h"
-#include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -427,6 +425,22 @@ virObjectGetRWLockableObj(void *anyobj)
 
 
 /**
+ * virObjectLockGuard:
+ * @anyobj: any instance of virObjectLockable
+ *
+ * Acquire a lock on @anyobj that will be managed by the virLockGuard object
+ * returned to the caller.
+ */
+virLockGuard
+virObjectLockGuard(void *anyobj)
+{
+    virObjectLockable *obj = virObjectGetLockableObj(anyobj);
+
+    return virLockGuardLock(&obj->lock);
+}
+
+
+/**
  * virObjectLock:
  * @anyobj: any instance of virObjectLockable
  *
@@ -581,36 +595,6 @@ const char *
 virClassName(virClass *klass)
 {
     return klass->name;
-}
-
-
-/**
- * virObjectFreeCallback:
- * @opaque: a pointer to a virObject instance
- *
- * Provides identical functionality to virObjectUnref,
- * but with the signature matching the virFreeCallback
- * typedef.
- */
-void virObjectFreeCallback(void *opaque)
-{
-    virObjectUnref(opaque);
-}
-
-
-/**
- * virObjectFreeHashData:
- * @opaque: a pointer to a virObject instance
- * @name: ignored, name of the hash key being deleted
- *
- * Provides identical functionality to virObjectUnref,
- * but with the signature matching the GDestroyNotify
- * typedef used with hash tables.
- */
-void
-virObjectFreeHashData(void *opaque)
-{
-    virObjectUnref(opaque);
 }
 
 

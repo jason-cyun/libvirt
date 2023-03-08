@@ -44,9 +44,6 @@ int virScaleInteger(unsigned long long *value, const char *suffix,
                     unsigned long long scale, unsigned long long limit)
     ATTRIBUTE_NONNULL(1) G_GNUC_WARN_UNUSED_RESULT;
 
-int virParseVersionString(const char *str, unsigned long *version,
-                          bool allowMissing);
-
 char *virFormatIntDecimal(char *buf, size_t buflen, int val)
     ATTRIBUTE_NONNULL(1) G_GNUC_WARN_UNUSED_RESULT;
 
@@ -92,17 +89,17 @@ static inline int pthread_sigmask(int how,
 }
 #endif
 
-char *virGetHostname(void) G_GNUC_NO_INLINE;
+char *virGetHostname(void) G_NO_INLINE;
 char *virGetHostnameQuiet(void);
 
 char *virGetUserDirectory(void);
 char *virGetUserDirectoryByUID(uid_t uid);
 char *virGetUserConfigDirectory(void);
 char *virGetUserCacheDirectory(void);
-char *virGetUserRuntimeDirectory(void) G_GNUC_NO_INLINE;
+char *virGetUserRuntimeDirectory(void) G_NO_INLINE;
 char *virGetUserShell(uid_t uid);
-char *virGetUserName(uid_t uid) G_GNUC_NO_INLINE;
-char *virGetGroupName(gid_t gid) G_GNUC_NO_INLINE;
+char *virGetUserName(uid_t uid) G_NO_INLINE;
+char *virGetGroupName(gid_t gid) G_NO_INLINE;
 int virGetGroupList(uid_t uid, gid_t group, gid_t **groups)
     ATTRIBUTE_NONNULL(3);
 int virGetUserID(const char *name,
@@ -116,34 +113,22 @@ bool virDoesGroupExist(const char *name);
 
 bool virValidateWWN(const char *wwn);
 
-int virGetDeviceID(const char *path,
-                   int *maj,
-                   int *min) G_GNUC_NO_INLINE;
-int virSetDeviceUnprivSGIO(const char *path,
-                           const char *sysfs_dir,
-                           int unpriv_sgio);
-int virGetDeviceUnprivSGIO(const char *path,
-                           const char *sysfs_dir,
-                           int *unpriv_sgio);
-char *virGetUnprivSGIOSysfsPath(const char *path,
-                                const char *sysfs_dir);
-
 int virParseOwnershipIds(const char *label, uid_t *uidPtr, gid_t *gidPtr);
 
 
 time_t virGetSelfLastChanged(void);
 void virUpdateSelfLastChanged(const char *path);
 
-long virGetSystemPageSize(void) G_GNUC_NO_INLINE;
-long virGetSystemPageSizeKB(void) G_GNUC_NO_INLINE;
+long virGetSystemPageSize(void) G_NO_INLINE;
+long virGetSystemPageSizeKB(void) G_NO_INLINE;
 
 unsigned long long virMemoryLimitTruncate(unsigned long long value);
 bool virMemoryLimitIsSet(unsigned long long value);
-unsigned long long virMemoryMaxValue(bool ulong) G_GNUC_NO_INLINE;
+unsigned long long virMemoryMaxValue(bool ulong) G_NO_INLINE;
 
 bool virHostHasIOMMU(void);
 
-char *virHostGetDRMRenderNode(void) G_GNUC_NO_INLINE;
+char *virHostGetDRMRenderNode(void) G_NO_INLINE;
 
 /* Kernel cmdline match and comparison strategy for arg=value pairs */
 typedef enum {

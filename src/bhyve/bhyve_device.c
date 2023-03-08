@@ -36,11 +36,13 @@ bhyveCollectPCIAddress(virDomainDef *def G_GNUC_UNUSED,
                        virDomainDeviceInfo *info,
                        void *opaque)
 {
+    virDomainPCIAddressSet *addrs = NULL;
+    virPCIDeviceAddress *addr = NULL;
     if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_DRIVE)
         return 0;
 
-    virDomainPCIAddressSet *addrs = opaque;
-    virPCIDeviceAddress *addr = &info->addr.pci;
+    addrs = opaque;
+    addr = &info->addr.pci;
 
     if (addr->domain == 0 && addr->bus == 0 && addr->slot == 0) {
             return 0;
@@ -83,10 +85,7 @@ bhyveAssignDevicePCISlots(virDomainDef *def,
                           virDomainPCIAddressSet *addrs)
 {
     size_t i;
-    virPCIDeviceAddress lpc_addr;
-
-    memset(&lpc_addr, 0, sizeof(lpc_addr));
-    lpc_addr.slot = 0x1;
+    virPCIDeviceAddress lpc_addr = { .slot = 0x1 };
 
     /* If the user didn't explicitly specify slot 1 for some of the devices,
        reserve it for LPC, even if there's no LPC device configured.

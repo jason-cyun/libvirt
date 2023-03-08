@@ -54,15 +54,7 @@ typedef enum {
 
 void virCommandPassFD(virCommand *cmd,
                       int fd,
-                      unsigned int flags) G_GNUC_NO_INLINE;
-
-void virCommandPassFDIndex(virCommand *cmd,
-                           int fd,
-                           unsigned int flags,
-                           size_t *idx) G_GNUC_NO_INLINE;
-
-int virCommandPassFDGetFDIndex(virCommand *cmd,
-                               int fd);
+                      unsigned int flags) G_NO_INLINE;
 
 void virCommandSetPidFile(virCommand *cmd,
                           const char *pidfile) ATTRIBUTE_NONNULL(2);
@@ -140,7 +132,7 @@ void virCommandSetWorkingDirectory(virCommand *cmd,
                                    const char *pwd) ATTRIBUTE_NONNULL(2);
 
 int virCommandSetSendBuffer(virCommand *cmd,
-                            unsigned char *buffer,
+                            unsigned char **buffer,
                             size_t buflen)
     ATTRIBUTE_NONNULL(2);
 
@@ -224,5 +216,10 @@ int virCommandRunNul(virCommand *cmd,
                      size_t n_columns,
                      virCommandRunNulFunc func,
                      void *data);
+
+void virCommandSetRunAlone(virCommand *cmd);
+
+void virCommandSetRunAmong(virCommand *cmd,
+                           pid_t pid);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCommand, virCommandFree);

@@ -349,6 +349,16 @@ static const vshCmdOptDef opts_network_dumpxml[] = {
      .type = VSH_OT_BOOL,
      .help = N_("show inactive defined XML")
     },
+    {.name = "xpath",
+     .type = VSH_OT_STRING,
+     .flags = VSH_OFLAG_REQ_OPT,
+     .completer = virshCompleteEmpty,
+     .help = N_("xpath expression to filter the XML document")
+    },
+    {.name = "wrap",
+     .type = VSH_OT_BOOL,
+     .help = N_("wrap xpath results in an common root element"),
+    },
     {.name = NULL}
 };
 
@@ -356,8 +366,10 @@ static bool
 cmdNetworkDumpXML(vshControl *ctl, const vshCmd *cmd)
 {
     g_autoptr(virshNetwork) network = NULL;
-    g_autofree char *dump = NULL;
+    g_autofree char *xml = NULL;
     unsigned int flags = 0;
+    bool wrap = vshCommandOptBool(cmd, "wrap");
+    const char *xpath = NULL;
 
     if (!(network = virshCommandOptNetwork(ctl, cmd, NULL)))
         return false;
@@ -365,12 +377,13 @@ cmdNetworkDumpXML(vshControl *ctl, const vshCmd *cmd)
     if (vshCommandOptBool(cmd, "inactive"))
         flags |= VIR_NETWORK_XML_INACTIVE;
 
-    if (!(dump = virNetworkGetXMLDesc(network, flags))) {
+    if (vshCommandOptStringQuiet(ctl, cmd, "xpath", &xpath) < 0)
         return false;
-    }
 
-    vshPrint(ctl, "%s", dump);
-    return true;
+    if (!(xml = virNetworkGetXMLDesc(network, flags)))
+        return false;
+
+    return virshDumpXML(ctl, xml, "network", xpath, wrap);
 }
 
 /*
@@ -399,7 +412,7 @@ cmdNetworkInfo(vshControl *ctl, const vshCmd *cmd)
     int autostart;
     int persistent = -1;
     int active = -1;
-    char *bridge = NULL;
+    g_autofree char *bridge = NULL;
 
     if (!(network = virshCommandOptNetwork(ctl, cmd, NULL)))
         return false;
@@ -428,7 +441,6 @@ cmdNetworkInfo(vshControl *ctl, const vshCmd *cmd)
     if (bridge)
         vshPrint(ctl, "%-15s %s\n", _("Bridge:"), bridge);
 
-    VIR_FREE(bridge);
     return true;
 }
 
@@ -640,8 +652,7 @@ virshNetworkListCollect(vshControl *ctl,
     VIR_FREE(names);
 
     if (!success) {
-        virshNetworkListFree(list);
-        list = NULL;
+        g_clear_pointer(&list, virshNetworkListFree);
     }
 
     return list;
@@ -919,11 +930,13 @@ static const vshCmdOptDef opts_network_update[] = {
     {.name = "command",
      .type = VSH_OT_DATA,
      .flags = VSH_OFLAG_REQ,
+     .completer = virshNetworkUpdateCommandCompleter,
      .help = N_("type of update (add-first, add-last (add), delete, or modify)")
     },
     {.name = "section",
      .type = VSH_OT_DATA,
      .flags = VSH_OFLAG_REQ,
+     .completer = virshNetworkUpdateSectionCompleter,
      .help = N_("which section of network configuration to update")
     },
     {.name = "xml",
@@ -943,12 +956,10 @@ static const vshCmdOptDef opts_network_update[] = {
     {.name = NULL}
 };
 
-VIR_ENUM_DECL(virshNetworkUpdateCommand);
 VIR_ENUM_IMPL(virshNetworkUpdateCommand,
               VIR_NETWORK_UPDATE_COMMAND_LAST,
               "none", "modify", "delete", "add-last", "add-first");
 
-VIR_ENUM_DECL(virshNetworkSection);
 VIR_ENUM_IMPL(virshNetworkSection,
               VIR_NETWORK_SECTION_LAST,
               "none", "bridge", "domain", "ip", "ip-dhcp-host",
@@ -984,7 +995,7 @@ cmdNetworkUpdate(vshControl *ctl, const vshCmd *cmd)
         command = VIR_NETWORK_UPDATE_COMMAND_ADD_LAST;
     } else {
         command = virshNetworkUpdateCommandTypeFromString(commandStr);
-        if (command <= 0 || command >= VIR_NETWORK_UPDATE_COMMAND_LAST) {
+        if (command <= 0) {
             vshError(ctl, _("unrecognized command name '%s'"), commandStr);
             goto cleanup;
         }
@@ -994,7 +1005,7 @@ cmdNetworkUpdate(vshControl *ctl, const vshCmd *cmd)
         goto cleanup;
 
     section = virshNetworkSectionTypeFromString(sectionStr);
-    if (section <= 0 || section >= VIR_NETWORK_SECTION_LAST) {
+    if (section <= 0) {
         vshError(ctl, _("unrecognized section name '%s'"), sectionStr);
         goto cleanup;
     }
@@ -1488,7 +1499,7 @@ cmdNetworkPortCreate(vshControl *ctl, const vshCmd *cmd)
     virNetworkPortPtr port = NULL;
     const char *from = NULL;
     bool ret = false;
-    char *buffer = NULL;
+    g_autofree char *buffer = NULL;
     g_autoptr(virshNetwork) network = NULL;
     unsigned int flags = 0;
 
@@ -1521,7 +1532,6 @@ cmdNetworkPortCreate(vshControl *ctl, const vshCmd *cmd)
 
     ret = true;
  cleanup:
-    VIR_FREE(buffer);
     if (port)
         virNetworkPortFree(port);
     return ret;
@@ -1543,6 +1553,16 @@ static const vshCmdInfo info_network_port_dumpxml[] = {
 static const vshCmdOptDef opts_network_port_dumpxml[] = {
     VIRSH_COMMON_OPT_NETWORK_FULL(VIR_CONNECT_LIST_NETWORKS_ACTIVE),
     VIRSH_COMMON_OPT_NETWORK_PORT(0),
+    {.name = "xpath",
+     .type = VSH_OT_STRING,
+     .flags = VSH_OFLAG_REQ_OPT,
+     .completer = virshCompleteEmpty,
+     .help = N_("xpath expression to filter the XML document")
+    },
+    {.name = "wrap",
+     .type = VSH_OT_BOOL,
+     .help = N_("wrap xpath results in an common root element"),
+    },
     {.name = NULL}
 };
 
@@ -1552,8 +1572,10 @@ cmdNetworkPortDumpXML(vshControl *ctl, const vshCmd *cmd)
     g_autoptr(virshNetwork) network = NULL;
     virNetworkPortPtr port = NULL;
     bool ret = true;
-    g_autofree char *dump = NULL;
+    g_autofree char *xml = NULL;
     unsigned int flags = 0;
+    bool wrap = vshCommandOptBool(cmd, "wrap");
+    const char *xpath = NULL;
 
     if (!(network = virshCommandOptNetwork(ctl, cmd, NULL)))
         goto cleanup;
@@ -1561,13 +1583,13 @@ cmdNetworkPortDumpXML(vshControl *ctl, const vshCmd *cmd)
     if (!(port = virshCommandOptNetworkPort(ctl, cmd, network, NULL)))
         goto cleanup;
 
-    dump = virNetworkPortGetXMLDesc(port, flags);
+    if (vshCommandOptStringQuiet(ctl, cmd, "xpath", &xpath) < 0)
+        return false;
 
-    if (dump != NULL) {
-        vshPrint(ctl, "%s", dump);
-    } else {
-        ret = false;
-    }
+    if (!(xml = virNetworkPortGetXMLDesc(port, flags)))
+        goto cleanup;
+
+    ret = virshDumpXML(ctl, xml, "network-port", xpath, wrap);
 
  cleanup:
     if (port)
@@ -1697,8 +1719,7 @@ virshNetworkPortListCollect(vshControl *ctl,
 
  cleanup:
     if (!success) {
-        virshNetworkPortListFree(list);
-        list = NULL;
+        g_clear_pointer(&list, virshNetworkPortListFree);
     }
 
     return list;

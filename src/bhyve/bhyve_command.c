@@ -551,6 +551,7 @@ bhyveBuildSoundArgStr(const virDomainDef *def G_GNUC_UNUSED,
         case VIR_DOMAIN_AUDIO_TYPE_SDL:
         case VIR_DOMAIN_AUDIO_TYPE_SPICE:
         case VIR_DOMAIN_AUDIO_TYPE_FILE:
+        case VIR_DOMAIN_AUDIO_TYPE_DBUS:
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("unsupported audio backend '%s'"),
                            virDomainAudioTypeTypeToString(audio->type));
@@ -577,7 +578,7 @@ bhyveBuildFSArgStr(const virDomainDef *def G_GNUC_UNUSED,
 {
     g_auto(virBuffer) params = VIR_BUFFER_INITIALIZER;
 
-    switch ((virDomainFSType) fs->type) {
+    switch (fs->type) {
     case VIR_DOMAIN_FS_TYPE_MOUNT:
         break;
     case VIR_DOMAIN_FS_TYPE_BLOCK:
@@ -616,6 +617,7 @@ bhyveBuildFSArgStr(const virDomainDef *def G_GNUC_UNUSED,
         break;
     case VIR_DOMAIN_FS_ACCESSMODE_MAPPED:
     case VIR_DOMAIN_FS_ACCESSMODE_SQUASH:
+    case VIR_DOMAIN_FS_ACCESSMODE_DEFAULT:
     case VIR_DOMAIN_FS_ACCESSMODE_LAST:
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        _("unsupported filesystem accessmode '%s'"),
@@ -1052,6 +1054,9 @@ virBhyveGetBootDisk(virDomainDef *def)
         case VIR_DOMAIN_BOOT_DISK:
             boot_dev = VIR_DOMAIN_DISK_DEVICE_DISK;
             break;
+        case VIR_DOMAIN_BOOT_FLOPPY:
+        case VIR_DOMAIN_BOOT_NET:
+        case VIR_DOMAIN_BOOT_LAST:
         default:
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                            _("Cannot boot from device %s"),

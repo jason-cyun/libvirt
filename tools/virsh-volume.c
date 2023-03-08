@@ -236,7 +236,7 @@ cmdVolCreateAs(vshControl *ctl, const vshCmd *cmd)
     const char *snapshotStrVol = NULL, *snapshotStrFormat = NULL;
     unsigned long long capacity, allocation = 0;
     g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
-    unsigned long flags = 0;
+    unsigned int flags = 0;
     virshControl *priv = ctl->privData;
 
     if (vshCommandOptBool(cmd, "prealloc-metadata"))
@@ -380,6 +380,10 @@ static const vshCmdOptDef opts_vol_create[] = {
      .type = VSH_OT_BOOL,
      .help = N_("preallocate metadata (for qcow2 instead of full allocation)")
     },
+    {.name = "validate",
+     .type = VSH_OT_BOOL,
+     .help = N_("validate the XML against the schema")
+    },
     {.name = NULL}
 };
 
@@ -394,6 +398,9 @@ cmdVolCreate(vshControl *ctl, const vshCmd *cmd)
 
     if (vshCommandOptBool(cmd, "prealloc-metadata"))
         flags |= VIR_STORAGE_VOL_CREATE_PREALLOC_METADATA;
+
+    if (vshCommandOptBool(cmd, "validate"))
+        flags |= VIR_STORAGE_VOL_CREATE_VALIDATE;
 
     if (!(pool = virshCommandOptPool(ctl, cmd, "pool", NULL)))
         return false;
@@ -446,6 +453,10 @@ static const vshCmdOptDef opts_vol_create_from[] = {
      .type = VSH_OT_BOOL,
      .help = N_("use btrfs COW lightweight copy")
     },
+    {.name = "validate",
+     .type = VSH_OT_BOOL,
+     .help = N_("validate the XML against the schema")
+    },
     {.name = NULL}
 };
 
@@ -467,6 +478,9 @@ cmdVolCreateFrom(vshControl *ctl, const vshCmd *cmd)
 
     if (vshCommandOptBool(cmd, "reflink"))
         flags |= VIR_STORAGE_VOL_CREATE_REFLINK;
+
+    if (vshCommandOptBool(cmd, "validate"))
+        flags |= VIR_STORAGE_VOL_CREATE_VALIDATE;
 
     if (vshCommandOptStringReq(ctl, cmd, "file", &from) < 0)
         return false;
@@ -491,28 +505,22 @@ cmdVolCreateFrom(vshControl *ctl, const vshCmd *cmd)
     return true;
 }
 
-static xmlChar *
+static char *
 virshMakeCloneXML(const char *origxml, const char *newname)
 {
     g_autoptr(xmlDoc) doc = NULL;
     g_autoptr(xmlXPathContext) ctxt = NULL;
-    g_autoptr(xmlXPathObject) obj = NULL;
-    xmlChar *newxml = NULL;
-    int size;
+    xmlNodePtr node;
 
-    doc = virXMLParseStringCtxt(origxml, _("(volume_definition)"), &ctxt);
-    if (!doc)
+    if (!(doc = virXMLParseStringCtxt(origxml, _("(volume_definition)"), &ctxt)))
         return NULL;
 
-    obj = xmlXPathEval(BAD_CAST "/volume/name", ctxt);
-    if (obj == NULL || obj->nodesetval == NULL ||
-        obj->nodesetval->nodeTab == NULL)
+    if (!(node = virXPathNode("/volume/name", ctxt)))
         return NULL;
 
-    xmlNodeSetContent(obj->nodesetval->nodeTab[0], (const xmlChar *)newname);
-    xmlDocDumpMemory(doc, &newxml, &size);
+    xmlNodeSetContent(node, (const xmlChar *)newname);
 
-    return newxml;
+    return virXMLNodeToString(doc, doc->children);
 }
 
 /*
@@ -545,6 +553,10 @@ static const vshCmdOptDef opts_vol_clone[] = {
      .type = VSH_OT_BOOL,
      .help = N_("use btrfs COW lightweight copy")
     },
+    {.name = "print-xml",
+     .type = VSH_OT_BOOL,
+     .help = N_("print XML document rather than clone the volume")
+    },
     {.name = NULL}
 };
 
@@ -556,12 +568,11 @@ cmdVolClone(vshControl *ctl, const vshCmd *cmd)
     g_autoptr(virshStorageVol) newvol = NULL;
     const char *name = NULL;
     g_autofree char *origxml = NULL;
-    xmlChar *newxml = NULL;
-    bool ret = false;
+    g_autofree char *newxml = NULL;
     unsigned int flags = 0;
 
     if (!(origvol = virshCommandOptVol(ctl, cmd, "vol", "pool", NULL)))
-        goto cleanup;
+        return false;
 
     if (vshCommandOptBool(cmd, "prealloc-metadata"))
         flags |= VIR_STORAGE_VOL_CREATE_PREALLOC_METADATA;
@@ -572,38 +583,34 @@ cmdVolClone(vshControl *ctl, const vshCmd *cmd)
     origpool = virStoragePoolLookupByVolume(origvol);
     if (!origpool) {
         vshError(ctl, "%s", _("failed to get parent pool"));
-        goto cleanup;
+        return false;
     }
 
     if (vshCommandOptStringReq(ctl, cmd, "newname", &name) < 0)
-        goto cleanup;
+        return false;
 
-    origxml = virStorageVolGetXMLDesc(origvol, 0);
-    if (!origxml)
-        goto cleanup;
+    if (!(origxml = virStorageVolGetXMLDesc(origvol, 0)))
+        return false;
 
-    newxml = virshMakeCloneXML(origxml, name);
-    if (!newxml) {
+    if (!(newxml = virshMakeCloneXML(origxml, name))) {
         vshError(ctl, "%s", _("Failed to allocate XML buffer"));
-        goto cleanup;
+        return false;
     }
 
-    newvol = virStorageVolCreateXMLFrom(origpool, (char *) newxml, origvol, flags);
+    if (vshCommandOptBool(cmd, "print-xml")) {
+        vshPrint(ctl, "%s", newxml);
+        return true;
+    }
 
-    if (newvol != NULL) {
-        vshPrintExtra(ctl, _("Vol %s cloned from %s\n"),
-                      virStorageVolGetName(newvol), virStorageVolGetName(origvol));
-    } else {
+    if (!(newvol = virStorageVolCreateXMLFrom(origpool, newxml, origvol, flags))) {
         vshError(ctl, _("Failed to clone vol from %s"),
                  virStorageVolGetName(origvol));
-        goto cleanup;
+        return false;
     }
 
-    ret = true;
-
- cleanup:
-    xmlFree(newxml);
-    return ret;
+    vshPrintExtra(ctl, _("Vol %s cloned from %s\n"),
+                  virStorageVolGetName(newvol), virStorageVolGetName(origvol));
+    return true;
 }
 
 /*
@@ -902,12 +909,12 @@ static const vshCmdOptDef opts_vol_wipe[] = {
     VIRSH_COMMON_OPT_POOL_OPTIONAL,
     {.name = "algorithm",
      .type = VSH_OT_STRING,
+     .completer = virshStorageVolWipeAlgorithmCompleter,
      .help = N_("perform selected wiping algorithm")
     },
     {.name = NULL}
 };
 
-VIR_ENUM_DECL(virshStorageVolWipeAlgorithm);
 VIR_ENUM_IMPL(virshStorageVolWipeAlgorithm,
               VIR_STORAGE_VOL_WIPE_ALG_LAST,
               "zero", "nnsa", "dod", "bsi", "gutmann", "schneier",
@@ -1159,6 +1166,16 @@ static const vshCmdInfo info_vol_dumpxml[] = {
 static const vshCmdOptDef opts_vol_dumpxml[] = {
     VIRSH_COMMON_OPT_VOL_FULL,
     VIRSH_COMMON_OPT_POOL_OPTIONAL,
+    {.name = "xpath",
+     .type = VSH_OT_STRING,
+     .flags = VSH_OFLAG_REQ_OPT,
+     .completer = virshCompleteEmpty,
+     .help = N_("xpath expression to filter the XML document")
+    },
+    {.name = "wrap",
+     .type = VSH_OT_BOOL,
+     .help = N_("wrap xpath results in an common root element"),
+    },
     {.name = NULL}
 };
 
@@ -1166,21 +1183,20 @@ static bool
 cmdVolDumpXML(vshControl *ctl, const vshCmd *cmd)
 {
     g_autoptr(virshStorageVol) vol = NULL;
-    bool ret = true;
-    char *dump;
+    bool wrap = vshCommandOptBool(cmd, "wrap");
+    const char *xpath = NULL;
+    g_autofree char *xml = NULL;
 
     if (!(vol = virshCommandOptVol(ctl, cmd, "vol", "pool", NULL)))
         return false;
 
-    dump = virStorageVolGetXMLDesc(vol, 0);
-    if (dump != NULL) {
-        vshPrint(ctl, "%s", dump);
-        VIR_FREE(dump);
-    } else {
-        ret = false;
-    }
+    if (vshCommandOptStringQuiet(ctl, cmd, "xpath", &xpath) < 0)
+        return false;
 
-    return ret;
+    if (!(xml = virStorageVolGetXMLDesc(vol, 0)))
+        return false;
+
+    return virshDumpXML(ctl, xml, "volume", xpath, wrap);
 }
 
 static int
@@ -1298,8 +1314,7 @@ virshStorageVolListCollect(vshControl *ctl,
     VIR_FREE(names);
 
     if (!success) {
-        virshStorageVolListFree(list);
-        list = NULL;
+        g_clear_pointer(&list, virshStorageVolListFree);
     }
 
     return list;

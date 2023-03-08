@@ -23,7 +23,6 @@
 #include "qemu_conf.h"
 #include "qemu_domain.h"
 
-#include "virhash.h"
 #include "virjson.h"
 #include "viruri.h"
 
@@ -39,18 +38,6 @@ struct qemuBlockNodeNameBackingChainData {
     char *drvformat;
     char *drvstorage;
 };
-
-GHashTable *
-qemuBlockNodeNameGetBackingChain(virJSONValue *namednodesdata,
-                                 virJSONValue *blockstats);
-
-int
-qemuBlockNodeNamesDetect(virQEMUDriver *driver,
-                         virDomainObj *vm,
-                         qemuDomainAsyncJob asyncJob);
-
-GHashTable *
-qemuBlockGetNodeData(virJSONValue *data);
 
 bool
 qemuBlockStorageSourceSupportsConcurrentAccess(virStorageSource *src);
@@ -94,8 +81,6 @@ struct qemuBlockStorageSourceAttachData {
     bool formatAttached;
 
     char *driveCmd;
-    char *driveAlias;
-    bool driveAdded;
 
     virDomainChrSourceDef *chardevDef;
     char *chardevAlias;
@@ -114,6 +99,8 @@ struct qemuBlockStorageSourceAttachData {
     char *tlsAlias;
     virJSONValue *tlsKeySecretProps;
     char *tlsKeySecretAlias;
+
+    qemuFDPass *fdpass;
 };
 
 
@@ -129,8 +116,7 @@ qemuBlockStorageSourceAttachPrepareBlockdev(virStorageSource *src,
                                             bool autoreadonly);
 
 qemuBlockStorageSourceAttachData *
-qemuBlockStorageSourceDetachPrepare(virStorageSource *src,
-                                    char *driveAlias);
+qemuBlockStorageSourceDetachPrepare(virStorageSource *src);
 
 int
 qemuBlockStorageSourceAttachApply(qemuMonitor *mon,
@@ -141,9 +127,8 @@ qemuBlockStorageSourceAttachRollback(qemuMonitor *mon,
                                      qemuBlockStorageSourceAttachData *data);
 
 int
-qemuBlockStorageSourceDetachOneBlockdev(virQEMUDriver *driver,
-                                        virDomainObj *vm,
-                                        qemuDomainAsyncJob asyncJob,
+qemuBlockStorageSourceDetachOneBlockdev(virDomainObj *vm,
+                                        virDomainAsyncJob asyncJob,
                                         virStorageSource *src);
 
 struct _qemuBlockStorageSourceChainData {
@@ -163,9 +148,6 @@ qemuBlockStorageSourceChainDataFree(qemuBlockStorageSourceChainData *data);
 qemuBlockStorageSourceChainData *
 qemuBlockStorageSourceChainDetachPrepareBlockdev(virStorageSource *src);
 qemuBlockStorageSourceChainData *
-qemuBlockStorageSourceChainDetachPrepareDrive(virStorageSource *src,
-                                              char *driveAlias);
-qemuBlockStorageSourceChainData *
 qemuBlockStorageSourceChainDetachPrepareChardev(char *chardevAlias);
 
 int
@@ -179,12 +161,6 @@ qemuBlockStorageSourceChainDetach(qemuMonitor *mon,
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(qemuBlockStorageSourceChainData,
                         qemuBlockStorageSourceChainDataFree);
-
-int
-qemuBlockSnapshotAddLegacy(virJSONValue *actions,
-                           virDomainDiskDef *disk,
-                           virStorageSource *newsrc,
-                           bool reuse);
 
 int
 qemuBlockSnapshotAddBlockdev(virJSONValue *actions,
@@ -213,7 +189,7 @@ qemuBlockStorageSourceCreate(virDomainObj *vm,
                              virStorageSource *backingStore,
                              virStorageSource *chain,
                              qemuBlockStorageSourceAttachData *data,
-                             qemuDomainAsyncJob asyncJob);
+                             virDomainAsyncJob asyncJob);
 
 int
 qemuBlockStorageSourceCreateDetectSize(GHashTable *blockNamedNodeData,
@@ -233,7 +209,7 @@ qemuBlockNamedNodeDataGetBitmapByName(GHashTable *blockNamedNodeData,
 
 GHashTable *
 qemuBlockGetNamedNodeData(virDomainObj *vm,
-                          qemuDomainAsyncJob asyncJob);
+                          virDomainAsyncJob asyncJob);
 
 int
 qemuBlockGetBitmapMergeActions(virStorageSource *topsrc,
@@ -272,11 +248,11 @@ qemuBlockReopenFormatMon(qemuMonitor *mon,
 int
 qemuBlockReopenReadWrite(virDomainObj *vm,
                          virStorageSource *src,
-                         qemuDomainAsyncJob asyncJob);
+                         virDomainAsyncJob asyncJob);
 int
 qemuBlockReopenReadOnly(virDomainObj *vm,
                         virStorageSource *src,
-                        qemuDomainAsyncJob asyncJob);
+                        virDomainAsyncJob asyncJob);
 
 bool
 qemuBlockStorageSourceNeedsStorageSliceLayer(const virStorageSource *src);
@@ -298,8 +274,29 @@ qemuBlockExportGetNBDProps(const char *nodename,
 
 int
 qemuBlockExportAddNBD(virDomainObj *vm,
-                      const char *drivealias,
                       virStorageSource *src,
                       const char *exportname,
                       bool writable,
                       const char *bitmap);
+
+qemuBlockJobData *
+qemuBlockCommit(virDomainObj *vm,
+                virDomainDiskDef *disk,
+                virStorageSource *baseSource,
+                virStorageSource *topSource,
+                virStorageSource *top_parent,
+                unsigned long long bandwidth,
+                virDomainAsyncJob asyncJob,
+                virTristateBool autofinalize,
+                unsigned int flags);
+
+int
+qemuBlockPivot(virDomainObj *vm,
+               qemuBlockJobData *job,
+               virDomainAsyncJob asyncJob,
+               virDomainDiskDef *disk);
+
+int
+qemuBlockFinalize(virDomainObj *vm,
+                  qemuBlockJobData *job,
+                  virDomainAsyncJob asyncJob);

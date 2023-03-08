@@ -30,12 +30,10 @@
 #include "qemu/qemu_processpriv.h"
 #include "qemu/qemu_monitor.h"
 #include "qemu/qemu_agent.h"
-#include "qemu/qemu_qapi.h"
 #include "rpc/virnetsocket.h"
 #include "viralloc.h"
 #include "virlog.h"
 #include "virerror.h"
-#include "virstring.h"
 #include "vireventthread.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
@@ -253,12 +251,11 @@ qemuMonitorTestIO(virNetSocket *sock,
 {
     qemuMonitorTest *test = opaque;
     bool err = false;
+    VIR_LOCK_GUARD lock = virLockGuardLock(&test->lock);
 
-    virMutexLock(&test->lock);
-    if (test->quit) {
-        virMutexUnlock(&test->lock);
+    if (test->quit)
         return;
-    }
+
     if (events & VIR_EVENT_HANDLE_WRITABLE) {
         ssize_t ret;
         if ((ret = virNetSocketWrite(sock,
@@ -327,8 +324,7 @@ qemuMonitorTestIO(virNetSocket *sock,
     if (err) {
         virNetSocketRemoveIOCallback(sock);
         virNetSocketClose(sock);
-        virObjectUnref(test->client);
-        test->client = NULL;
+        g_clear_pointer(&test->client, virObjectUnref);
     } else {
         events = VIR_EVENT_HANDLE_READABLE;
 
@@ -337,7 +333,6 @@ qemuMonitorTestIO(virNetSocket *sock,
 
         virNetSocketUpdateIOCallback(sock, events);
     }
-    virMutexUnlock(&test->lock);
 }
 
 
@@ -346,24 +341,22 @@ qemuMonitorTestWorker(void *opaque)
 {
     qemuMonitorTest *test = opaque;
 
-    virMutexLock(&test->lock);
-
-    while (!test->quit) {
-        virMutexUnlock(&test->lock);
-
-        if (virEventRunDefaultImpl() < 0) {
-            virMutexLock(&test->lock);
-            test->quit = true;
-            break;
+    while (true) {
+        VIR_WITH_MUTEX_LOCK_GUARD(&test->lock) {
+            if (test->quit) {
+                test->running = false;
+                return;
+            }
         }
 
-        virMutexLock(&test->lock);
+        if (virEventRunDefaultImpl() < 0) {
+            VIR_WITH_MUTEX_LOCK_GUARD(&test->lock) {
+                test->quit = true;
+                test->running = false;
+                return;
+            }
+        }
     }
-
-    test->running = false;
-
-    virMutexUnlock(&test->lock);
-    return;
 }
 
 
@@ -384,13 +377,13 @@ qemuMonitorTestFree(qemuMonitorTest *test)
     if (!test)
         return;
 
-    virMutexLock(&test->lock);
-    if (test->running) {
-        test->quit = true;
-        /* HACK: Add a dummy timeout to break event loop */
-        timer = virEventAddTimeout(0, qemuMonitorTestFreeTimer, NULL, NULL);
+    VIR_WITH_MUTEX_LOCK_GUARD(&test->lock) {
+        if (test->running) {
+            test->quit = true;
+            /* HACK: Add a dummy timeout to break event loop */
+            timer = virEventAddTimeout(0, qemuMonitorTestFreeTimer, NULL, NULL);
+        }
     }
-    virMutexUnlock(&test->lock);
 
     if (test->client) {
         virNetSocketRemoveIOCallback(test->client);
@@ -464,9 +457,9 @@ qemuMonitorTestAddHandler(qemuMonitorTest *test,
     item->freecb = freecb;
     item->opaque = opaque;
 
-    virMutexLock(&test->lock);
-    VIR_APPEND_ELEMENT(test->items, test->nitems, item);
-    virMutexUnlock(&test->lock);
+    VIR_WITH_MUTEX_LOCK_GUARD(&test->lock) {
+        VIR_APPEND_ELEMENT(test->items, test->nitems, item);
+    }
 
     return 0;
 }
@@ -648,7 +641,8 @@ qemuMonitorTestProcessCommandVerbatim(qemuMonitorTest *test,
         ret = qemuMonitorTestAddResponse(test, data->response);
     } else {
         if (data->cmderr) {
-            qemuMonitorTestError("%s: %s", data->cmderr, cmdstr);
+            qemuMonitorTestError("%s: %s expected %s",
+                                 data->cmderr, cmdstr, data->command_name);
         } else {
             qemuMonitorTestErrorInvalidCommand(data->command_name, cmdstr);
         }
@@ -957,16 +951,14 @@ qemuMonitorTestAddItemExpect(qemuMonitorTest *test,
 
 static void
 qemuMonitorTestEOFNotify(qemuMonitor *mon G_GNUC_UNUSED,
-                         virDomainObj *vm G_GNUC_UNUSED,
-                         void *opaque G_GNUC_UNUSED)
+                         virDomainObj *vm G_GNUC_UNUSED)
 {
 }
 
 
 static void
 qemuMonitorTestErrorNotify(qemuMonitor *mon G_GNUC_UNUSED,
-                           virDomainObj *vm G_GNUC_UNUSED,
-                           void *opaque G_GNUC_UNUSED)
+                           virDomainObj *vm G_GNUC_UNUSED)
 {
 }
 
@@ -1072,16 +1064,11 @@ qemuMonitorCommonTestInit(qemuMonitorTest *test)
                                   NULL) < 0)
         return -1;
 
-    virMutexLock(&test->lock);
-    if (virThreadCreate(&test->thread,
-                        true,
-                        qemuMonitorTestWorker,
-                        test) < 0) {
-        virMutexUnlock(&test->lock);
-        return -1;
+    VIR_WITH_MUTEX_LOCK_GUARD(&test->lock) {
+        if (virThreadCreate(&test->thread, true, qemuMonitorTestWorker, test) < 0)
+            return -1;
+        test->started = test->running = true;
     }
-    test->started = test->running = true;
-    virMutexUnlock(&test->lock);
 
     return 0;
 }
@@ -1105,7 +1092,6 @@ qemuMonitorCommonTestInit(qemuMonitorTest *test)
 qemuMonitorTest *
 qemuMonitorTestNew(virDomainXMLOption *xmlopt,
                    virDomainObj *vm,
-                   virQEMUDriver *driver,
                    const char *greeting,
                    GHashTable *schema)
 {
@@ -1123,11 +1109,8 @@ qemuMonitorTestNew(virDomainXMLOption *xmlopt,
     test->qapischema = schema;
     if (!(test->mon = qemuMonitorOpen(test->vm,
                                       &src,
-                                      true,
-                                      0,
                                       virEventThreadGetContext(test->eventThread),
-                                      &qemuMonitorTestCallbacks,
-                                      driver)))
+                                      &qemuMonitorTestCallbacks)))
         goto error;
 
     virObjectLock(test->mon);
@@ -1199,7 +1182,7 @@ qemuMonitorTestNewFromFile(const char *fileName,
                     return NULL;
             } else {
                 /* Create new mocked monitor with our greeting */
-                if (!(test = qemuMonitorTestNew(xmlopt, NULL, NULL,
+                if (!(test = qemuMonitorTestNew(xmlopt, NULL,
                                                 singleReply, NULL)))
                     return NULL;
             }
@@ -1278,6 +1261,100 @@ qemuMonitorTestFullAddItem(qemuMonitorTest *test,
 
 
 /**
+ * qemuMonitorTestProcessFileEntries:
+ * @inputstr: input file contents (modified)
+ * @fileName: File name of @inputstr (for error reporting)
+ * @items: filled with command, reply tuples
+ * @nitems: Count of elements in @items.
+ *
+ * Process a monitor interaction file.
+ *
+ * The file contains a sequence of JSON commands and reply objects separated by
+ * empty lines. A command is followed by a reply.
+ */
+int
+qemuMonitorTestProcessFileEntries(char *inputstr,
+                                  const char *fileName,
+                                  struct qemuMonitorTestCommandReplyTuple **items,
+                                  size_t *nitems)
+{
+    size_t nalloc = 0;
+    char *tmp = inputstr;
+    size_t line = 0;
+    char *command = inputstr;
+    char *response = NULL;
+    size_t commandln = 0;
+
+    *items = NULL;
+    *nitems = 0;
+
+    while ((tmp = strchr(tmp, '\n'))) {
+        line++;
+
+        /* eof */
+        if (!tmp[1])
+            break;
+
+        /* concatenate block which was broken up for readability */
+        if (*(tmp + 1) != '\n') {
+            *tmp = ' ';
+            tmp++;
+            continue;
+        }
+
+        /* We've seen a new line, increment the counter */
+        line++;
+
+        /* Cut off a single reply. */
+        *(tmp + 1) = '\0';
+
+        if (response) {
+            struct qemuMonitorTestCommandReplyTuple *item;
+
+            VIR_RESIZE_N(*items, nalloc, *nitems, 1);
+
+            item = *items + *nitems;
+
+            item->command = g_steal_pointer(&command);
+            item->reply = g_steal_pointer(&response);
+            item->line = commandln;
+            (*nitems)++;
+        }
+
+        /* Move the @tmp and @singleReply. */
+        tmp += 2;
+
+        if (!command) {
+            commandln = line;
+            command = tmp;
+        } else {
+            response = tmp;
+        }
+    }
+
+    if (command) {
+        struct qemuMonitorTestCommandReplyTuple *item;
+
+        if (!response) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "missing response for command "
+                           "on line '%zu' in '%s'", commandln, fileName);
+            return -1;
+        }
+
+        VIR_RESIZE_N(*items, nalloc, *nitems, 1);
+
+        item = *items + *nitems;
+
+        item->command = g_steal_pointer(&command);
+        item->reply = g_steal_pointer(&response);
+        item->line = commandln;
+        (*nitems)++;
+    }
+
+    return 0;
+}
+
+/**
  * qemuMonitorTestNewFromFileFull:
  * @fileName: File name to load monitor replies from
  * @driver: qemu driver object
@@ -1301,67 +1378,24 @@ qemuMonitorTestNewFromFileFull(const char *fileName,
 {
     g_autoptr(qemuMonitorTest) ret = NULL;
     g_autofree char *jsonstr = NULL;
-    char *tmp;
-    size_t line = 0;
-
-    char *command = NULL;
-    char *response = NULL;
-    size_t commandln = 0;
+    g_autofree struct qemuMonitorTestCommandReplyTuple *items = NULL;
+    size_t nitems = 0;
+    size_t i;
 
     if (virTestLoadFile(fileName, &jsonstr) < 0)
         return NULL;
 
-    if (!(ret = qemuMonitorTestNew(driver->xmlopt, vm, driver, NULL,
-                                   qmpschema)))
+    if (!(ret = qemuMonitorTestNew(driver->xmlopt, vm, NULL, qmpschema)))
         return NULL;
 
-    tmp = jsonstr;
-    command = tmp;
-    while ((tmp = strchr(tmp, '\n'))) {
-        line++;
+    if (qemuMonitorTestProcessFileEntries(jsonstr, fileName, &items, &nitems) < 0)
+        return NULL;
 
-        /* eof */
-        if (!tmp[1])
-            break;
+    for (i = 0; i < nitems; i++) {
+        struct qemuMonitorTestCommandReplyTuple *item = items + i;
 
-        /* concatenate block which was broken up for readability */
-        if (*(tmp + 1) != '\n') {
-            *tmp = ' ';
-            tmp++;
-            continue;
-        }
-
-        /* Cut off a single reply. */
-        *(tmp + 1) = '\0';
-
-        if (response) {
-            if (qemuMonitorTestFullAddItem(ret, fileName, command,
-                                           response, commandln) < 0)
-                return NULL;
-            command = NULL;
-            response = NULL;
-        }
-
-        /* Move the @tmp and @singleReply. */
-        tmp += 2;
-
-        if (!command) {
-            commandln = line;
-            command = tmp;
-        } else {
-            response = tmp;
-        }
-    }
-
-    if (command) {
-        if (!response) {
-            virReportError(VIR_ERR_INTERNAL_ERROR, "missing response for command "
-                           "on line '%zu' in '%s'", commandln, fileName);
-            return NULL;
-        }
-
-        if (qemuMonitorTestFullAddItem(ret, fileName, command,
-                                       response, commandln) < 0)
+        if (qemuMonitorTestFullAddItem(ret, fileName, item->command, item->reply,
+                                       item->line) < 0)
             return NULL;
     }
 
@@ -1386,8 +1420,7 @@ qemuMonitorTestNewAgent(virDomainXMLOption *xmlopt)
     if (!(test->agent = qemuAgentOpen(test->vm,
                                       &src,
                                       virEventThreadGetContext(test->eventThread),
-                                      &qemuMonitorTestAgentCallbacks,
-                                      false)))
+                                      &qemuMonitorTestAgentCallbacks)))
         goto error;
 
     virObjectLock(test->agent);

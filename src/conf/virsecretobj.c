@@ -54,7 +54,7 @@ struct _virSecretObjList {
     virObjectRWLockable parent;
 
     /* uuid string -> virSecretObj  mapping
-     * for O(1), lockless lookup-by-uuid */
+     * for O(1), lookup-by-uuid */
     GHashTable *objs;
 };
 
@@ -103,8 +103,7 @@ virSecretObjEndAPI(virSecretObj **obj)
         return;
 
     virObjectUnlock(*obj);
-    virObjectUnref(*obj);
-    *obj = NULL;
+    g_clear_pointer(obj, virObjectUnref);
 }
 
 
@@ -119,7 +118,7 @@ virSecretObjListNew(void)
     if (!(secrets = virObjectRWLockableNew(virSecretObjListClass)))
         return NULL;
 
-    if (!(secrets->objs = virHashNew(virObjectFreeHashData))) {
+    if (!(secrets->objs = virHashNew(virObjectUnref))) {
         virObjectUnref(secrets);
         return NULL;
     }
@@ -871,7 +870,7 @@ virSecretLoad(virSecretObjList *secrets,
     virSecretDef *def = NULL;
     virSecretObj *obj = NULL;
 
-    if (!(def = virSecretDefParseFile(path)))
+    if (!(def = virSecretDefParse(NULL, path, 0)))
         goto cleanup;
 
     if (virSecretLoadValidateUUID(def, file) < 0)
@@ -882,8 +881,7 @@ virSecretLoad(virSecretObjList *secrets,
 
     if (virSecretLoadValue(obj) < 0) {
         virSecretObjListRemove(secrets, obj);
-        virObjectUnref(obj);
-        obj = NULL;
+        g_clear_pointer(&obj, virObjectUnref);
     }
 
  cleanup:

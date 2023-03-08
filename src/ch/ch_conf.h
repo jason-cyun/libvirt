@@ -36,13 +36,19 @@ struct _virCHDriverConfig {
     char *stateDir;
     char *logDir;
 
+    int cgroupControllers;
+
     uid_t user;
     gid_t group;
 };
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCHDriverConfig, virObjectUnref);
+
 struct _virCHDriver
 {
     virMutex lock;
+
+    bool privileged;
 
     /* Require lock to get a reference on the object,
      * lockless access thereafter */
@@ -72,13 +78,3 @@ virDomainXMLOption *chDomainXMLConfInit(virCHDriver *driver);
 virCHDriverConfig *virCHDriverConfigNew(bool privileged);
 virCHDriverConfig *virCHDriverGetConfig(virCHDriver *driver);
 int chExtractVersion(virCHDriver *driver);
-
-static inline void chDriverLock(virCHDriver *driver)
-{
-    virMutexLock(&driver->lock);
-}
-
-static inline void chDriverUnlock(virCHDriver *driver)
-{
-    virMutexUnlock(&driver->lock);
-}

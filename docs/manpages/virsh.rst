@@ -895,7 +895,7 @@ domain capabilities XML (printed by ``domcapabilities`` command). In
 addition to the <cpu> element itself, this command accepts
 full domain XML, capabilities XML, or domain capabilities XML containing
 the CPU definition. For more information on guest CPU definition see:
-`https://libvirt.org/formatdomain.html#elementsCPU <https://libvirt.org/formatdomain.html#elementsCPU>`__. If *--error* is
+`https://libvirt.org/formatdomain.html#elementsCPU <https://libvirt.org/formatdomain.html#cpu-model-and-topology>`__. If *--error* is
 specified, the command will return an error when the given CPU is
 incompatible with host CPU and a message providing more details about the
 incompatibility will be printed out. If *--validate* is specified, validates
@@ -943,7 +943,7 @@ host CPU model found in the domain capabilities XML (printed by the
 ``domcapabilities`` command). In addition to the <cpu> element itself, this
 command accepts full domain XML, capabilities XML, or domain capabilities XML
 containing the CPU definition. For more information on guest CPU definition
-see: `https://libvirt.org/formatdomain.html#elementsCPU <https://libvirt.org/formatdomain.html#elementsCPU>`__.
+see: `https://libvirt.org/formatdomain.html#elementsCPU <https://libvirt.org/formatdomain.html#cpu-model-and-topology>`__.
 
 The *virttype* option specifies the virtualization type (usable in the 'type'
 attribute of the <domain> top level element from the domain XML). *emulator*
@@ -962,12 +962,17 @@ hypervisor-cpu-baseline
 
 ::
 
-   hypervisor-cpu-baseline FILE [virttype] [emulator] [arch] [machine] [--features] [--migratable]
+   hypervisor-cpu-baseline [FILE] [virttype] [emulator] [arch] [machine]
+      [--features] [--migratable] [model]
 
 Compute a baseline CPU which will be compatible with all CPUs defined in an XML
 *file* and with the CPU the hypervisor is able to provide on the host. (This
 is different from ``cpu-baseline`` which does not consider any hypervisor
 abilities when computing the baseline CPU.)
+
+As an alternative for *FILE* in case the XML would only contain a CPU model
+with no additional features the CPU model name itself can be passed as *model*.
+Exactly one of *FILE* and *model* must be used.
 
 The XML *FILE* may contain either host or guest CPU definitions describing the
 host CPU model. The host CPU definition is the <cpu> element and its contents
@@ -981,10 +986,13 @@ fail or provide unexpected results.
 
 When *FILE* contains only a single CPU definition, the command will print the
 same CPU with restrictions imposed by the capabilities of the hypervisor.
-Specifically, running th ``virsh hypervisor-cpu-baseline`` command with no
+Specifically, running the ``virsh hypervisor-cpu-baseline`` command with no
 additional options on the result of ``virsh domcapabilities`` will transform the
 host CPU model from domain capabilities XML to a form directly usable in domain
-XML.
+XML. Running the command with *model* (or *FILE* containing just a single CPU
+definition with model and no feature elements) which is marked as unusable in
+``virsh domcapabilities`` will provide a list of features that block this CPU
+model from being usable.
 
 The *virttype* option specifies the virtualization type (usable in the 'type'
 attribute of the <domain> top level element from the domain XML). *emulator*
@@ -1232,7 +1240,7 @@ blockcopy
       [--shallow] [--reuse-external] [bandwidth]
       [--wait [--async] [--verbose]] [{--pivot | --finish}]
       [--timeout seconds] [granularity] [buf-size] [--bytes]
-      [--transient-job] [--synchronous-writes]
+      [--transient-job] [--synchronous-writes] [--print-xml]
 
 Copy a disk backing image chain to a destination.  Either *dest* as
 the destination file name, or *--xml* with the name of an XML file containing
@@ -1297,6 +1305,8 @@ to be propagated both to the original image and to the destination of the copy
 so that it's guaranteed that the job converges if the destination storage is
 slower. This may impact performance of writes while the blockjob is running.
 
+If *--print-xml* is specified, then the XML used to start the block copy job
+is printed instead of starting the job.
 
 blockjob
 --------
@@ -1455,7 +1465,7 @@ create
 ::
 
    create FILE [--console] [--paused] [--autodestroy]
-      [--pass-fds N,M,...] [--validate]
+      [--pass-fds N,M,...] [--validate] [--reset-nvram]
 
 Create a domain from an XML <file>. Optionally, *--validate* option can be
 passed to validate the format of the input XML file against an internal RNG
@@ -1477,6 +1487,9 @@ If *--pass-fds* is specified, the argument is a comma separated list
 of open file descriptors which should be pass on into the guest. The
 file descriptors will be re-numbered in the guest, starting from 3. This
 is only supported with container based virtualization.
+
+If *--reset-nvram* is specified, any existing NVRAM file will be deleted
+and re-initialized from its pristine template.
 
 **Example:**
 
@@ -1563,7 +1576,7 @@ destroy
 
 ::
 
-   destroy domain [--graceful]
+   destroy domain [--graceful] [--remove-logs]
 
 Immediately terminate the domain *domain*.  This doesn't give the domain
 OS any chance to react, and it's the equivalent of ripping the power
@@ -1582,6 +1595,11 @@ If *--graceful* is specified, don't resort to extreme measures
 (e.g. SIGKILL) when the guest doesn't stop after a reasonable timeout;
 return an error instead.
 
+If *--remove-logs* is specified, remove per *domain* log files. Not all
+deployment configuration can be supported.
+
+In case of QEMU the flag is only supported if virlogd is used to handle QEMU
+process output. Otherwise the flag is ignored.
 
 
 domblkerror
@@ -1714,13 +1732,16 @@ domdirtyrate-calc
 ::
 
    domdirtyrate-calc <domain> [--seconds <sec>]
+      --mode=[page-sampling | dirty-bitmap | dirty-ring]
 
 Calculate an active domain's memory dirty rate which may be expected by
 user in order to decide whether it's proper to be migrated out or not.
 The ``seconds`` parameter can be used to calculate dirty rate in a
 specific time which allows 60s at most now and would be default to 1s
-if missing. The calculated dirty rate information is available by calling
-'domstats --dirtyrate'.
+if missing. These three *page-sampling, dirty-bitmap, dirty-ring* modes
+are mutually exclusive and alternative when specify calculation mode,
+*page-sampling* is the default mode if missing. The calculated dirty
+rate information is available by calling 'domstats --dirtyrate'.
 
 
 domdisplay
@@ -1869,13 +1890,16 @@ domif-setlink
 
 ::
 
-   domif-setlink domain interface-device state [--config]
+   domif-setlink domain interface-device state [--config] [--print-xml]
 
 Modify link state of the domain's virtual interface. Possible values for
 state are "up" and "down". If *--config* is specified, only the persistent
 configuration of the domain is modified, for compatibility purposes,
 *--persistent* is alias of *--config*.
 *interface-device* can be the interface's target name or the MAC address.
+
+If *--print-xml* is specified, then the XML used to update the interface is
+printed instead.
 
 
 domifaddr
@@ -1946,10 +1970,16 @@ backup-dumpxml
 
 ::
 
-   backup-dumpxml domain
+   backup-dumpxml [--xpath EXPRESSION] [--wrap] domain
 
 Output XML describing the current backup job.
 
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 domiflist
 ---------
@@ -1982,7 +2012,8 @@ interface stats are only available for interfaces that have a
 physical source interface. This does not include, for example, a
 'user' interface type since it is a virtual LAN with NAT to the
 outside world. *interface-device* can be the interface target by
-name or MAC address.
+name or MAC address. Please note, for an unmanaged *ethernet*
+type returned stats might have RX/TX swapped.
 
 
 domiftune
@@ -2006,7 +2037,8 @@ inbound or outbound bandwidth. *average,peak,burst,floor* is the same as
 in command *attach-interface*.  Values for *average*, *peak* and *floor*
 are expressed in kilobytes per second, while *burst* is expressed in kilobytes
 in a single burst at *peak* speed as described in the Network XML
-documentation at `https://libvirt.org/formatnetwork.html#elementQoS <https://libvirt.org/formatnetwork.html#elementQoS>`__.
+documentation at
+`https://libvirt.org/formatnetwork.html#quality-of-service <https://libvirt.org/formatnetwork.html#quality-of-service>`__.
 
 To clear inbound or outbound settings, use *--inbound* or *--outbound*
 respectfully with average value of zero.
@@ -2039,9 +2071,15 @@ domjobabort
 
 ::
 
-   domjobabort domain
+   domjobabort domain [--postcopy]
 
 Abort the currently running domain job.
+
+When the job to be aborted is a migration which entered post-copy mode, it
+cannot be aborted as none of the hosts involved in migration has a complete
+state of the domain. Optional *--postcopy* can be used to interrupt such
+migration although doing so may effectively suspend the domain until the
+migration is resumed (see also *--postcopy-resume* option of ``migrate``).
 
 
 domjobinfo
@@ -2086,6 +2124,31 @@ with a running domain.
 The set of parameters reported will vary depending on which type of
 launch security protection is active. If none is active, no parameters
 will be reported.
+
+
+domsetlaunchsecstate
+--------------------
+
+**Syntax:**
+
+::
+
+   domsetlaunchsecstate domain --secrethdr hdr-filename
+       --secret secret-filename [--set-address address]
+
+Set a launch security secret in the guest's memory. The guest must have a
+launchSecurity type enabled in its configuration and be in a paused state.
+On success, the guest can be transitioned to a running state. On failure,
+the guest should be destroyed.
+
+*--secrethdr* specifies a filename containing the base64-encoded secret header.
+The header includes artifacts needed by the hypervisor firmware to recover the
+plain text of the launch secret. *--secret* specifies the filename containing
+the base64-encoded encrypted launch secret.
+
+The *--set-address* option can be used to specify a physical address within
+the guest's memory to set the secret. If not specified, the address will be
+determined by the hypervisor.
 
 
 dommemstat
@@ -2238,7 +2301,7 @@ domstats
 
    domstats [--raw] [--enforce] [--backing] [--nowait] [--state]
       [--cpu-total] [--balloon] [--vcpu] [--interface]
-      [--block] [--perf] [--iothread] [--memory] [--dirtyrate]
+      [--block] [--perf] [--iothread] [--memory] [--dirtyrate] [--vm]
       [[--list-active] [--list-inactive]
        [--list-persistent] [--list-transient] [--list-running]y
        [--list-paused] [--list-shutoff] [--list-other]] | [domain ...]
@@ -2258,7 +2321,7 @@ The individual statistics groups are selectable via specific flags. By
 default all supported statistics groups are returned. Supported
 statistics groups flags are: *--state*, *--cpu-total*, *--balloon*,
 *--vcpu*, *--interface*, *--block*, *--perf*, *--iothread*, *--memory*,
-*--dirtyrate*.
+*--dirtyrate*, *--vm*.
 
 Note that - depending on the hypervisor type and version or the domain state
 - not all of the following statistics may be returned.
@@ -2340,6 +2403,28 @@ When selecting the *--state* group the following fields are returned:
   host scheduler, but was waiting in the queue instead of running.
   Exposed to the VM as a steal time.
 
+This group of statistics also reports additional hypervisor-originating per-vCPU
+stats. The hypervisor-specific statistics in this group have the following
+naming scheme:
+
+ ``vcpu.<num>.$NAME.$TYPE``
+
+ ``$NAME``
+   name of the statistics field provided by the hypervisor
+
+ ``$TYPE``
+   Type of the value. The following types are returned:
+
+   ``cur``
+     current instant value
+   ``sum``
+     aggregate value
+   ``max``
+     peak value
+
+ The returned value may be either an unsigned long long or a boolean. Meaning
+ is hypervisor specific. Please see the disclaimer for the *--vm* group which
+ also consists of hypervisor-specific stats.
 
 
 *--interface* returns:
@@ -2469,7 +2554,43 @@ not available for statistical purposes.
   calculation.
 * ``dirtyrate.megabytes_per_second`` - the calculated memory dirty
   rate in MiB/s.
+* ``dirtyrate.calc_mode`` - the calculation mode used last measurement
+  (``page-sampling``/``dirty-bitmap``/``dirty-ring``)
+* ``dirtyrate.vcpu.<num>.megabytes_per_second`` - the calculated memory dirty
+  rate for a virtual cpu in MiB/s
 
+*--vm* returns:
+
+The *--vm* option enables reporting of hypervisor-specific statistics. Naming
+and meaning of the fields is entirely hypervisor dependent.
+
+The statistics in this group have the following naming scheme:
+
+ ``vm.$NAME.$TYPE``
+
+ ``$NAME``
+   name of the statistics field provided by the hypervisor
+
+ ``$TYPE``
+   Type of the value. The following types are returned:
+
+   ``cur``
+     current instant value
+   ``sum``
+     aggregate value
+   ``max``
+     peak value
+
+ The returned value may be either an unsigned long long or a boolean.
+
+ **WARNING**: The stats reported in this group are runtime-collected and
+ hypervisor originated, thus fall outside of the usual stable API
+ policies of libvirt.
+
+ Libvirt can't guarantee that the statistics reported from the outside
+ source will be present in further versions of the hypervisor, or that
+ naming or meaning will stay consistent. Changes to existing fields,
+ however, are expected to be rare.
 
 Selecting a specific statistics groups doesn't guarantee that the
 daemon supports the selected group of stats. Flag *--enforce*
@@ -2603,7 +2724,8 @@ dumpxml
 
 ::
 
-   dumpxml domain [--inactive] [--security-info] [--update-cpu] [--migratable]
+   dumpxml [--inactive] [--security-info] [--update-cpu] [--migratable]
+           [--xpath EXPRESSION] [--wrap] domain
 
 Output the domain information as an XML dump to stdout, this format can be used
 by the ``create`` command. Additional options affecting the XML dump may be
@@ -2615,6 +2737,13 @@ host CPU. With *--migratable* one can request an XML that is suitable for
 migrations, i.e., compatible with older libvirt releases and possibly amended
 with internal run-time options. This option may automatically enable other
 options (*--update-cpu*, *--security-info*, ...) as necessary.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 edit
@@ -2743,11 +2872,14 @@ Note that this command requires a guest agent to be configured and running in
 the domain's guest OS.
 
 When run without any arguments, this command prints all information types that
-are supported by the guest agent. You can limit the types of information that
-are returned by specifying one or more flags.  If a requested information
-type is not supported, the processes will provide an exit code of 1.
-Available information types flags are *--user*, *--os*,
+are supported by the guest agent at that point, omitting unavailable ones.
+Success is always reported in this case.
+
+You can limit the types of information that are returned by specifying one or
+more flags.  Available information types flags are *--user*, *--os*,
 *--timezone*, *--hostname*, *--filesystem*, *--disk* and *--interface*.
+If an explicitly requested information type is not supported by the guest agent
+at that point, the processes will provide an exit code of 1.
 
 Note that depending on the hypervisor type and the version of the guest agent
 running within the domain, not all of the following information may be
@@ -2947,7 +3079,8 @@ iothreadset
 ::
 
    iothreadset domain iothread_id [[--poll-max-ns ns] [--poll-grow factor]
-      [--poll-shrink divisor]]
+      [--poll-shrink divisor] [--thread-pool-min value]
+      [--thread-pool-max value]]
       [[--config] [--live] | [--current]]
 
 Modifies an existing iothread of the domain using the specified
@@ -2963,6 +3096,16 @@ the default quotient will be used. The polling values are purely dynamic
 for a running guest. Saving, destroying, stopping, etc. the guest will
 result in the polling values returning to hypervisor defaults at the
 next start, restore, etc.
+
+The *--thread-pool-min* and *--thread-pool-max* options then set lower and
+upper bound, respectively of number of threads in worker pool of given
+iothread. For changes to an inactive configuration -1 can be specified to
+remove corresponding boundary from the domain configuration. For changes to a
+running guest it's recommended to set the upper boundary first
+(*--thread-pool-max*) and only after that set the lower boundary
+(*--thread-pool-min*). It is allowed for the lower boundary to be the same as
+the upper boundary, however it's not allowed for the upper boundary to be value
+of zero.
 
 If *--live* is specified, affect a running guest. If the guest is not
 running an error is returned.
@@ -3027,11 +3170,18 @@ managedsave-dumpxml
 
 ::
 
-   managedsave-dumpxml domain [--security-info]
+   managedsave-dumpxml [--security-info] [--xpath EXPRESSION] [--wrap] domain
 
 Extract the domain XML that was in effect at the time the saved state
 file *file* was created with the ``managedsave`` command.  Using
 *--security-info* will also include security sensitive information.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 managedsave-edit
@@ -3200,7 +3350,8 @@ migrate
    migrate [--live] [--offline] [--direct] [--p2p [--tunnelled]]
       [--persistent] [--undefinesource] [--suspend] [--copy-storage-all]
       [--copy-storage-inc] [--change-protection] [--unsafe] [--verbose]
-      [--rdma-pin-all] [--abort-on-error] [--postcopy] [--postcopy-after-precopy]
+      [--rdma-pin-all] [--abort-on-error] [--postcopy]
+      [--postcopy-after-precopy] [--postcopy-resume] [--zerocopy]
       domain desturi [migrateuri] [graphicsuri] [listen-address] [dname]
       [--timeout seconds [--timeout-suspend | --timeout-postcopy]]
       [--xml file] [--migrate-disks disk-list] [--disks-port port]
@@ -3256,7 +3407,11 @@ Once migration is running, the user may switch to post-copy using the
 automatically switch to post-copy after the first pass of pre-copy is finished.
 The maximum bandwidth consumed during the post-copy phase may be limited using
 *--postcopy-bandwidth*. The maximum bandwidth consumed during the pre-copy phase
-may be limited using *--bandwidth*.
+may be limited using *--bandwidth*. In case connection between the hosts breaks
+while migration is in post-copy mode, the domain cannot be resumed on either
+source or destination host and the ``migrate`` command will report an error
+leaving the domain active on both hosts. To recover from such situation repeat
+the original ``migrate`` command with an additional *--postcopy-resume* flag.
 
 *--auto-converge* forces convergence during live migration. The initial
 guest CPU throttling rate can be set with *auto-converge-initial*. If the
@@ -3272,6 +3427,11 @@ consumed by the QEMU process itself. Beware of setting the memory limit too
 high (and thus allowing the domain to lock most of the host's memory). Doing so
 may be dangerous to both the domain and the host itself since the host's kernel
 may run out of memory.
+
+*--zerocopy* requests zero-copy mechanism to be used for migrating memory pages.
+For QEMU/KVM this means QEMU will be temporarily allowed to lock all guest
+pages in host's memory, although only those that are queued for transfer will
+be locked at the same time.
 
 ``Note``: Individual hypervisors usually do not support all possible types of
 migration. For example, QEMU does not support direct migration.
@@ -3545,11 +3705,11 @@ Set or get a domain's numa parameters, corresponding to the <numatune>
 element of domain XML.  Without flags, the current settings are
 displayed.
 
-*mode* can be one of \`strict', \`interleave' and \`preferred' or any
-valid number from the virDomainNumatuneMemMode enum in case the daemon
-supports it.  For a running domain, the mode can't be changed, and the
-nodeset can be changed only if the domain was started with a mode of
-\`strict'.
+*mode* can be one of \`strict', \`interleave', \`preferred' and
+\'restrictive' or any valid number from the virDomainNumatuneMemMode enum
+in case the daemon supports it.  For a running domain, the mode can't be
+changed, and the nodeset can be changed only if the domain was started with
+\`restrictive' mode.
 
 *nodeset* is a list of numa nodes used by the host for running the domain.
 Its syntax is a comma separated list, with '-' for ranges and '^' for
@@ -3708,7 +3868,7 @@ restore
 ::
 
    restore state-file [--bypass-cache] [--xml file]
-      [{--running | --paused}]
+      [{--running | --paused}] [--reset-nvram]
 
 Restores a domain from a ``virsh save`` state file. See *save* for more info.
 
@@ -3725,6 +3885,9 @@ Normally, restoring a saved image will use the state recorded in the
 save image to decide between running or paused; passing either the
 *--running* or *--paused* flag will allow overriding which state the
 domain should be started in.
+
+If *--reset-nvram* is specified, any existing NVRAM file will be deleted
+and re-initialized from its pristine template.
 
 ``Note``: To avoid corrupting file system contents within the domain, you
 should not reuse the saved state file for a second ``restore`` unless you
@@ -3819,11 +3982,18 @@ save-image-dumpxml
 
 ::
 
-   save-image-dumpxml file [--security-info]
+   save-image-dumpxml [--security-info] [--xpath EXPRESSION] [--wrap] file
 
 Extract the domain XML that was in effect at the time the saved state
 file *file* was created with the ``save`` command.  Using
 *--security-info* will also include security sensitive information.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 save-image-edit
@@ -3885,7 +4055,8 @@ If *--config* is specified, affect the next start of a persistent guest.
 If *--current* is specified, it is equivalent to either *--live* or
 *--config*, depending on the current state of the guest.
 
-``Note``: The cpu_shares parameter has a valid value range of 2-262144.
+``Note``: The cpu_shares parameter has a valid value range of 2-262144
+with cgroups v1, 1-10000 with cgroups v2.
 
 ``Note``: The weight and cap parameters are defined only for the
 XEN_CREDIT scheduler.
@@ -4322,7 +4493,7 @@ start
 
    start domain-name-or-uuid [--console] [--paused]
       [--autodestroy] [--bypass-cache] [--force-boot]
-      [--pass-fds N,M,...]
+      [--pass-fds N,M,...] [--reset-nvram]
 
 Start a (previously defined) inactive domain, either from the last
 ``managedsave`` state, or via a fresh boot if no managedsave state is
@@ -4340,6 +4511,9 @@ If *--pass-fds* is specified, the argument is a comma separated list
 of open file descriptors which should be pass on into the guest. The
 file descriptors will be re-numbered in the guest, starting from 3. This
 is only supported with container based virtualization.
+
+If *--reset-nvram* is specified, any existing NVRAM file will be deleted
+and re-initialized from its pristine template.
 
 
 suspend
@@ -4379,6 +4553,7 @@ undefine
       [--checkpoints-metadata] [--nvram] [--keep-nvram]
       [ {--storage volumes | --remove-all-storage
          [--delete-storage-volume-snapshots]} --wipe-storage]
+      [--tpm] [--keep-tpm]
 
 Undefine a domain. If the domain is running, this converts it to a
 transient domain, without stopping it. If the domain is inactive,
@@ -4429,6 +4604,11 @@ failure.
 
 The flag *--wipe-storage* specifies that the storage volumes should be
 wiped before removal.
+
+*--tpm* and *--keep-tpm* specify accordingly to delete or keep a TPM's
+persistent state directory structure and files. If the flags are omitted
+then the persistent_state attribute in the TPM emulator definition in the
+domain XML determines whether the TPM state is kept.
 
 NOTE: For an inactive domain, the domain name or UUID must be used as the
 *domain*.
@@ -4593,7 +4773,7 @@ attach-device
 Attach a device to the domain, using a device definition in an XML
 file using a device definition element such as <disk> or <interface>
 as the top-level element.  See the documentation at
-`https://libvirt.org/formatdomain.html#elementsDevices <https://libvirt.org/formatdomain.html#elementsDevices>`__ to learn about
+`https://libvirt.org/formatdomain.html#elementsDevices <https://libvirt.org/formatdomain.html#devices>`__ to learn about
 libvirt XML format for a device.  If *--config* is specified the
 command alters the persistent guest configuration with the device
 attach taking effect the next time libvirt starts the domain.
@@ -4775,7 +4955,7 @@ specified.  The other two *peak* and *burst* are optional, so
 are expressed in kilobytes per second, while *burst* is expressed in
 kilobytes in a single burst at *peak* speed as described in the
 Network XML documentation at
-`https://libvirt.org/formatnetwork.html#elementQoS <https://libvirt.org/formatnetwork.html#elementQoS>`__.
+`https://libvirt.org/formatnetwork.html#quality-of-service <https://libvirt.org/formatnetwork.html#quality-of-service>`__.
 
 ``--managed`` is usable only for *hostdev* type and tells libvirt
 that the interface should be managed, which means detached and reattached
@@ -4915,7 +5095,7 @@ detach-interface
 ::
 
    detach-interface domain type [--mac mac]
-      [[[--live] [--config] | [--current]] | [--persistent]]
+      [[[--live] [--config] | [--current]] | [--persistent]] [--print-xml]
 
 Detach a network interface from a domain.
 *type* can be either *network* to indicate a physical network device or
@@ -4937,6 +5117,9 @@ an offline domain, and like *--live* *--config* for a running domain.
 Note that older versions of virsh used *--config* as an alias for
 *--persistent*.
 
+If *--print-xml* is specified, then the XML used to detach the interface
+is printed instead.
+
 Please see documentation for ``detach-device`` for known quirks.
 
 
@@ -4954,7 +5137,7 @@ Update the characteristics of a device associated with *domain*,
 based on the device definition in an XML *file*.  The *--force* option
 can be used to force device update, e.g., to eject a CD-ROM even if it is
 locked/mounted in the domain. See the documentation at
-`https://libvirt.org/formatdomain.html#elementsDevices <https://libvirt.org/formatdomain.html#elementsDevices>`__ to learn about
+`https://libvirt.org/formatdomain.html#elementsDevices <https://libvirt.org/formatdomain.html#devices>`__ to learn about
 libvirt XML format for a device.
 
 If *--live* is specified, affect a running domain.
@@ -5044,6 +5227,25 @@ If *--print-xml* is specified, the XML that would be used to change media is
 printed instead of changing the media.
 
 
+dom-fd-associate
+----------------
+
+**Syntax:**
+
+::
+
+    dom-fd-associate domain --name FDGROUPNAME --pass-fds M,N,....
+        [--seclabel-writable] [--seclabel-restore]
+
+Associate one or more fds described via *--pass-fds* argument to *domain* as
+*--name*. The lifetime of the passed fd group is the same as the connection, thus
+exitting virsh un-registers them afterwards.
+
+By default security labels are applied if needed but they are not restored after
+use to avoid keeping them open unnecessarily. Best-effort security label restore
+may be requested by using the *--seclabel-restore* flag.
+
+
 NODEDEV COMMANDS
 ================
 
@@ -5082,13 +5284,16 @@ nodedev-create
 
 ::
 
-   nodedev-create FILE
+   nodedev-create FILE [--validate]
 
 Create a device on the host node that can then be assigned to virtual
 machines. Normally, libvirt is able to automatically determine which
 host nodes are available for use, but this allows registration of
 host hardware that libvirt did not automatically detect.  *file*
 contains xml for a top-level <device> description of a node device.
+
+If *--validate* is specified, validates the format of the XML document against
+an internal RNG schema.
 
 
 nodedev-destroy
@@ -5113,10 +5318,13 @@ nodedev-define
 
 ::
 
-   nodedev-define FILE
+   nodedev-define FILE [--validate]
 
 Define an inactive persistent device or modify an existing persistent one from
 the XML *FILE*.
+
+If *--validate* is specified, validates the format of the XML document against
+an internal RNG schema.
 
 
 nodedev-undefine
@@ -5158,10 +5366,9 @@ guests via <hostdev> passthrough.  This is reversed with
 ``nodedev-reattach``, and is done automatically for managed devices.
 
 Different backend drivers expect the device to be bound to different
-dummy devices. For example, QEMU's "kvm" backend driver (the default)
-expects the device to be bound to pci-stub, but its "vfio" backend
-driver expects the device to be bound to vfio-pci. The *--driver*
-parameter can be used to specify the desired backend driver.
+dummy devices. For example, QEMU's "vfio" backend driver expects the
+device to be bound to vfio-pci. The *--driver* parameter can be used
+to specify the desired backend driver.
 
 
 nodedev-dumpxml
@@ -5171,7 +5378,7 @@ nodedev-dumpxml
 
 ::
 
-   nodedev-dumpxml device
+   nodedev-dumpxml [--xpath EXPRESSION] [--wrap] device
 
 Dump a <device> XML representation for the given node device, including
 such information as the device name, which bus owns the device, the
@@ -5179,6 +5386,13 @@ vendor and product id, and any capabilities of the device usable by
 libvirt (such as whether device reset is supported). *device* can
 be either device name or wwn pair in "wwnn,wwpn" format (only works
 for HBA).
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 nodedev-info
@@ -5360,12 +5574,19 @@ net-dumpxml
 
 ::
 
-   net-dumpxml network [--inactive]
+   net-dumpxml [--inactive] [--xpath EXPRESSION] [--wrap] network
 
 
 Output the virtual network information as an XML dump to stdout.
 If *--inactive* is specified, then physical functions are not
 expanded into their associated virtual functions.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 net-edit
@@ -5622,9 +5843,16 @@ net-port-dumpxml
 
 ::
 
-   net-port-dumpxml network port
+   net-port-dumpxml [--xpath EXPRESSION] [--wrap] network port
 
 Output the network port information as an XML dump to stdout.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 net-port-delete
@@ -5709,11 +5937,18 @@ iface-dumpxml
 
 ::
 
-   iface-dumpxml interface [--inactive]
+   iface-dumpxml [--inactive] [--xpath EXPRESSION] [--wrap] interface
 
 Output the host interface information as an XML dump to stdout.  If
 *--inactive* is specified, then the output reflects the persistent
 state of the interface that will be used the next time it is started.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 iface-edit
@@ -6185,11 +6420,18 @@ pool-dumpxml
 
 ::
 
-   pool-dumpxml [--inactive] pool-or-uuid
+   pool-dumpxml [--inactive] [--xpath EXPRESSION] [--wrap] pool-or-uuid
 
 Returns the XML information about the *pool* object.
 *--inactive* tells virsh to dump pool configuration that will be used
 on next start of the pool as opposed to the current pool configuration.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 pool-edit
@@ -6381,7 +6623,7 @@ vol-create
 
 ::
 
-   vol-create pool-or-uuid FILE [--prealloc-metadata]
+   vol-create pool-or-uuid FILE [--prealloc-metadata] [--validate]
 
 Create a volume from an XML <file>.
 
@@ -6395,6 +6637,9 @@ pre-existing volume.
 support full allocation). This option creates a sparse image file with metadata,
 resulting in higher performance compared to images with no preallocation and
 only slightly higher initial disk space usage.
+
+If *--validate* is specified, validates the format of the XML document against
+an internal RNG schema.
 
 **Example:**
 
@@ -6413,7 +6658,7 @@ vol-create-from
 ::
 
    vol-create-from pool-or-uuid FILE vol-name-or-key-or-path
-      [--inputpool pool-or-uuid]  [--prealloc-metadata] [--reflink]
+      [--inputpool pool-or-uuid]  [--prealloc-metadata] [--reflink] [--validate]
 
 Create a volume, using another volume as input.
 
@@ -6435,6 +6680,8 @@ When *--reflink* is specified, perform a COW lightweight copy,
 where the data blocks are copied only when modified.
 If this is not possible, the copy fails.
 
+If *--validate* is specified, validates the format of the XML document against
+an internal RNG schema.
 
 vol-create-as
 -------------
@@ -6493,7 +6740,7 @@ vol-clone
 ::
 
    vol-clone vol-name-or-key-or-path name
-      [--pool pool-or-uuid] [--prealloc-metadata] [--reflink]
+      [--pool pool-or-uuid] [--prealloc-metadata] [--reflink] [--print-xml]
 
 Clone an existing volume within the parent pool.  Less powerful,
 but easier to type, version of ``vol-create-from``.
@@ -6516,6 +6763,9 @@ only slightly higher initial disk space usage.
 When *--reflink* is specified, perform a COW lightweight copy,
 where the data blocks are copied only when modified.
 If this is not possible, the copy fails.
+
+If *--print-xml* is specified, then the XML used to clone the volume is
+printed instead.
 
 
 vol-delete
@@ -6677,7 +6927,8 @@ vol-dumpxml
 
 ::
 
-   vol-dumpxml vol-name-or-key-or-path [--pool pool-or-uuid]
+   vol-dumpxml [--pool pool-or-uuid] [--xpath EXPRESSION] [--wrap]
+               vol-name-or-key-or-path
 
 Output the volume information as an XML dump to stdout.
 
@@ -6688,6 +6939,13 @@ to output the XML.
 is in. If the volume name is provided instead of the key or path, then
 providing the pool is necessary to find the volume to be uploaded into;
 otherwise, the first volume found by the key or path will be used.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 vol-info
@@ -6876,9 +7134,16 @@ secret-dumpxml
 
 ::
 
-   secret-dumpxml secret
+   secret-dumpxml [--xpath EXPRESSION] [--wrap] secret
 
 Output properties of *secret* (specified by its UUID) as an XML dump to stdout.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 secret-event
@@ -7297,11 +7562,19 @@ snapshot-dumpxml
 
 ::
 
-   snapshot-dumpxml domain snapshot [--security-info]
+   snapshot-dumpxml [--security-info] [--xpath EXPRESSION] [--wrap]
+                    domain snapshot
 
 Output the snapshot XML for the domain's snapshot named *snapshot*.
 Using *--security-info* will also include security sensitive information.
 Use ``snapshot-current`` to easily access the XML of the current snapshot.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 snapshot-parent
@@ -7324,7 +7597,8 @@ snapshot-revert
 
 ::
 
-   snapshot-revert domain {snapshot | --current} [{--running | --paused}] [--force]
+   snapshot-revert domain {snapshot | --current} [{--running | --paused}]
+      [--force] [--reset-nvram]
 
 Revert the given domain to the snapshot specified by *snapshot*, or to
 the current snapshot with *--current*.  Be aware
@@ -7369,6 +7643,9 @@ requires the use of *--force* to proceed:
     state. This ends up switching a disk underneath a running system and will
     likely cause extensive filesystem corruption or crashes due to swap content
     mismatches when run.
+
+If *--reset-nvram* is specified, any existing NVRAM file will be deleted
+and re-initialized from its pristine template.
 
 
 snapshot-delete
@@ -7578,7 +7855,8 @@ checkpoint-dumpxml
 
 ::
 
-   checkpoint-dumpxml domain checkpoint [--security-info] [--no-domain] [--size]
+   checkpoint-dumpxml [--security-info] [--no-domain] [--size]
+                      [--xpath EXPRESSION] [--wrap] domain checkpoint
 
 Output the checkpoint XML for the domain's checkpoint named
 *checkpoint*.  Using
@@ -7593,6 +7871,13 @@ space). Note that some hypervisors may require that *domain* is running when
 
 Using *--no-domain* will omit the <domain> element from the
 output for a more compact view.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 checkpoint-parent
@@ -7696,9 +7981,16 @@ nwfilter-dumpxml
 
 ::
 
-   nwfilter-dumpxml nwfilter-name
+   nwfilter-dumpxml [--xpath EXPRESSION] [--wrap] nwfilter-name
 
 Output the network filter XML.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 nwfilter-edit
@@ -7799,10 +8091,17 @@ nwfilter-binding-dumpxml
 
 ::
 
-   nwfilter-binding-dumpxml port-name
+   nwfilter-binding-dumpxml [--xpath EXPRESSION] [--wrap] port-name
 
 Output the network filter binding XML for the network device called
 ``port-name``.
+
+If the **--xpath** argument provides an XPath expression, it will be
+evaluated against the output XML and only those matching nodes will
+be printed. The default behaviour is to print each matching node as
+a standalone document, however, for ease of additional processing,
+the **--wrap** argument will cause the matching node to be wrapped
+in a common root node.
 
 
 HYPERVISOR-SPECIFIC COMMANDS
@@ -7853,7 +8152,8 @@ qemu-monitor-command
 
 ::
 
-   qemu-monitor-command domain { [--hmp] | [--pretty] [--return-value] } command...
+   qemu-monitor-command domain { [--hmp] | [--pretty] [--return-value] }
+       [--pass-fds N,M,...] command...
 
 Send an arbitrary monitor command *command* to domain *domain* through the
 QEMU monitor.  The results of the command will be printed on stdout.
@@ -7886,6 +8186,9 @@ extracted rather than passing through the full reply from QEMU.
 If *--hmp* is passed, the command is considered to be a human monitor command
 and libvirt will automatically convert it into QMP and convert the result back.
 
+If *--pass-fds* is specified, the argument is a comma separated list
+of open file descriptors which should be passed on to qemu along with the
+command.
 
 qemu-agent-command
 ------------------

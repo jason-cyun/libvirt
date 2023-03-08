@@ -1,7 +1,6 @@
 vbox_driver_sources = [
-  'vbox_V5_2.c',
-  'vbox_V6_0.c',
   'vbox_V6_1.c',
+  'vbox_V7_0.c',
   'vbox_common.c',
   'vbox_driver.c',
   'vbox_network.c',
@@ -67,10 +66,5 @@ if conf.has('WITH_VBOX')
   openrc_init_files += {
     'name': 'virtvboxd',
     'in_file': files('virtvboxd.init.in'),
-  }
-
-  sysconf_files += {
-    'name': 'virtvboxd',
-    'file': files('virtvboxd.sysconf'),
   }
 endif

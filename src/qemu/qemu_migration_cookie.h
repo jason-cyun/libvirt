@@ -19,7 +19,6 @@
 #pragma once
 
 #include "qemu_domain.h"
-#include "qemu_domainjob.h"
 #include "qemu_migration_params.h"
 #include "virenum.h"
 
@@ -162,7 +161,7 @@ struct _qemuMigrationCookie {
     qemuMigrationCookieNBD *nbd;
 
     /* If (flags & QEMU_MIGRATION_COOKIE_STATS) */
-    qemuDomainJobInfo *jobInfo;
+    virDomainJobData *jobData;
 
     /* If flags & QEMU_MIGRATION_COOKIE_CPU */
     virCPUDef *cpu;
@@ -190,12 +189,13 @@ qemuMigrationCookieFormat(qemuMigrationCookie *mig,
 
 qemuMigrationCookie *
 qemuMigrationCookieParse(virQEMUDriver *driver,
-                        const virDomainDef *def,
-                        const char *origname,
-                        qemuDomainObjPrivate *priv,
-                        const char *cookiein,
-                        int cookieinlen,
-                        unsigned int flags);
+                         virDomainObj *vm,
+                         const virDomainDef *def,
+                         const char *origname,
+                         virQEMUCaps *qemuCaps,
+                         const char *cookiein,
+                         int cookieinlen,
+                         unsigned int flags);
 
 void
 qemuMigrationCookieFree(qemuMigrationCookie *mig);

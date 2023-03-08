@@ -42,15 +42,17 @@ The project aims to support the most recent major version at all times. Support
 for the previous major version will be dropped 2 years after the new major
 version is released or when the vendor itself drops support, whichever comes
 first. In this context, third-party efforts to extend the lifetime of a distro
-are not considered, even when they are endorsed by the vendor (eg. Debian LTS).
-Within each major release, only the most recent minor release is considered.
+are not considered, even when they are endorsed by the vendor (e.g. Debian
+LTS); the same is true of repositories that contain packages backported from
+later releases (e.g. Debian backports). Within each major release, only the
+most recent minor release is considered.
 
 For the purposes of identifying supported software versions available on Linux,
 the project will look at CentOS, Debian, Fedora, openSUSE, RHEL, SLES and
 Ubuntu LTS. Other distros will be assumed to ship similar software versions.
 
 For FreeBSD, decisions will be made based on the contents of the ports tree;
-for macOS, `HomeBrew`_ will be used, although `MacPorts`_ is expected to carry
+for macOS, `Homebrew`_ will be used, although `MacPorts`_ is expected to carry
 similar versions.
 
 Windows
@@ -76,7 +78,7 @@ If a hypervisor is not commonly shipped directly by any distro listed above,
 or until the vendor discontinues support, whichever comes first.
 
 
-.. _HomeBrew: https://brew.sh/
+.. _Homebrew: https://brew.sh/
 .. _MacPorts: https://www.macports.org/
 .. _Repology: https://repology.org/
 .. _hypervisor drivers: drivers.html

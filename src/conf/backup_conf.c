@@ -21,16 +21,13 @@
 #include "configmake.h"
 #include "internal.h"
 #include "virbuffer.h"
-#include "datatypes.h"
 #include "domain_conf.h"
 #include "virlog.h"
 #include "viralloc.h"
 #include "backup_conf.h"
 #include "storage_source_conf.h"
-#include "virfile.h"
 #include "virerror.h"
 #include "virxml.h"
-#include "virstring.h"
 #include "virhash.h"
 #include "virenum.h"
 
@@ -193,10 +190,10 @@ virDomainBackupDefParsePrivate(virDomainBackupDef *def,
 }
 
 
-static virDomainBackupDef *
-virDomainBackupDefParse(xmlXPathContextPtr ctxt,
-                        virDomainXMLOption *xmlopt,
-                        unsigned int flags)
+virDomainBackupDef *
+virDomainBackupDefParseXML(xmlXPathContextPtr ctxt,
+                           virDomainXMLOption *xmlopt,
+                           unsigned int flags)
 {
     g_autoptr(virDomainBackupDef) def = NULL;
     g_autofree xmlNodePtr *nodes = NULL;
@@ -277,40 +274,20 @@ virDomainBackupDefParseString(const char *xmlStr,
                               virDomainXMLOption *xmlopt,
                               unsigned int flags)
 {
-    virDomainBackupDef *ret = NULL;
     g_autoptr(xmlDoc) xml = NULL;
+    g_autoptr(xmlXPathContext) ctxt = NULL;
     int keepBlanksDefault = xmlKeepBlanksDefault(0);
+    bool validate = !(flags & VIR_DOMAIN_BACKUP_PARSE_INTERNAL);
 
-    if ((xml = virXMLParse(NULL, xmlStr, _("(domain_backup)"), "domainbackup.rng",
-                           !(flags & VIR_DOMAIN_BACKUP_PARSE_INTERNAL)))) {
-        xmlKeepBlanksDefault(keepBlanksDefault);
-        ret = virDomainBackupDefParseNode(xml, xmlDocGetRootElement(xml),
-                                          xmlopt, flags);
-    }
+    xml = virXMLParse(NULL, xmlStr, _("(domain_backup)"),
+                      "domainbackup", &ctxt, "domainbackup.rng", validate);
+
     xmlKeepBlanksDefault(keepBlanksDefault);
 
-    return ret;
-}
-
-
-virDomainBackupDef *
-virDomainBackupDefParseNode(xmlDocPtr xml,
-                            xmlNodePtr root,
-                            virDomainXMLOption *xmlopt,
-                            unsigned int flags)
-{
-    g_autoptr(xmlXPathContext) ctxt = NULL;
-
-    if (!virXMLNodeNameEqual(root, "domainbackup")) {
-        virReportError(VIR_ERR_XML_ERROR, "%s", _("domainbackup"));
-        return NULL;
-    }
-
-    if (!(ctxt = virXMLXPathContextNew(xml)))
+    if (!xml)
         return NULL;
 
-    ctxt->node = root;
-    return virDomainBackupDefParse(ctxt, xmlopt, flags);
+    return virDomainBackupDefParseXML(ctxt, xmlopt, flags);
 }
 
 

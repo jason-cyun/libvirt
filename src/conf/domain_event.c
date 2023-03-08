@@ -29,8 +29,6 @@
 #include "datatypes.h"
 #include "viralloc.h"
 #include "virerror.h"
-#include "virstring.h"
-#include "virtypedparam.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -1497,7 +1495,7 @@ static virObjectEvent *
 virDomainEventTunableNew(int id,
                          const char *name,
                          unsigned char *uuid,
-                         virTypedParameterPtr params,
+                         virTypedParameterPtr *params,
                          int nparams)
 {
     virDomainEventTunable *ev;
@@ -1510,19 +1508,20 @@ virDomainEventTunableNew(int id,
                                  id, name, uuid)))
         goto error;
 
-    ev->params = params;
+    ev->params = *params;
     ev->nparams = nparams;
-
+    *params = NULL;
     return (virObjectEvent *)ev;
 
  error:
-    virTypedParamsFree(params, nparams);
+    virTypedParamsFree(*params, nparams);
+    *params = NULL;
     return NULL;
 }
 
 virObjectEvent *
 virDomainEventTunableNewFromObj(virDomainObj *obj,
-                                virTypedParameterPtr params,
+                                virTypedParameterPtr *params,
                                 int nparams)
 {
     return virDomainEventTunableNew(obj->def->id,
@@ -1534,7 +1533,7 @@ virDomainEventTunableNewFromObj(virDomainObj *obj,
 
 virObjectEvent *
 virDomainEventTunableNewFromDom(virDomainPtr dom,
-                                virTypedParameterPtr params,
+                                virTypedParameterPtr *params,
                                 int nparams)
 {
     return virDomainEventTunableNew(dom->id,

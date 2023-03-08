@@ -35,19 +35,16 @@
 #define LIBVIRT_VIRCGROUPPRIV_H_ALLOW
 #include "vircgrouppriv.h"
 
-#include "virutil.h"
 #include "viralloc.h"
 #include "vircgroupbackend.h"
 #include "virerror.h"
 #include "virlog.h"
 #include "virfile.h"
 #include "virgdbus.h"
-#include "virhash.h"
 #include "virstring.h"
 #include "virsystemd.h"
 #include "virtypedparam.h"
 #include "virhostcpu.h"
-#include "virthread.h"
 
 VIR_LOG_INIT("util.cgroup");
 
@@ -522,7 +519,7 @@ virCgroupSetValueRaw(const char *path,
 {
     char *tmp;
 
-    VIR_DEBUG("Set value '%s' to '%s'", path, value);
+    VIR_DEBUG("Set path '%s' to value '%s'", path, value);
     if (virFileWriteStr(path, value, 0) < 0) {
         if (errno == EINVAL &&
             (tmp = strrchr(path, '/'))) {
@@ -1027,7 +1024,20 @@ virCgroupNewNested(virCgroup *parent,
 int
 virCgroupNewSelf(virCgroup **group)
 {
-    return virCgroupNewDetect(-1, -1, group);
+    g_autoptr(virCgroup) newGroup = NULL;
+    g_autoptr(virCgroup) nested = NULL;
+
+    if (virCgroupNewDetect(-1, -1, &newGroup) < 0)
+        return -1;
+
+    if (virCgroupNewNested(newGroup, -1, false, -1, &nested) < 0)
+        return -1;
+
+    if (virCgroupExists(nested))
+        newGroup->nested = g_steal_pointer(&nested);
+
+    *group = g_steal_pointer(&newGroup);
+    return 0;
 }
 
 

@@ -30,6 +30,7 @@ log_daemon_sources = files(
   'log_daemon_config.c',
   'log_daemon_dispatch.c',
   'log_handler.c',
+  'log_cleaner.c',
 )
 
 if conf.has('WITH_REMOTE')
@@ -100,11 +101,6 @@ if conf.has('WITH_LIBVIRTD')
   openrc_init_files += {
     'name': 'virtlogd',
     'in_file': files('virtlogd.init.in'),
-  }
-
-  sysconf_files += {
-    'name': 'virtlogd',
-    'file': files('virtlogd.sysconf'),
   }
 endif
 

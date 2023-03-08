@@ -125,7 +125,7 @@ static void virLogOutputToFd(virLogSource *src,
 /*
  * Logs accesses must be serialized though a mutex
  */
-virMutex virLogMutex;
+static virMutex virLogMutex = VIR_MUTEX_INITIALIZER;
 
 void
 virLogLock(void)
@@ -178,6 +178,7 @@ virLogSetDefaultOutputToFile(const char *binary, bool privileged)
         old_umask = umask(077);
         if (g_mkdir_with_parents(logdir, 0777) < 0) {
             umask(old_umask);
+            virReportSystemError(errno, "%s", _("Could not create log directory"));
             return -1;
         }
         umask(old_umask);
@@ -201,7 +202,7 @@ virLogSetDefaultOutputToFile(const char *binary, bool privileged)
  * according to @binary, @godaemon, @privileged. This function should be run
  * exactly once at daemon startup, so no locks are used.
  */
-void
+int
 virLogSetDefaultOutput(const char *binary, bool godaemon, bool privileged)
 {
     bool have_journald = access("/run/systemd/journal/socket", W_OK) >= 0;
@@ -209,14 +210,16 @@ virLogSetDefaultOutput(const char *binary, bool godaemon, bool privileged)
     if (godaemon) {
         if (have_journald)
             virLogSetDefaultOutputToJournald();
-        else
-            virLogSetDefaultOutputToFile(binary, privileged);
+        else if (virLogSetDefaultOutputToFile(binary, privileged) < 0)
+            return -1;
     } else {
         if (!isatty(STDIN_FILENO) && have_journald)
             virLogSetDefaultOutputToJournald();
         else
             virLogSetDefaultOutputToStderr();
     }
+
+    return 0;
 }
 
 
@@ -247,9 +250,6 @@ virLogPriorityString(virLogPriority lvl)
 static int
 virLogOnceInit(void)
 {
-    if (virMutexInit(&virLogMutex) < 0)
-        return -1;
-
     virLogLock();
     virLogDefaultPriority = VIR_LOG_DEFAULT;
 
@@ -925,7 +925,13 @@ virLogOutputToJournald(virLogSource *source,
     journalAddString(&state, "MESSAGE", rawstr);
     journalAddInt(&state, "PRIORITY",
                   virLogPrioritySyslog(priority));
-    journalAddInt(&state, "SYSLOG_FACILITY", LOG_DAEMON);
+    /* See RFC 5424 section 6.2.1
+     *
+     * Don't use LOG_nnn constants as those have a bit-shift
+     * applied for use with syslog()  API, while journald
+     * needs the raw value
+     */
+    journalAddInt(&state, "SYSLOG_FACILITY", 3);
     journalAddString(&state, "LIBVIRT_SOURCE", source->name);
     if (filename)
         journalAddString(&state, "CODE_FILE", filename);
@@ -1187,6 +1193,10 @@ virLogParseDefaultPriority(const char *priority)
         return VIR_LOG_WARN;
     else if (STREQ(priority, "4") || STREQ(priority, "error"))
         return VIR_LOG_ERROR;
+
+    virReportError(VIR_ERR_INVALID_ARG,
+                   _("Failed to set logging priority, argument '%s' is "
+                     "invalid"), priority);
     return -1;
 }
 
@@ -1196,24 +1206,34 @@ virLogParseDefaultPriority(const char *priority)
  *
  * Sets virLogDefaultPriority, virLogFilters and virLogOutputs based on
  * environment variables.
+ *
+ * This function might fail which should also make the caller fail.
  */
-void
+int
 virLogSetFromEnv(void)
 {
     const char *debugEnv;
 
     if (virLogInitialize() < 0)
-        return;
+        return -1;
 
     debugEnv = getenv("LIBVIRT_DEBUG");
-    if (debugEnv && *debugEnv)
-        virLogSetDefaultPriority(virLogParseDefaultPriority(debugEnv));
+    if (debugEnv && *debugEnv) {
+        int priority = virLogParseDefaultPriority(debugEnv);
+        if (priority < 0 ||
+            virLogSetDefaultPriority(priority) < 0)
+            return -1;
+    }
     debugEnv = getenv("LIBVIRT_LOG_FILTERS");
-    if (debugEnv && *debugEnv)
-        virLogSetFilters(debugEnv);
+    if (debugEnv && *debugEnv &&
+        virLogSetFilters(debugEnv))
+        return -1;
     debugEnv = getenv("LIBVIRT_LOG_OUTPUTS");
-    if (debugEnv && *debugEnv)
-        virLogSetOutputs(debugEnv);
+    if (debugEnv && *debugEnv &&
+        virLogSetOutputs(debugEnv))
+        return -1;
+
+    return 0;
 }
 
 
@@ -1392,7 +1412,7 @@ virLogDefineOutputs(virLogOutput **outputs, size_t noutputs)
         tmp = g_strdup(outputs[id]->name);
         VIR_FREE(current_ident);
         current_ident = tmp;
-        openlog(current_ident, 0, 0);
+        openlog(current_ident, 0, LOG_DAEMON);
     }
 #endif /* WITH_SYSLOG_H */
 
@@ -1473,21 +1493,21 @@ virLogParseOutput(const char *src)
     if (!(tokens = g_strsplit(src, ":", 0)) ||
         (count = g_strv_length(tokens)) < 2) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Malformed format for output '%s'"), src);
+                       _("Malformed format for log output '%s'"), src);
         return NULL;
     }
 
     if (virStrToLong_uip(tokens[0], NULL, 10, &prio) < 0 ||
         (prio < VIR_LOG_DEBUG) || (prio > VIR_LOG_ERROR)) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Invalid priority '%s' for output '%s'"),
+                       _("Invalid log priority '%s' for log output '%s'"),
                        tokens[0], src);
         return NULL;
     }
 
     if ((dest = virLogDestinationTypeFromString(tokens[1])) < 0) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Invalid destination '%s' for output '%s'"),
+                       _("Invalid log destination '%s' for log output '%s'"),
                        tokens[1], src);
         return NULL;
     }
@@ -1497,7 +1517,7 @@ virLogParseOutput(const char *src)
         ((dest == VIR_LOG_TO_FILE ||
           dest == VIR_LOG_TO_SYSLOG) && count != 3)) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Output '%s' does not meet the format requirements "
+                       _("Log output '%s' does not meet the format requirements "
                          "for destination type '%s'"), src, tokens[1]);
         return NULL;
     }

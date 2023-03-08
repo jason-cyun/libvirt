@@ -22,7 +22,6 @@
 
 #include <sys/stat.h>
 
-#include "virstring.h"
 #include "virerror.h"
 #include "viralloc.h"
 #include "virfile.h"
@@ -40,6 +39,7 @@ VIR_LOG_INIT("util.tpm");
 VIR_ENUM_IMPL(virTPMSwtpmFeature,
               VIR_TPM_SWTPM_FEATURE_LAST,
               "cmdarg-pwd-fd",
+              "cmdarg-migration",
 );
 
 VIR_ENUM_IMPL(virTPMSwtpmSetupFeature,
@@ -48,6 +48,8 @@ VIR_ENUM_IMPL(virTPMSwtpmSetupFeature,
               "cmdarg-create-config-files",
               "tpm12-not-need-root",
               "cmdarg-reconfigure-pcr-banks",
+              "tpm-1.2",
+              "tpm-2.0",
 );
 
 /**
@@ -59,7 +61,6 @@ VIR_ENUM_IMPL(virTPMSwtpmSetupFeature,
 char *
 virTPMCreateCancelPath(const char *devpath)
 {
-    char *path = NULL;
     const char *dev;
     const char *prefix[] = {"misc/", "tpm/"};
     size_t i;
@@ -77,18 +78,14 @@ virTPMCreateCancelPath(const char *devpath)
 
     dev++;
     for (i = 0; i < G_N_ELEMENTS(prefix); i++) {
-        path = g_strdup_printf("/sys/class/%s%s/device/cancel", prefix[i],
-                               dev);
+        g_autofree char *path = g_strdup_printf("/sys/class/%s%s/device/cancel",
+                                                prefix[i], dev);
 
         if (virFileExists(path))
-            break;
-
-        VIR_FREE(path);
+            return g_steal_pointer(&path);
     }
-    if (!path)
-        path = g_strdup("/dev/null");
 
-    return path;
+    return g_strdup("/dev/null");
 }
 
 /*
@@ -140,18 +137,12 @@ static int virTPMEmulatorInit(bool quiet);
 static char *
 virTPMBinaryGetPath(virTPMBinary binary)
 {
-    char *s = NULL;
-
-    virMutexLock(&swtpm_tools_lock);
+    VIR_LOCK_GUARD lock = virLockGuardLock(&swtpm_tools_lock);
 
     if (virTPMEmulatorInit(false) < 0)
-        goto cleanup;
+        return NULL;
 
-    s = g_strdup(swtpmBinaries[binary].path);
-
- cleanup:
-    virMutexUnlock(&swtpm_tools_lock);
-    return s;
+    return g_strdup(swtpmBinaries[binary].path);
 }
 
 char *
@@ -174,20 +165,14 @@ virTPMGetSwtpmIoctl(void)
 
 bool virTPMHasSwtpm(void)
 {
-    bool ret = false;
-
-    virMutexLock(&swtpm_tools_lock);
+    VIR_LOCK_GUARD lock = virLockGuardLock(&swtpm_tools_lock);
 
     if (virTPMEmulatorInit(true) < 0)
-        goto cleanup;
+        return false;
 
-    ret = swtpmBinaries[VIR_TPM_BINARY_SWTPM].path != NULL &&
+    return swtpmBinaries[VIR_TPM_BINARY_SWTPM].path != NULL &&
         swtpmBinaries[VIR_TPM_BINARY_SWTPM_SETUP].path != NULL &&
         swtpmBinaries[VIR_TPM_BINARY_SWTPM_IOCTL].path != NULL;
-
- cleanup:
-    virMutexUnlock(&swtpm_tools_lock);
-    return ret;
 }
 
 /* virTPMExecGetCaps
@@ -271,8 +256,7 @@ virTPMGetCaps(virTPMBinaryCapsParse capsParse,
 {
     g_autoptr(virCommand) cmd = NULL;
 
-    if (!(cmd = virCommandNew(exec)))
-        return NULL;
+    cmd = virCommandNew(exec);
 
     if (param1)
         virCommandAddArg(cmd, param1);
@@ -333,8 +317,7 @@ virTPMEmulatorInit(bool quiet)
                 return -1;
             }
             swtpmBinaries[i].path = g_steal_pointer(&path);
-            virBitmapFree(swtpmBinaries[i].caps);
-            swtpmBinaries[i].caps = NULL;
+            g_clear_pointer(&swtpmBinaries[i].caps, virBitmapFree);
         }
     }
 
@@ -345,12 +328,10 @@ static bool
 virTPMBinaryGetCaps(virTPMBinary binary,
                     unsigned int cap)
 {
-    bool ret = false;
-
-    virMutexLock(&swtpm_tools_lock);
+    VIR_LOCK_GUARD lock = virLockGuardLock(&swtpm_tools_lock);
 
     if (virTPMEmulatorInit(false) < 0)
-        goto cleanup;
+        return false;
 
     if (!swtpmBinaries[binary].caps &&
         swtpmBinaries[binary].capsParse) {
@@ -359,22 +340,21 @@ virTPMBinaryGetCaps(virTPMBinary binary,
             swtpmBinaries[binary].path,
             swtpmBinaries[binary].parm);
     }
-    if (swtpmBinaries[binary].caps)
-        ret = virBitmapIsBitSet(swtpmBinaries[binary].caps, cap);
 
- cleanup:
-    virMutexUnlock(&swtpm_tools_lock);
-    return ret;
+    if (!swtpmBinaries[binary].caps)
+        return false;
+
+    return virBitmapIsBitSet(swtpmBinaries[binary].caps, cap);
 }
 
 bool
-virTPMSwtpmCapsGet(unsigned int cap)
+virTPMSwtpmCapsGet(virTPMSwtpmFeature cap)
 {
     return virTPMBinaryGetCaps(VIR_TPM_BINARY_SWTPM, cap);
 }
 
 bool
-virTPMSwtpmSetupCapsGet(unsigned int cap)
+virTPMSwtpmSetupCapsGet(virTPMSwtpmSetupFeature cap)
 {
     return virTPMBinaryGetCaps(VIR_TPM_BINARY_SWTPM_SETUP, cap);
 }

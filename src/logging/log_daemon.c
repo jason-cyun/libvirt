@@ -33,15 +33,10 @@
 #include "virutil.h"
 #include "virfile.h"
 #include "virpidfile.h"
-#include "virprocess.h"
 #include "virerror.h"
 #include "virlog.h"
 #include "viralloc.h"
-#include "virconf.h"
 #include "rpc/virnetdaemon.h"
-#include "virrandom.h"
-#include "virhash.h"
-#include "viruuid.h"
 #include "virstring.h"
 #include "virgettext.h"
 #include "virdaemon.h"
@@ -134,8 +129,7 @@ virLogDaemonNew(virLogDaemonConfig *config, bool privileged)
 
     if (virNetDaemonAddServer(logd->dmn, srv) < 0)
         goto error;
-    virObjectUnref(srv);
-    srv = NULL;
+    g_clear_pointer(&srv, virObjectUnref);
 
     if (!(srv = virNetServerNew("admin", 1,
                                 0, 0, 0, config->admin_max_clients,
@@ -148,12 +142,10 @@ virLogDaemonNew(virLogDaemonConfig *config, bool privileged)
 
     if (virNetDaemonAddServer(logd->dmn, srv) < 0)
         goto error;
-    virObjectUnref(srv);
-    srv = NULL;
+    g_clear_pointer(&srv, virObjectUnref);
 
     if (!(logd->handler = virLogHandlerNew(privileged,
-                                           config->max_size,
-                                           config->max_backups,
+                                           config,
                                            virLogDaemonInhibitor,
                                            logd)))
         goto error;
@@ -238,8 +230,7 @@ virLogDaemonNewPostExecRestart(virJSONValue *object, bool privileged,
 
     if (!(logd->handler = virLogHandlerNewPostExecRestart(child,
                                                           privileged,
-                                                          config->max_size,
-                                                          config->max_backups,
+                                                          config,
                                                           virLogDaemonInhibitor,
                                                           logd)))
         goto error;
@@ -620,14 +611,14 @@ int main(int argc, char **argv) {
     int rv;
 
     struct option opts[] = {
-        { "verbose", no_argument, &verbose, 'v'},
-        { "daemon", no_argument, &godaemon, 'd'},
-        { "config", required_argument, NULL, 'f'},
-        { "timeout", required_argument, NULL, 't'},
-        { "pid-file", required_argument, NULL, 'p'},
+        { "verbose", no_argument, &verbose, 'v' },
+        { "daemon", no_argument, &godaemon, 'd' },
+        { "config", required_argument, NULL, 'f' },
+        { "timeout", required_argument, NULL, 't' },
+        { "pid-file", required_argument, NULL, 'p' },
         { "version", no_argument, NULL, 'V' },
         { "help", no_argument, NULL, 'h' },
-        {0, 0, 0, 0}
+        { 0, 0, 0, 0 },
     };
 
     privileged = geteuid() == 0;
@@ -719,13 +710,16 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    virDaemonSetupLogging("virtlogd",
-                          config->log_level,
-                          config->log_filters,
-                          config->log_outputs,
-                          privileged,
-                          verbose,
-                          godaemon);
+    if (virDaemonSetupLogging("virtlogd",
+                              config->log_level,
+                              config->log_filters,
+                              config->log_outputs,
+                              privileged,
+                              verbose,
+                              godaemon) < 0) {
+        virDispatchError(NULL);
+        exit(EXIT_FAILURE);
+    }
 
     if (!pid_file &&
         virPidFileConstructPath(privileged,
@@ -793,10 +787,6 @@ int main(int argc, char **argv) {
      */
     if (rv == 0) {
         g_autoptr(virSystemdActivation) act = NULL;
-        virSystemdActivationMap actmap[] = {
-            { .name = "virtlogd.socket", .family = AF_UNIX, .path = sock_file },
-            { .name = "virtlogd-admin.socket", .family = AF_UNIX, .path = admin_sock_file },
-        };
 
         if (godaemon) {
             if (chdir("/") < 0) {
@@ -823,9 +813,7 @@ int main(int argc, char **argv) {
             goto cleanup;
         }
 
-        if (virSystemdGetActivation(actmap,
-                                    G_N_ELEMENTS(actmap),
-                                    &act) < 0) {
+        if (virSystemdGetActivation(&act) < 0) {
             ret = VIR_DAEMON_ERR_NETWORK;
             goto cleanup;
         }
@@ -864,9 +852,8 @@ int main(int argc, char **argv) {
     }
 
     if (timeout > 0) {
-        VIR_DEBUG("Registering shutdown timeout %d", timeout);
-        virNetDaemonAutoShutdown(logDaemon->dmn,
-                                 timeout);
+        if (virNetDaemonAutoShutdown(logDaemon->dmn, timeout) < 0)
+            return -1;
     }
 
     if ((virLogDaemonSetupSignals(logDaemon->dmn)) < 0) {
@@ -909,7 +896,7 @@ int main(int argc, char **argv) {
      */
     if (statuswrite != -1) {
         char status = 0;
-        while (write(statuswrite, &status, 1) == -1 &&
+        while (write(statuswrite, &status, 1) == -1 && /* sc_avoid_write */
                errno == EINTR)
             ;
         VIR_FORCE_CLOSE(statuswrite);
@@ -938,7 +925,7 @@ int main(int argc, char **argv) {
         if (ret != 0) {
             /* Tell parent of daemon what failed */
             char status = ret;
-            while (write(statuswrite, &status, 1) == -1 &&
+            while (write(statuswrite, &status, 1) == -1 && /* sc_avoid_write */
                    errno == EINTR)
                 ;
         }

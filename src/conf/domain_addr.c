@@ -23,7 +23,6 @@
 
 #include "viralloc.h"
 #include "virlog.h"
-#include "virstring.h"
 #include "domain_addr.h"
 
 #define VIR_FROM_THIS VIR_FROM_DOMAIN
@@ -302,6 +301,26 @@ virDomainPCIAddressFlagsCompatible(virPCIDeviceAddress *addr,
 {
     virErrorNumber errType = (fromConfig
                               ? VIR_ERR_XML_ERROR : VIR_ERR_INTERNAL_ERROR);
+
+    if (devFlags & VIR_PCI_CONNECT_INTEGRATED) {
+        if (addr->bus == 0) {
+            /* pcie-root doesn't usually allow endpoint devices to be
+             * plugged directly into it, but for integrated devices
+             * that's exactly what we want. It also refuses conventional
+             * PCI devices by default, but in the case of integrated
+             * devices both types are fine */
+            busFlags |= VIR_PCI_CONNECT_TYPE_PCI_DEVICE |
+                        VIR_PCI_CONNECT_AUTOASSIGN;
+        } else {
+            if (reportError) {
+                virReportError(errType,
+                               _("The device at PCI address %s needs to be "
+                                 "an integrated device (bus=0)"),
+                               addrStr);
+            }
+            return false;
+        }
+    }
 
     if (fromConfig) {
         /* If the requested connection was manually specified in
@@ -1181,7 +1200,7 @@ virDomainPCIAddressReserveNextAddr(virDomainPCIAddressSet *addrs,
                                    virDomainPCIConnectFlags flags,
                                    int function)
 {
-    virPCIDeviceAddress addr;
+    virPCIDeviceAddress addr = { 0 };
 
     if (virDomainPCIAddressGetNextAddr(addrs, &addr, flags,
                                        dev->isolationGroup, function) < 0)
@@ -1286,26 +1305,6 @@ virDomainPCIAddressSetAllMulti(virDomainDef *def)
 }
 
 
-char*
-virDomainCCWAddressAsString(virDomainDeviceCCWAddress *addr)
-{
-    return g_strdup_printf("%x.%x.%04x", addr->cssid, addr->ssid, addr->devno);
-}
-
-static int
-virDomainCCWAddressIncrement(virDomainDeviceCCWAddress *addr)
-{
-    virDomainDeviceCCWAddress ccwaddr = *addr;
-
-    /* We are not touching subchannel sets and channel subsystems */
-    if (++ccwaddr.devno > VIR_DOMAIN_DEVICE_CCW_MAX_DEVNO)
-        return -1;
-
-    *addr = ccwaddr;
-    return 0;
-}
-
-
 int
 virDomainCCWAddressAssign(virDomainDeviceInfo *dev,
                           virDomainCCWAddressSet *addrs,
@@ -1317,7 +1316,7 @@ virDomainCCWAddressAssign(virDomainDeviceInfo *dev,
         return 0;
 
     if (!autoassign && dev->addr.ccw.assigned) {
-        if (!(addr = virDomainCCWAddressAsString(&dev->addr.ccw)))
+        if (!(addr = virCCWDeviceAddressAsString(&dev->addr.ccw)))
             return -1;
 
         if (virHashLookup(addrs->defined, addr)) {
@@ -1327,17 +1326,17 @@ virDomainCCWAddressAssign(virDomainDeviceInfo *dev,
             return -1;
         }
     } else if (autoassign && !dev->addr.ccw.assigned) {
-        if (!(addr = virDomainCCWAddressAsString(&addrs->next)))
+        if (!(addr = virCCWDeviceAddressAsString(&addrs->next)))
             return -1;
 
         while (virHashLookup(addrs->defined, addr)) {
-            if (virDomainCCWAddressIncrement(&addrs->next) < 0) {
+            if (virCCWDeviceAddressIncrement(&addrs->next) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                                _("There are no more free CCW devnos."));
                 return -1;
             }
             VIR_FREE(addr);
-            if (!(addr = virDomainCCWAddressAsString(&addrs->next)))
+            if (!(addr = virCCWDeviceAddressAsString(&addrs->next)))
                 return -1;
         }
         dev->addr.ccw = addrs->next;

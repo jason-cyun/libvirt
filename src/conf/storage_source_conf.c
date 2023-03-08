@@ -28,6 +28,7 @@
 #include "virerror.h"
 #include "virlog.h"
 #include "virstring.h"
+#include "virfile.h"
 
 #define VIR_FROM_THIS VIR_FROM_STORAGE
 
@@ -66,6 +67,7 @@ VIR_ENUM_IMPL(virStorageFileFormat,
 VIR_ENUM_IMPL(virStorageFileFeature,
               VIR_STORAGE_FILE_FEATURE_LAST,
               "lazy_refcounts",
+              "extended_l2",
 );
 
 
@@ -321,24 +323,16 @@ virStoragePRDefParseXML(xmlXPathContextPtr ctxt)
 {
     virStoragePRDef *prd;
     virStoragePRDef *ret = NULL;
-    g_autofree char *managed = NULL;
     g_autofree char *type = NULL;
     g_autofree char *path = NULL;
     g_autofree char *mode = NULL;
 
     prd = g_new0(virStoragePRDef, 1);
 
-    if (!(managed = virXPathString("string(./@managed)", ctxt))) {
-        virReportError(VIR_ERR_XML_ERROR, "%s",
-                       _("missing @managed attribute for <reservations/>"));
+    if (virXMLPropTristateBool(ctxt->node, "managed",
+                               VIR_XML_PROP_REQUIRED,
+                               &prd->managed) < 0)
         goto cleanup;
-    }
-
-    if ((prd->managed = virTristateBoolTypeFromString(managed)) <= 0) {
-        virReportError(VIR_ERR_XML_ERROR,
-                       _("invalid value for 'managed': %s"), managed);
-        goto cleanup;
-    }
 
     type = virXPathString("string(./source[1]/@type)", ctxt);
     path = virXPathString("string(./source[1]/@path)", ctxt);
@@ -823,6 +817,7 @@ virStorageSourceCopy(const virStorageSource *src,
     def->drv = NULL;
 
     def->path = g_strdup(src->path);
+    def->fdgroup = g_strdup(src->fdgroup);
     def->volume = g_strdup(src->volume);
     def->relPath = g_strdup(src->relPath);
     def->backingStoreRaw = g_strdup(src->backingStoreRaw);
@@ -834,6 +829,7 @@ virStorageSourceCopy(const virStorageSource *src,
     def->compat = g_strdup(src->compat);
     def->tlsAlias = g_strdup(src->tlsAlias);
     def->tlsCertdir = g_strdup(src->tlsCertdir);
+    def->tlsHostname = g_strdup(src->tlsHostname);
     def->query = g_strdup(src->query);
 
     if (src->sliceStorage)
@@ -890,6 +886,9 @@ virStorageSourceCopy(const virStorageSource *src,
             return NULL;
     }
 
+    if (src->fdtuple)
+        def->fdtuple = g_object_ref(src->fdtuple);
+
     /* ssh config passthrough for libguestfs */
     def->ssh_host_key_check_disabled = src->ssh_host_key_check_disabled;
     def->ssh_user = g_strdup(src->ssh_user);
@@ -935,7 +934,8 @@ virStorageSourceIsSameLocation(virStorageSource *a,
         STRNEQ_NULLABLE(a->snapshot, b->snapshot))
         return false;
 
-    if (a->type == VIR_STORAGE_TYPE_NETWORK) {
+    switch (virStorageSourceGetActualType(a)) {
+    case VIR_STORAGE_TYPE_NETWORK:
         if (a->protocol != b->protocol ||
             a->nhosts != b->nhosts)
             return false;
@@ -947,11 +947,23 @@ virStorageSourceIsSameLocation(virStorageSource *a,
                 STRNEQ_NULLABLE(a->hosts[i].socket, b->hosts[i].socket))
                 return false;
         }
-    }
+        break;
 
-    if (a->type == VIR_STORAGE_TYPE_NVME &&
-        !virStorageSourceNVMeDefIsEqual(a->nvme, b->nvme))
-        return false;
+    case VIR_STORAGE_TYPE_NVME:
+        if (!virStorageSourceNVMeDefIsEqual(a->nvme, b->nvme))
+            return false;
+        break;
+
+    case VIR_STORAGE_TYPE_VHOST_USER:
+    case VIR_STORAGE_TYPE_NONE:
+    case VIR_STORAGE_TYPE_FILE:
+    case VIR_STORAGE_TYPE_BLOCK:
+    case VIR_STORAGE_TYPE_DIR:
+    case VIR_STORAGE_TYPE_LAST:
+    case VIR_STORAGE_TYPE_VOLUME:
+        /* nothing to do */
+        break;
+    }
 
     return true;
 }
@@ -1010,7 +1022,7 @@ virStorageSourcePoolDefFree(virStorageSourcePoolDef *def)
  * and virDomainDiskTranslateSourcePool was called on @def the actual type
  * of the storage volume is returned rather than VIR_STORAGE_TYPE_VOLUME.
  */
-int
+virStorageType
 virStorageSourceGetActualType(const virStorageSource *def)
 {
     if (def->type == VIR_STORAGE_TYPE_VOLUME &&
@@ -1045,6 +1057,13 @@ virStorageSourceIsLocalStorage(const virStorageSource *src)
     }
 
     return false;
+}
+
+
+bool
+virStorageSourceIsFD(const virStorageSource *src)
+{
+    return src->fdgroup;
 }
 
 
@@ -1104,8 +1123,7 @@ virStorageSourceBackingStoreClear(virStorageSource *def)
     VIR_FREE(def->backingStoreRaw);
 
     /* recursively free backing chain */
-    virObjectUnref(def->backingStore);
-    def->backingStore = NULL;
+    g_clear_pointer(&def->backingStore, virObjectUnref);
 }
 
 
@@ -1116,6 +1134,7 @@ virStorageSourceClear(virStorageSource *def)
         return;
 
     VIR_FREE(def->path);
+    VIR_FREE(def->fdgroup);
     VIR_FREE(def->volume);
     VIR_FREE(def->snapshot);
     VIR_FREE(def->configFile);
@@ -1145,6 +1164,7 @@ virStorageSourceClear(virStorageSource *def)
 
     VIR_FREE(def->tlsAlias);
     VIR_FREE(def->tlsCertdir);
+    VIR_FREE(def->tlsHostname);
 
     VIR_FREE(def->ssh_user);
 
@@ -1152,6 +1172,8 @@ virStorageSourceClear(virStorageSource *def)
     VIR_FREE(def->nfs_group);
 
     virStorageSourceInitiatorClear(&def->initiator);
+
+    g_clear_pointer(&def->fdtuple, g_object_unref);
 
     /* clear everything except the class header as the object APIs
      * will break otherwise */
@@ -1353,4 +1375,46 @@ void
 virStorageSourceInitiatorClear(virStorageSourceInitiatorDef *initiator)
 {
     VIR_FREE(initiator->iqn);
+}
+
+G_DEFINE_TYPE(virStorageSourceFDTuple, vir_storage_source_fd_tuple, G_TYPE_OBJECT);
+
+static void
+vir_storage_source_fd_tuple_init(virStorageSourceFDTuple *fdt G_GNUC_UNUSED)
+{
+}
+
+
+static void
+virStorageSourceFDTupleFinalize(GObject *object)
+{
+    virStorageSourceFDTuple *fdt = VIR_STORAGE_SOURCE_FD_TUPLE(object);
+    size_t i;
+
+    if (!fdt)
+        return;
+
+    for (i = 0; i < fdt->nfds; i++)
+        VIR_FORCE_CLOSE(fdt->fds[i]);
+
+    g_free(fdt->fds);
+    g_free(fdt->testfds);
+    g_free(fdt->selinuxLabel);
+    G_OBJECT_CLASS(vir_storage_source_fd_tuple_parent_class)->finalize(object);
+}
+
+
+static void
+vir_storage_source_fd_tuple_class_init(virStorageSourceFDTupleClass *klass)
+{
+    GObjectClass *obj = G_OBJECT_CLASS(klass);
+
+    obj->finalize = virStorageSourceFDTupleFinalize;
+}
+
+
+virStorageSourceFDTuple *
+virStorageSourceFDTupleNew(void)
+{
+    return g_object_new(vir_storage_source_fd_tuple_get_type(), NULL);
 }

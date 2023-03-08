@@ -19,13 +19,13 @@
  */
 
 #include <config.h>
+#include "virsh-completer-nodedev.h"
 #include "virsh-nodedev.h"
 #include "virsh-util.h"
 
 #include "internal.h"
 #include "viralloc.h"
 #include "virfile.h"
-#include "virstring.h"
 #include "virtime.h"
 #include "conf/node_device_conf.h"
 #include "virenum.h"
@@ -50,6 +50,10 @@ static const vshCmdInfo info_node_device_create[] = {
 static const vshCmdOptDef opts_node_device_create[] = {
     VIRSH_COMMON_OPT_FILE(N_("file containing an XML description "
                              "of the device")),
+    {.name = "validate",
+     .type = VSH_OT_BOOL,
+     .help = N_("validate the XML against the schema")
+    },
     {.name = NULL}
 };
 
@@ -60,6 +64,7 @@ cmdNodeDeviceCreate(vshControl *ctl, const vshCmd *cmd)
     const char *from = NULL;
     g_autofree char *buffer = NULL;
     virshControl *priv = ctl->privData;
+    unsigned int flags = 0;
 
     if (vshCommandOptStringReq(ctl, cmd, "file", &from) < 0)
         return false;
@@ -67,7 +72,10 @@ cmdNodeDeviceCreate(vshControl *ctl, const vshCmd *cmd)
     if (virFileReadAll(from, VSH_MAX_XML_FILE, &buffer) < 0)
         return false;
 
-    if (!(dev = virNodeDeviceCreateXML(priv->conn, buffer, 0))) {
+    if (vshCommandOptBool(cmd, "validate"))
+        flags |= VIR_NODE_DEVICE_CREATE_XML_VALIDATE;
+
+    if (!(dev = virNodeDeviceCreateXML(priv->conn, buffer, flags))) {
         vshError(ctl, _("Failed to create node device from %s"), from);
         return false;
     }
@@ -343,8 +351,7 @@ virshNodeDeviceListCollect(vshControl *ctl,
     VIR_FREE(names);
 
     if (!success) {
-        virshNodeDeviceListFree(list);
-        list = NULL;
+        g_clear_pointer(&list, virshNodeDeviceListFree);
     }
 
     return list;
@@ -566,6 +573,16 @@ static const vshCmdOptDef opts_node_device_dumpxml[] = {
      .help = N_("device name or wwn pair in 'wwnn,wwpn' format"),
      .completer = virshNodeDeviceNameCompleter,
     },
+    {.name = "xpath",
+     .type = VSH_OT_STRING,
+     .flags = VSH_OFLAG_REQ_OPT,
+     .completer = virshCompleteEmpty,
+     .help = N_("xpath expression to filter the XML document")
+    },
+    {.name = "wrap",
+     .type = VSH_OT_BOOL,
+     .help = N_("wrap xpath results in an common root element"),
+    },
     {.name = NULL}
 };
 
@@ -575,9 +592,14 @@ cmdNodeDeviceDumpXML(vshControl *ctl, const vshCmd *cmd)
     g_autoptr(virshNodeDevice) device = NULL;
     g_autofree char *xml = NULL;
     const char *device_value = NULL;
+    bool wrap = vshCommandOptBool(cmd, "wrap");
+    const char *xpath = NULL;
 
     if (vshCommandOptStringReq(ctl, cmd, "device", &device_value) < 0)
          return false;
+
+    if (vshCommandOptStringQuiet(ctl, cmd, "xpath", &xpath) < 0)
+        return false;
 
     device = vshFindNodeDevice(ctl, device_value);
 
@@ -587,8 +609,7 @@ cmdNodeDeviceDumpXML(vshControl *ctl, const vshCmd *cmd)
     if (!(xml = virNodeDeviceGetXMLDesc(device, 0)))
         return false;
 
-    vshPrint(ctl, "%s\n", xml);
-    return true;
+    return virshDumpXML(ctl, xml, "node-device", xpath, wrap);
 }
 
 /*
@@ -614,7 +635,8 @@ static const vshCmdOptDef opts_node_device_detach[] = {
     },
     {.name = "driver",
      .type = VSH_OT_STRING,
-     .help = N_("pci device assignment backend driver (e.g. 'vfio' or 'kvm')")
+     .completer = virshNodeDevicePCIBackendCompleter,
+     .help = N_("pci device assignment backend driver (e.g. 'vfio' or 'xen')")
     },
     {.name = NULL}
 };
@@ -1044,6 +1066,10 @@ static const vshCmdInfo info_node_device_define[] = {
 static const vshCmdOptDef opts_node_device_define[] = {
     VIRSH_COMMON_OPT_FILE(N_("file containing an XML description "
                              "of the device")),
+    {.name = "validate",
+     .type = VSH_OT_BOOL,
+     .help = N_("validate the XML against the schema")
+    },
     {.name = NULL}
 };
 
@@ -1054,6 +1080,7 @@ cmdNodeDeviceDefine(vshControl *ctl, const vshCmd *cmd G_GNUC_UNUSED)
     const char *from = NULL;
     g_autofree char *buffer = NULL;
     virshControl *priv = ctl->privData;
+    unsigned int flags = 0;
 
     if (vshCommandOptStringReq(ctl, cmd, "file", &from) < 0)
         return false;
@@ -1061,7 +1088,10 @@ cmdNodeDeviceDefine(vshControl *ctl, const vshCmd *cmd G_GNUC_UNUSED)
     if (virFileReadAll(from, VSH_MAX_XML_FILE, &buffer) < 0)
         return false;
 
-    if (!(dev = virNodeDeviceDefineXML(priv->conn, buffer, 0))) {
+    if (vshCommandOptBool(cmd, "validate"))
+        flags |= VIR_NODE_DEVICE_DEFINE_XML_VALIDATE;
+
+    if (!(dev = virNodeDeviceDefineXML(priv->conn, buffer, flags))) {
         vshError(ctl, _("Failed to define node device from '%s'"), from);
         return false;
     }

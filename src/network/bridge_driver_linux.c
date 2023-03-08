@@ -21,7 +21,6 @@
 
 #include <config.h>
 
-#include "viralloc.h"
 #include "virfile.h"
 #include "viriptables.h"
 #include "virstring.h"
@@ -50,10 +49,8 @@ static void networkSetupPrivateChains(void)
 
     VIR_DEBUG("Setting up global firewall chains");
 
-    virFreeError(errInitV4);
-    errInitV4 = NULL;
-    virFreeError(errInitV6);
-    errInitV6 = NULL;
+    g_clear_pointer(&errInitV4, virFreeError);
+    g_clear_pointer(&errInitV6, virFreeError);
 
     rc = iptablesSetupPrivateChains(VIR_FIREWALL_LAYER_IPV4);
     if (rc < 0) {
@@ -89,9 +86,9 @@ static int
 networkHasRunningNetworksWithFWHelper(virNetworkObj *obj,
                                 void *opaque)
 {
+    VIR_LOCK_GUARD lock = virObjectLockGuard(obj);
     bool *activeWithFW = opaque;
 
-    virObjectLock(obj);
     if (virNetworkObjIsActive(obj)) {
         virNetworkDef *def = virNetworkObjGetDef(obj);
 
@@ -112,8 +109,6 @@ networkHasRunningNetworksWithFWHelper(virNetworkObj *obj,
             break;
         }
     }
-
-    virObjectUnlock(obj);
 
     /*
      * terminate ForEach early once we find an active network that
@@ -862,8 +857,17 @@ int networkAddFirewallRules(virNetworkDef *def)
              * nftables + default zone means that traffic cannot be
              * forwarded (and even DHCP and DNS from guest to host
              * will probably no be permitted by the default zone
+             *
+             * Routed networks use a different zone and policy which we also
+             * need to verify exist. Probing for the policy guarantees the
+             * running firewalld has support for policies (firewalld >= 0.9.0).
              */
-            if (virFirewallDZoneExists("libvirt")) {
+            if (def->forward.type == VIR_NETWORK_FORWARD_ROUTE &&
+                virFirewallDPolicyExists("libvirt-routed-out") &&
+                virFirewallDZoneExists("libvirt-routed")) {
+                if (virFirewallDInterfaceSetZone(def->bridge, "libvirt-routed") < 0)
+                    return -1;
+            } else if (virFirewallDZoneExists("libvirt")) {
                 if (virFirewallDInterfaceSetZone(def->bridge, "libvirt") < 0)
                     return -1;
             } else {

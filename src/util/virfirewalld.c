@@ -28,10 +28,10 @@
 #include "virfirewalldpriv.h"
 #include "viralloc.h"
 #include "virerror.h"
-#include "virutil.h"
 #include "virlog.h"
 #include "virgdbus.h"
 #include "virenum.h"
+#include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_FIREWALLD
 
@@ -107,7 +107,7 @@ virFirewallDGetVersion(unsigned long *version)
     g_variant_get(reply, "(v)", &gvar);
     g_variant_get(gvar, "&s", &versionStr);
 
-    if (virParseVersionString(versionStr, version, false) < 0) {
+    if (virStringParseVersion(version, versionStr, false) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Failed to parse firewalld version '%s'"),
                        versionStr);
@@ -223,6 +223,56 @@ virFirewallDGetZones(char ***zones, size_t *nzones)
     return 0;
 }
 
+/**
+ * virFirewallDGetPolicies:
+ * @policies: array of char *, each entry is a null-terminated policy name
+ * @npolicies: number of entries in @policies
+ *
+ * Get the number of currently active firewalld policies, and their names
+ * in an array of null-terminated strings. The memory pointed to by
+ * @policies will belong to the caller, and must be freed.
+ *
+ * Returns 0 on success, -1 (and failure logged) on error
+ */
+int
+virFirewallDGetPolicies(char ***policies, size_t *npolicies)
+{
+    GDBusConnection *sysbus = virGDBusGetSystemBus();
+    g_autoptr(GVariant) reply = NULL;
+    g_autoptr(GVariant) array = NULL;
+    g_autoptr(virError) error = NULL;
+
+    *npolicies = 0;
+    *policies = NULL;
+
+    if (!sysbus)
+        return -1;
+
+    error = g_new0(virError, 1);
+
+    if (virGDBusCallMethod(sysbus,
+                           &reply,
+                           G_VARIANT_TYPE("(as)"),
+                           error,
+                           VIR_FIREWALL_FIREWALLD_SERVICE,
+                           "/org/fedoraproject/FirewallD1",
+                           "org.fedoraproject.FirewallD1.policy",
+                           "getPolicies",
+                           NULL) < 0)
+        return -1;
+
+    if (error->level == VIR_ERR_ERROR) {
+        if (!virGDBusErrorIsUnknownMethod(error))
+            virReportErrorObject(error);
+        return -1;
+    }
+
+    g_variant_get(reply, "(@as)", &array);
+    *policies = g_variant_dup_strv(array, npolicies);
+
+    return 0;
+}
+
 
 /**
  * virFirewallDZoneExists:
@@ -251,6 +301,37 @@ virFirewallDZoneExists(const char *match)
     for (i = 0; i < nzones; i++)
        VIR_FREE(zones[i]);
     VIR_FREE(zones);
+    return result;
+}
+
+
+/**
+ * virFirewallDPolicyExists:
+ * @match: name of policy to look for
+ *
+ * Returns true if the requested policy exists, or false if it doesn't exist
+ */
+bool
+virFirewallDPolicyExists(const char *match)
+{
+    size_t npolicies = 0, i;
+    char **policies = NULL;
+    bool result = false;
+
+    if (virFirewallDGetPolicies(&policies, &npolicies) < 0)
+        goto cleanup;
+
+    for (i = 0; i < npolicies; i++) {
+        if (STREQ_NULLABLE(policies[i], match))
+            result = true;
+    }
+
+ cleanup:
+    VIR_DEBUG("Requested policy '%s' %s exist",
+              match, result ? "does" : "doesn't");
+    for (i = 0; i < npolicies; i++)
+       VIR_FREE(policies[i]);
+    VIR_FREE(policies);
     return result;
 }
 

@@ -93,8 +93,7 @@ testJSONFromString(const void *data)
         return -1;
     }
 
-    if (STRNEQ(expectstr, formatted)) {
-        virTestDifference(stderr, expectstr, formatted);
+    if (virTestCompareToString(expectstr, formatted) < 0) {
         return -1;
     }
 
@@ -424,8 +423,7 @@ testJSONEscapeObj(const void *data G_GNUC_UNUSED)
         return -1;
     }
 
-    if (STRNEQ(parsednestedstr, neststr)) {
-        virTestDifference(stderr, neststr, parsednestedstr);
+    if (virTestCompareToString(neststr, parsednestedstr) < 0) {
         return -1;
     }
 
@@ -441,8 +439,8 @@ testJSONObjectFormatSteal(const void *opaque G_GNUC_UNUSED)
     g_autoptr(virJSONValue) t1 = NULL;
     g_autoptr(virJSONValue) t2 = NULL;
 
-    if (!(a1 = virJSONValueNewString("test")) ||
-        !(a2 = virJSONValueNewString("test"))) {
+    if (!(a1 = virJSONValueNewString(g_strdup("test"))) ||
+        !(a2 = virJSONValueNewString(g_strdup("test")))) {
         VIR_TEST_VERBOSE("Failed to create json object");
     }
 

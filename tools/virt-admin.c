@@ -32,7 +32,6 @@
 #include "virstring.h"
 #include "virthread.h"
 #include "virgettext.h"
-#include "virtime.h"
 #include "virt-admin-completer.h"
 #include "vsh-table.h"
 #include "virenum.h"
@@ -74,7 +73,7 @@ vshAdmCatchDisconnect(virAdmConnectPtr conn G_GNUC_UNUSED,
     vshControl *ctl = opaque;
     const char *str = "unknown reason";
     virErrorPtr error;
-    char *uri = NULL;
+    g_autofree char *uri = NULL;
 
     if (reason == VIR_CONNECT_CLOSE_REASON_CLIENT)
         return;
@@ -98,8 +97,6 @@ vshAdmCatchDisconnect(virAdmConnectPtr conn G_GNUC_UNUSED,
     }
 
     vshError(ctl, _(str), NULLSTR(uri));
-    VIR_FREE(uri);
-
     virErrorRestore(&error);
 }
 
@@ -184,7 +181,7 @@ static const vshCmdInfo info_uri[] = {
 static bool
 cmdURI(vshControl *ctl, const vshCmd *cmd G_GNUC_UNUSED)
 {
-    char *uri;
+    g_autofree char *uri = NULL;
     vshAdmControl *priv = ctl->privData;
 
     uri = virAdmConnectGetURI(priv->conn);
@@ -194,7 +191,6 @@ cmdURI(vshControl *ctl, const vshCmd *cmd G_GNUC_UNUSED)
     }
 
     vshPrint(ctl, "%s\n", uri);
-    VIR_FREE(uri);
 
     return true;
 }
@@ -329,7 +325,7 @@ cmdSrvList(vshControl *ctl, const vshCmd *cmd G_GNUC_UNUSED)
     int nsrvs = 0;
     size_t i;
     bool ret = false;
-    char *uri = NULL;
+    g_autofree char *uri = NULL;
     virAdmServerPtr *srvs = NULL;
     vshAdmControl *priv = ctl->privData;
     g_autoptr(vshTable) table = NULL;
@@ -366,7 +362,6 @@ cmdSrvList(vshControl *ctl, const vshCmd *cmd G_GNUC_UNUSED)
             virAdmServerFree(srvs[i]);
         VIR_FREE(srvs);
     }
-    VIR_FREE(uri);
 
     return ret;
 }
@@ -703,9 +698,8 @@ cmdClientInfo(vshControl *ctl, const vshCmd *cmd)
              vshAdmClientTransportToString(virAdmClientGetTransport(clnt)));
 
     for (i = 0; i < nparams; i++) {
-        char *str = vshGetTypedParamValue(ctl, &params[i]);
+        g_autofree char *str = vshGetTypedParamValue(ctl, &params[i]);
         vshPrint(ctl, "%-15s: %s\n", params[i].field, str);
-        VIR_FREE(str);
     }
 
     ret = true;
@@ -1072,6 +1066,45 @@ static const vshCmdInfo info_daemon_log_outputs[] = {
     {.name = NULL}
 };
 
+static const vshCmdOptDef opts_daemon_timeout[] = {
+    {.name = "timeout",
+     .type = VSH_OT_INT,
+     .help = N_("number of seconds the daemon will run without any active connection"),
+     .flags = VSH_OFLAG_REQ | VSH_OFLAG_REQ_OPT
+    },
+    {.name = NULL}
+};
+
+static bool
+cmdDaemonTimeout(vshControl *ctl, const vshCmd *cmd)
+{
+    vshAdmControl *priv = ctl->privData;
+    unsigned int timeout = 0;
+
+    if (vshCommandOptUInt(ctl, cmd, "timeout", &timeout) < 0)
+        return false;
+
+    if (virAdmConnectSetDaemonTimeout(priv->conn, timeout, 0) < 0)
+        return false;
+
+    return true;
+}
+
+
+/* --------------------------
+ * Command daemon-timeout
+ * --------------------------
+ */
+static const vshCmdInfo info_daemon_timeout[] = {
+    {.name = "help",
+     .data = N_("set the auto shutdown timeout of the daemon")
+    },
+    {.name = "desc",
+     .data = N_("set the auto shutdown timeout of the daemon")
+    },
+    {.name = NULL}
+};
+
 static const vshCmdOptDef opts_daemon_log_outputs[] = {
     {.name = "outputs",
      .type = VSH_OT_STRING,
@@ -1189,13 +1222,13 @@ vshAdmDeinit(vshControl *ctl)
     virResetLastError();
 
     if (ctl->eventLoopStarted) {
-        int timer;
+        int timer = -1;
 
-        virMutexLock(&ctl->lock);
-        ctl->quit = true;
-        /* HACK: Add a dummy timeout to break event loop */
-        timer = virEventAddTimeout(0, vshAdmDeinitTimer, NULL, NULL);
-        virMutexUnlock(&ctl->lock);
+        VIR_WITH_MUTEX_LOCK_GUARD(&ctl->lock) {
+            ctl->quit = true;
+            /* HACK: Add a dummy timeout to break event loop */
+            timer = virEventAddTimeout(0, vshAdmDeinitTimer, NULL, NULL);
+        }
 
         virThreadJoin(&ctl->eventLoop);
 
@@ -1280,13 +1313,13 @@ vshAdmParseArgv(vshControl *ctl, int argc, char **argv)
     size_t i;
     int longindex = -1;
     struct option opt[] = {
-        {"connect", required_argument, NULL, 'c'},
-        {"debug", required_argument, NULL, 'd'},
-        {"help", no_argument, NULL, 'h'},
-        {"log", required_argument, NULL, 'l'},
-        {"quiet", no_argument, NULL, 'q'},
-        {"version", optional_argument, NULL, 'v'},
-        {NULL, 0, NULL, 0}
+        { "connect", required_argument, NULL, 'c' },
+        { "debug", required_argument, NULL, 'd' },
+        { "help", no_argument, NULL, 'h' },
+        { "log", required_argument, NULL, 'l' },
+        { "quiet", no_argument, NULL, 'q' },
+        { "version", optional_argument, NULL, 'v' },
+        { NULL, 0, NULL, 0 },
     };
 
     /* Standard (non-command) options. The leading + ensures that no
@@ -1497,6 +1530,12 @@ static const vshCmdDef managementCmds[] = {
      .handler = cmdDaemonLogOutputs,
      .opts = opts_daemon_log_outputs,
      .info = info_daemon_log_outputs,
+     .flags = 0
+    },
+    {.name = "daemon-timeout",
+     .handler = cmdDaemonTimeout,
+     .opts = opts_daemon_timeout,
+     .info = info_daemon_timeout,
      .flags = 0
     },
     {.name = NULL}

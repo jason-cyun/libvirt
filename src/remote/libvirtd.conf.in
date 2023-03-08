@@ -8,8 +8,10 @@
 #
 
 # Flag listening for secure TLS connections on the public TCP/IP port.
-# NB, must pass the --listen flag to the @DAEMON_NAME@ process for this to
-# have any effect.
+#
+# To enable listening sockets with the 'libvirtd' daemon it's also required to
+# pass the '--listen' flag on the commandline of the daemon.
+# This is not needed with 'virtproxyd'.
 #
 # This setting is not required or honoured if using systemd socket
 # activation.
@@ -21,8 +23,10 @@
 #listen_tls = 0
 
 # Listen for unencrypted TCP connections on the public TCP/IP port.
-# NB, must pass the --listen flag to the @DAEMON_NAME@ process for this to
-# have any effect.
+#
+# To enable listening sockets with the 'libvirtd' daemon it's also required to
+# pass the '--listen' flag on the commandline of the daemon.
+# This is not needed with 'virtproxyd'.
 #
 # This setting is not required or honoured if using systemd socket
 # activation.
@@ -40,7 +44,7 @@
 # This can be a port number, or service name
 #
 # This setting is not required or honoured if using systemd socket
-# activation with systemd version >= 227
+# activation.
 #
 #tls_port = "16514"
 
@@ -48,7 +52,7 @@
 # This can be a port number, or service name
 #
 # This setting is not required or honoured if using systemd socket
-# activation with systemd version >= 227
+# activation.
 #
 #tcp_port = "16509"
 
@@ -117,7 +121,7 @@
 # Set the name of the directory in which sockets will be found/created.
 #
 # This setting is not required or honoured if using systemd socket
-# activation with systemd version >= 227
+# activation.
 #
 #unix_sock_dir = "@runstatedir@/libvirt"
 
@@ -370,6 +374,7 @@
 # connection. To avoid one client monopolizing the server
 # this should be a small fraction of the global max_workers
 # parameter.
+# Setting this too low may cause keepalive timeouts.
 #max_client_requests = 5
 
 # Same processing controls, but this time for the admin interface.

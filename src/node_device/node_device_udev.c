@@ -30,19 +30,17 @@
 #include "node_device_udev.h"
 #include "virerror.h"
 #include "driver.h"
-#include "datatypes.h"
 #include "virlog.h"
 #include "viralloc.h"
 #include "viruuid.h"
-#include "virbuffer.h"
 #include "virfile.h"
+#include "virccw.h"
 #include "virpci.h"
 #include "virpidfile.h"
 #include "virstring.h"
 #include "virnetdev.h"
 #include "virmdev.h"
 #include "virutil.h"
-#include "virpcivpd.h"
 
 #include "configmake.h"
 
@@ -53,6 +51,8 @@ VIR_LOG_INIT("node_device.node_device_udev");
 #ifndef TYPE_RAID
 # define TYPE_RAID 12
 #endif
+
+#define DMI_DEVPATH "/sys/devices/virtual/dmi/id"
 
 typedef struct _udevEventData udevEventData;
 struct _udevEventData {
@@ -93,9 +93,9 @@ udevEventDataDispose(void *obj)
     udev_monitor_unref(priv->udev_monitor);
     udev_unref(udev);
 
-    virMutexLock(&priv->mdevctlLock);
-    g_list_free_full(priv->mdevctlMonitors, g_object_unref);
-    virMutexUnlock(&priv->mdevctlLock);
+    VIR_WITH_MUTEX_LOCK_GUARD(&priv->mdevctlLock) {
+        g_list_free_full(priv->mdevctlMonitors, g_object_unref);
+    }
     virMutexDestroy(&priv->mdevctlLock);
 
     virCondDestroy(&priv->threadCond);
@@ -348,13 +348,9 @@ udevTranslatePCIIds(unsigned int vendor,
     m.match_data = 0;
 
     /* pci_get_strings returns void and unfortunately is not thread safe. */
-    virMutexLock(&pciaccessMutex);
-    pci_get_strings(&m,
-                    &device_name,
-                    &vendor_name,
-                    NULL,
-                    NULL);
-    virMutexUnlock(&pciaccessMutex);
+    VIR_WITH_MUTEX_LOCK_GUARD(&pciaccessMutex) {
+        pci_get_strings(&m, &device_name, &vendor_name, NULL, NULL);
+    }
 
     *vendor_string = g_strdup(vendor_name);
     *product_string = g_strdup(device_name);
@@ -370,14 +366,14 @@ udevProcessPCI(struct udev_device *device,
     virNodeDevCapPCIDev *pci_dev = &def->caps->data.pci_dev;
     virPCIEDeviceInfo *pci_express = NULL;
     virPCIDevice *pciDev = NULL;
-    virPCIDeviceAddress devAddr;
+    virPCIDeviceAddress devAddr = { 0 };
     int ret = -1;
     char *p;
-    bool privileged;
+    bool privileged = false;
 
-    nodeDeviceLock();
-    privileged = driver->privileged;
-    nodeDeviceUnlock();
+    VIR_WITH_MUTEX_LOCK_GUARD(&driver->lock) {
+        privileged = driver->privileged;
+    }
 
     pci_dev->klass = -1;
     if (udevGetIntProperty(device, "PCI_CLASS", &pci_dev->klass, 16) < 0)
@@ -460,6 +456,28 @@ udevProcessPCI(struct udev_device *device,
     virPCIDeviceFree(pciDev);
     virPCIEDeviceInfoFree(pci_express);
     return ret;
+}
+
+
+static int
+udevProcessMdevParent(struct udev_device *device,
+                      virNodeDeviceDef *def)
+{
+    virNodeDevCapMdevParent *mdev_parent = &def->caps->data.mdev_parent;
+
+    udevGenerateDeviceName(device, def, NULL);
+
+    if (virMediatedDeviceParentGetAddress(def->sysfs_path, &mdev_parent->address) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("Unable to find address for mdev parent device '%s'"),
+                       def->name);
+        return -1;
+    }
+
+    if (virNodeDeviceGetMdevParentDynamicCaps(def->sysfs_path, mdev_parent) < 0)
+        return -1;
+
+    return 0;
 }
 
 
@@ -890,32 +908,40 @@ udevProcessDASD(struct udev_device *device,
 static int
 udevKludgeStorageType(virNodeDeviceDef *def)
 {
+    size_t i;
+    const struct {
+        const char *prefix;
+        const char *subst;
+    } fixups[] = {
+        /* virtio disk */
+        { "/dev/vd", "disk" },
+
+        /* For Direct Access Storage Devices (DASDs) there are
+         * currently no identifiers in udev besides ID_PATH. Since
+         * ID_TYPE=disk does not exist on DASDs they fall through
+         * the udevProcessStorage detection logic. */
+        { "/dev/dasd", "dasd" },
+
+        /* NVMe disk. While strictly speaking /dev/nvme is a
+         * controller not a disk, this function is called if and
+         * only if @def is of VIR_NODE_DEV_CAP_STORAGE type. */
+        { "/dev/nvme", "disk" },
+    };
+
     VIR_DEBUG("Could not find definitive storage type for device "
               "with sysfs path '%s', trying to guess it",
               def->sysfs_path);
 
-    /* virtio disk */
-    if (STRPREFIX(def->caps->data.storage.block, "/dev/vd")) {
-        def->caps->data.storage.drive_type = g_strdup("disk");
-        VIR_DEBUG("Found storage type '%s' for device "
-                  "with sysfs path '%s'",
-                  def->caps->data.storage.drive_type,
-                  def->sysfs_path);
-        return 0;
+    for (i = 0; i < G_N_ELEMENTS(fixups); i++) {
+        if (STRPREFIX(def->caps->data.storage.block, fixups[i].prefix)) {
+            def->caps->data.storage.drive_type = g_strdup(fixups[i].subst);
+            VIR_DEBUG("Found storage type '%s' for device with sysfs path '%s'",
+                      def->caps->data.storage.drive_type,
+                      def->sysfs_path);
+            return 0;
+        }
     }
 
-    /* For Direct Access Storage Devices (DASDs) there are
-     * currently no identifiers in udev besides ID_PATH. Since
-     * ID_TYPE=disk does not exist on DASDs they fall through
-     * the udevProcessStorage detection logic. */
-    if (STRPREFIX(def->caps->data.storage.block, "/dev/dasd")) {
-        def->caps->data.storage.drive_type = g_strdup("dasd");
-        VIR_DEBUG("Found storage type '%s' for device "
-                  "with sysfs path '%s'",
-                  def->caps->data.storage.drive_type,
-                  def->sysfs_path);
-        return 0;
-    }
     VIR_DEBUG("Could not determine storage type "
               "for device with sysfs path '%s'", def->sysfs_path);
     return -1;
@@ -1034,7 +1060,7 @@ udevProcessMediatedDevice(struct udev_device *dev,
 
     linkpath = g_strdup_printf("%s/mdev_type", udev_device_get_syspath(dev));
 
-    if (virFileWaitForExists(linkpath, 1, 100) < 0) {
+    if (virFileWaitForExists(linkpath, 10, 100) < 0) {
         virReportSystemError(errno,
                              _("failed to wait for file '%s' to appear"),
                              linkpath);
@@ -1082,9 +1108,10 @@ udevGetCCWAddress(const char *sysfs_path,
     char *p;
 
     if ((p = strrchr(sysfs_path, '/')) == NULL ||
-        virStrToLong_ui(p + 1, &p, 16, &data->ccw_dev.cssid) < 0 || p == NULL ||
-        virStrToLong_ui(p + 1, &p, 16, &data->ccw_dev.ssid) < 0 || p == NULL ||
-        virStrToLong_ui(p + 1, &p, 16, &data->ccw_dev.devno) < 0) {
+        virCCWDeviceAddressParseFromString(p + 1,
+                                           &data->ccw_dev.cssid,
+                                           &data->ccw_dev.ssid,
+                                           &data->ccw_dev.devno) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("failed to parse the CCW address from sysfs path: '%s'"),
                        sysfs_path);
@@ -1118,6 +1145,8 @@ static int
 udevProcessCSS(struct udev_device *device,
                virNodeDeviceDef *def)
 {
+    g_autofree char *dev_busid = NULL;
+
     /* only process IO subchannel and vfio-ccw devices to keep the list sane */
     if (!def->driver ||
         (STRNEQ(def->driver, "io_subchannel") &&
@@ -1128,6 +1157,12 @@ udevProcessCSS(struct udev_device *device,
         return -1;
 
     udevGenerateDeviceName(device, def, NULL);
+
+    /* process optional channel devices information */
+    udevGetStringSysfsAttr(device, "dev_busid", &dev_busid);
+
+    if (dev_busid != NULL && STRNEQ(dev_busid, "none"))
+        def->caps->data.ccw_dev.channel_dev_addr = virCCWDeviceAddressFromString(dev_busid);
 
     if (virNodeDeviceGetCSSDynamicCaps(def->sysfs_path, &def->caps->data.ccw_dev) < 0)
         return -1;
@@ -1338,6 +1373,8 @@ udevGetDeviceType(struct udev_device *device,
             *type = VIR_NODE_DEV_CAP_VDPA;
         else if (STREQ_NULLABLE(subsystem, "matrix"))
             *type = VIR_NODE_DEV_CAP_AP_MATRIX;
+        else if (STREQ_NULLABLE(subsystem, "mtty"))
+            *type = VIR_NODE_DEV_CAP_MDEV_TYPES;
 
         VIR_FREE(subsystem);
     }
@@ -1393,6 +1430,7 @@ udevGetDeviceDetails(struct udev_device *device,
     case VIR_NODE_DEV_CAP_AP_MATRIX:
         return udevProcessAPMatrix(device, def);
     case VIR_NODE_DEV_CAP_MDEV_TYPES:
+        return udevProcessMdevParent(device, def);
     case VIR_NODE_DEV_CAP_VPD:
     case VIR_NODE_DEV_CAP_SYSTEM:
     case VIR_NODE_DEV_CAP_FC_HOST:
@@ -1435,6 +1473,10 @@ udevRemoveOneDeviceSysPath(const char *path)
         virNodeDeviceObjListRemove(driver->devs, obj);
     }
     virNodeDeviceObjEndAPI(&obj);
+
+    /* cannot check for mdev_types since they have already been removed */
+    if (nodeDeviceUpdateMediatedDevices() < 0)
+        VIR_WARN("mdevctl failed to update mediated devices");
 
     virObjectEventStateQueue(driver->nodeDeviceEventState, event);
     return 0;
@@ -1503,6 +1545,7 @@ udevAddOneDevice(struct udev_device *device)
     bool persistent = false;
     bool autostart = false;
     bool is_mdev;
+    bool has_mdev_types = false;
 
     def = g_new0(virNodeDeviceDef, 1);
 
@@ -1558,7 +1601,11 @@ udevAddOneDevice(struct udev_device *device)
         event = virNodeDeviceEventUpdateNew(objdef->name);
 
     virNodeDeviceObjSetActive(obj, true);
+    has_mdev_types = virNodeDeviceObjHasCap(obj, VIR_NODE_DEV_CAP_MDEV_TYPES);
     virNodeDeviceObjEndAPI(&obj);
+
+    if (has_mdev_types && nodeDeviceUpdateMediatedDevices() < 0)
+        VIR_WARN("mdevctl failed to update mediated devices");
 
     ret = 0;
 
@@ -1675,10 +1722,10 @@ nodeStateCleanup(void)
 
     priv = driver->privateData;
     if (priv) {
-        virObjectLock(priv);
-        priv->threadQuit = true;
-        virCondSignal(&priv->threadCond);
-        virObjectUnlock(priv);
+        VIR_WITH_OBJECT_LOCK_GUARD(priv) {
+            priv->threadQuit = true;
+            virCondSignal(&priv->threadCond);
+        }
         if (priv->initThread) {
             virThreadJoin(priv->initThread);
             g_clear_pointer(&priv->initThread, g_free);
@@ -1794,24 +1841,21 @@ udevEventHandleThread(void *opaque G_GNUC_UNUSED)
 
     /* continue rather than break from the loop on non-fatal errors */
     while (1) {
-        virObjectLock(priv);
-        while (!priv->dataReady && !priv->threadQuit) {
-            if (virCondWait(&priv->threadCond, &priv->parent.lock)) {
-                virReportSystemError(errno, "%s",
-                                     _("handler failed to wait on condition"));
-                virObjectUnlock(priv);
-                return;
+        VIR_WITH_OBJECT_LOCK_GUARD(priv) {
+            while (!priv->dataReady && !priv->threadQuit) {
+                if (virCondWait(&priv->threadCond, &priv->parent.lock)) {
+                    virReportSystemError(errno, "%s",
+                                         _("handler failed to wait on condition"));
+                    return;
+                }
             }
-        }
 
-        if (priv->threadQuit) {
-            virObjectUnlock(priv);
-            return;
-        }
+            if (priv->threadQuit)
+                return;
 
-        errno = 0;
-        device = udev_monitor_receive_device(priv->udev_monitor);
-        virObjectUnlock(priv);
+            errno = 0;
+            device = udev_monitor_receive_device(priv->udev_monitor);
+        }
 
         if (!device) {
             if (errno == 0) {
@@ -1821,10 +1865,12 @@ udevEventHandleThread(void *opaque G_GNUC_UNUSED)
             }
 
             /* POSIX allows both EAGAIN and EWOULDBLOCK to be used
-             * interchangeably when the read would block or timeout was fired
+             * interchangeably when the read would block or timeout was fired.
+             * EINVAL might happen on too large udev entries, ignore those for
+             * the robustness of udevEventHandleThread.
              */
             VIR_WARNINGS_NO_WLOGICALOP_EQUAL_EXPR
-            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINVAL) {
             VIR_WARNINGS_RESET
                 virReportSystemError(errno, "%s",
                                      _("failed to receive device from udev "
@@ -1835,9 +1881,9 @@ udevEventHandleThread(void *opaque G_GNUC_UNUSED)
             /* Trying to move the reset of the @priv->dataReady flag to
              * after the udev_monitor_receive_device wouldn't help much
              * due to event mgmt and scheduler timing. */
-            virObjectLock(priv);
-            priv->dataReady = false;
-            virObjectUnlock(priv);
+            VIR_WITH_OBJECT_LOCK_GUARD(priv) {
+                priv->dataReady = false;
+            }
 
             continue;
         }
@@ -1860,8 +1906,7 @@ udevEventHandleCallback(int watch G_GNUC_UNUSED,
                         void *data G_GNUC_UNUSED)
 {
     udevEventData *priv = driver->privateData;
-
-    virObjectLock(priv);
+    VIR_LOCK_GUARD lock = virObjectLockGuard(priv);
 
     if (!udevEventMonitorSanityCheck(priv, fd))
         priv->threadQuit = true;
@@ -1869,7 +1914,6 @@ udevEventHandleCallback(int watch G_GNUC_UNUSED,
         priv->dataReady = true;
 
     virCondSignal(&priv->threadCond);
-    virObjectUnlock(priv);
 }
 
 
@@ -1884,18 +1928,17 @@ udevGetDMIData(virNodeDevCapSystem *syscap)
     virNodeDevCapSystemHardware *hardware = &syscap->hardware;
     virNodeDevCapSystemFirmware *firmware = &syscap->firmware;
 
-    virObjectLock(priv);
-    udev = udev_monitor_get_udev(priv->udev_monitor);
+    VIR_WITH_OBJECT_LOCK_GUARD(priv) {
+        udev = udev_monitor_get_udev(priv->udev_monitor);
 
-    device = udev_device_new_from_syspath(udev, DMI_DEVPATH);
-    if (device == NULL) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to get udev device for syspath '%s'"),
-                       DMI_DEVPATH);
-        virObjectUnlock(priv);
-        return;
+        device = udev_device_new_from_syspath(udev, DMI_DEVPATH);
+        if (device == NULL) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("Failed to get udev device for syspath '%s'"),
+                           DMI_DEVPATH);
+            return;
+        }
     }
-    virObjectUnlock(priv);
 
     if (udevGetStringSysfsAttr(device, "product_name",
                                &syscap->product_name) < 0)
@@ -1981,20 +2024,20 @@ nodeStateInitializeEnumerate(void *opaque)
         goto error;
 
  cleanup:
-    nodeDeviceLock();
-    driver->initialized = true;
-    virCondBroadcast(&driver->initCond);
-    nodeDeviceUnlock();
+    VIR_WITH_MUTEX_LOCK_GUARD(&driver->lock) {
+        driver->initialized = true;
+        virCondBroadcast(&driver->initCond);
+    }
 
     return;
 
  error:
-    virObjectLock(priv);
-    ignore_value(virEventRemoveHandle(priv->watch));
-    priv->watch = -1;
-    priv->threadQuit = true;
-    virCondSignal(&priv->threadCond);
-    virObjectUnlock(priv);
+    VIR_WITH_OBJECT_LOCK_GUARD(priv) {
+        ignore_value(virEventRemoveHandle(priv->watch));
+        priv->watch = -1;
+        priv->threadQuit = true;
+        virCondSignal(&priv->threadCond);
+    }
 
     goto cleanup;
 }
@@ -2028,12 +2071,10 @@ static void
 mdevctlHandlerThread(void *opaque G_GNUC_UNUSED)
 {
     udevEventData *priv = driver->privateData;
+    VIR_LOCK_GUARD lock = virLockGuardLock(&priv->mdevctlLock);
 
-    /* ensure only a single thread can query mdevctl at a time */
-    virMutexLock(&priv->mdevctlLock);
     if (nodeDeviceUpdateMediatedDevices() < 0)
-        VIR_WARN("mdevctl failed to updated mediated devices");
-    virMutexUnlock(&priv->mdevctlLock);
+        VIR_WARN("mdevctl failed to update mediated devices");
 }
 
 
@@ -2135,13 +2176,10 @@ mdevctlEnableMonitor(udevEventData *priv)
      * mdevctl configuration is stored in a directory tree within
      * /etc/mdevctl.d/. There is a directory for each parent device, which
      * contains a file defining each mediated device */
-    virMutexLock(&priv->mdevctlLock);
-    if (!(priv->mdevctlMonitors = monitorFileRecursively(priv,
-                                                         mdevctlConfigDir))) {
-        virMutexUnlock(&priv->mdevctlLock);
-        return -1;
+    VIR_WITH_MUTEX_LOCK_GUARD(&priv->mdevctlLock) {
+        if (!(priv->mdevctlMonitors = monitorFileRecursively(priv, mdevctlConfigDir)))
+            return -1;
     }
-    virMutexUnlock(&priv->mdevctlLock);
 
     return 0;
 }
@@ -2163,9 +2201,10 @@ mdevctlEventHandleCallback(GFileMonitor *monitor G_GNUC_UNUSED,
         if (file_type == G_FILE_TYPE_DIRECTORY) {
             GList *newmonitors = monitorFileRecursively(priv, file);
 
-            virMutexLock(&priv->mdevctlLock);
-            priv->mdevctlMonitors = g_list_concat(priv->mdevctlMonitors, newmonitors);
-            virMutexUnlock(&priv->mdevctlLock);
+            VIR_WITH_MUTEX_LOCK_GUARD(&priv->mdevctlLock) {
+                priv->mdevctlMonitors = g_list_concat(priv->mdevctlMonitors,
+                                                      newmonitors);
+            }
         }
     }
 
@@ -2191,6 +2230,7 @@ mdevctlEventHandleCallback(GFileMonitor *monitor G_GNUC_UNUSED,
 static int
 nodeStateInitialize(bool privileged,
                     const char *root,
+                    bool monolithic G_GNUC_UNUSED,
                     virStateInhibitCallback callback G_GNUC_UNUSED,
                     void *opaque G_GNUC_UNUSED)
 {

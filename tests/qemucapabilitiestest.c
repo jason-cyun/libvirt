@@ -95,9 +95,9 @@ testQemuCaps(const void *opaque)
     binary = g_strdup_printf("/usr/bin/qemu-system-%s",
                              data->archName);
 
-    if (!(capsActual = virQEMUCapsNewBinary(binary)) ||
-        virQEMUCapsInitQMPMonitor(capsActual,
-                                  qemuMonitorTestGetMonitor(mon)) < 0)
+    capsActual = virQEMUCapsNewBinary(binary);
+
+    if (virQEMUCapsInitQMPMonitor(capsActual, qemuMonitorTestGetMonitor(mon)) < 0)
         return -1;
 
     if (virQEMUCapsGet(capsActual, QEMU_CAPS_KVM)) {
@@ -150,8 +150,7 @@ testQemuCapsCopy(const void *opaque)
               virArchFromString(data->archName), capsFile)))
         return -1;
 
-    if (!(copy = virQEMUCapsNewCopy(orig)))
-        return -1;
+    copy = virQEMUCapsNewCopy(orig);
 
     if (!(actual = virQEMUCapsFormatCache(copy)))
         return -1;
@@ -212,7 +211,9 @@ mymain(void)
      * to generate updated or new *.replies data files.
      *
      * If you manually edit replies files you can run
-     * "tests/qemucapsfixreplies foo.replies" to fix the replies ids.
+     * VIR_TEST_REGENERATE_OUTPUT=1 tests/qemucapabilitiesnumbering
+     * to fix the replies ids. The tool also allows for programmatic
+     * modification of the replies file.
      *
      * Once a replies file has been generated and tweaked if necessary,
      * you can drop it into tests/qemucapabilitiesdata/ (with a sensible
@@ -228,4 +229,5 @@ mymain(void)
     return (data.ret == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-VIR_TEST_MAIN(mymain)
+VIR_TEST_MAIN_PRELOAD(mymain,
+                      VIR_TEST_MOCK("domaincaps"))

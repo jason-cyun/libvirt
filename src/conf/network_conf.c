@@ -26,7 +26,6 @@
 #include <fcntl.h>
 
 #include "virerror.h"
-#include "datatypes.h"
 #include "network_conf.h"
 #include "netdev_vport_profile_conf.h"
 #include "netdev_bandwidth_conf.h"
@@ -35,7 +34,6 @@
 #include "virxml.h"
 #include "viruuid.h"
 #include "virbuffer.h"
-#include "virfile.h"
 #include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_NETWORK
@@ -118,9 +116,8 @@ virPortGroupDefClear(virPortGroupDef *def)
 {
     VIR_FREE(def->name);
     VIR_FREE(def->virtPortProfile);
-    virNetDevBandwidthFree(def->bandwidth);
+    g_clear_pointer(&def->bandwidth, virNetDevBandwidthFree);
     virNetDevVlanClear(&def->vlan);
-    def->bandwidth = NULL;
 }
 
 
@@ -318,7 +315,7 @@ virNetworkDefCopy(virNetworkDef *def,
     if (!(xml = virNetworkDefFormat(def, xmlopt, flags)))
        return NULL;
 
-    return virNetworkDefParseString(xml, xmlopt, false);
+    return virNetworkDefParse(xml, NULL, xmlopt, false);
 }
 
 
@@ -456,7 +453,7 @@ virNetworkDHCPRangeDefParseXML(const char *networkName,
                                virNetworkDHCPRangeDef *range)
 {
     virSocketAddrRange *addr = &range->addr;
-    xmlNodePtr cur = node->children;
+    xmlNodePtr lease;
     g_autofree char *start = NULL;
     g_autofree char *end = NULL;
 
@@ -483,15 +480,9 @@ virNetworkDHCPRangeDefParseXML(const char *networkName,
                               virNetworkIPDefPrefix(ipdef)) < 0)
         return -1;
 
-    while (cur != NULL) {
-        if (cur->type == XML_ELEMENT_NODE &&
-            virXMLNodeNameEqual(cur, "lease")) {
-
-            if (virNetworkDHCPLeaseTimeDefParseXML(&range->lease, cur) < 0)
-                return -1;
-        }
-        cur = cur->next;
-    }
+    if ((lease = virXMLNodeGetSubelement(node, "lease")) &&
+        virNetworkDHCPLeaseTimeDefParseXML(&range->lease, lease) < 0)
+        return -1;
 
     return 0;
 }
@@ -510,7 +501,7 @@ virNetworkDHCPHostDefParseXML(const char *networkName,
     g_autofree char *id = NULL;
     virMacAddr addr;
     virSocketAddr inaddr;
-    xmlNodePtr cur = node->children;
+    xmlNodePtr lease;
 
     mac = virXMLPropString(node, "mac");
     if (mac != NULL) {
@@ -548,7 +539,7 @@ virNetworkDHCPHostDefParseXML(const char *networkName,
     }
 
     name = virXMLPropString(node, "name");
-    if (name && (!g_ascii_isalpha(name[0]))) {
+    if (name && !(g_ascii_isalpha(name[0]) || g_ascii_isdigit(name[0]))) {
         virReportError(VIR_ERR_XML_ERROR,
                        _("Cannot use host name '%s' in network '%s'"),
                        name, networkName);
@@ -602,15 +593,9 @@ virNetworkDHCPHostDefParseXML(const char *networkName,
         }
     }
 
-    while (cur != NULL) {
-        if (cur->type == XML_ELEMENT_NODE &&
-            virXMLNodeNameEqual(cur, "lease")) {
-
-            if (virNetworkDHCPLeaseTimeDefParseXML(&host->lease, cur) < 0)
-                return -1;
-        }
-        cur = cur->next;
-    }
+    if ((lease = virXMLNodeGetSubelement(node, "lease")) &&
+        virNetworkDHCPLeaseTimeDefParseXML(&host->lease, lease) < 0)
+        return -1;
 
     host->mac = g_steal_pointer(&mac);
     host->id = g_steal_pointer(&id);
@@ -928,37 +913,21 @@ virNetworkDNSDefParseXML(const char *networkName,
     g_autofree xmlNodePtr *srvNodes = NULL;
     g_autofree xmlNodePtr *txtNodes = NULL;
     g_autofree xmlNodePtr *fwdNodes = NULL;
-    g_autofree char *forwardPlainNames = NULL;
-    g_autofree char *enable = NULL;
     int nhosts, nsrvs, ntxts, nfwds;
     size_t i;
     VIR_XPATH_NODE_AUTORESTORE(ctxt)
 
     ctxt->node = node;
 
-    enable = virXPathString("string(./@enable)", ctxt);
-    if (enable) {
-        def->enable = virTristateBoolTypeFromString(enable);
-        if (def->enable <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid dns enable setting '%s' "
-                             "in network '%s'"),
-                           enable, networkName);
-            return -1;
-        }
-    }
+    if (virXMLPropTristateBool(node, "enable",
+                               VIR_XML_PROP_NONE,
+                               &def->enable) < 0)
+        return -1;
 
-    forwardPlainNames = virXPathString("string(./@forwardPlainNames)", ctxt);
-    if (forwardPlainNames) {
-        def->forwardPlainNames = virTristateBoolTypeFromString(forwardPlainNames);
-        if (def->forwardPlainNames <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid dns forwardPlainNames setting '%s' "
-                             "in network '%s'"),
-                           forwardPlainNames, networkName);
-            return -1;
-        }
-    }
+    if (virXMLPropTristateBool(node, "forwardPlainNames",
+                               VIR_XML_PROP_NONE,
+                               &def->forwardPlainNames) < 0)
+        return -1;
 
     nfwds = virXPathNodeSet("./forwarder", ctxt, &fwdNodes);
     if (nfwds < 0) {
@@ -1076,9 +1045,6 @@ virNetworkIPDefParseXML(const char *networkName,
     xmlNodePtr dhcp;
     g_autofree char *address = NULL;
     g_autofree char *netmask = NULL;
-    g_autofree char *localPtr = NULL;
-    unsigned long prefix = 0;
-    int prefixRc;
     int ret = -1;
 
     ctxt->node = node;
@@ -1109,28 +1075,13 @@ virNetworkIPDefParseXML(const char *networkName,
         goto cleanup;
     }
 
-    prefixRc = virXPathULong("string(./@prefix)", ctxt, &prefix);
-    if (prefixRc == -2) {
-        virReportError(VIR_ERR_XML_ERROR,
-                       _("Invalid ULong value specified for prefix in definition of network '%s'"),
-                       networkName);
+    if (virXMLPropUInt(node, "prefix", 10, VIR_XML_PROP_NONE, &def->prefix) < 0)
         goto cleanup;
-    }
-    if (prefixRc < 0)
-        def->prefix = 0;
-    else
-        def->prefix = prefix;
 
-    localPtr = virXPathString("string(./@localPtr)", ctxt);
-    if (localPtr) {
-        def->localPTR = virTristateBoolTypeFromString(localPtr);
-        if (def->localPTR <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid localPtr value '%s' in network '%s'"),
-                           localPtr, networkName);
-            goto cleanup;
-        }
-    }
+    if (virXMLPropTristateBool(node, "localPtr",
+                               VIR_XML_PROP_NONE,
+                               &def->localPTR) < 0)
+        goto cleanup;
 
     /* validate address, etc. for each family */
     if ((def->family == NULL) || (STREQ(def->family, "ipv4"))) {
@@ -1157,8 +1108,8 @@ virNetworkIPDefParseXML(const char *networkName,
             }
         } else if (def->prefix > 32) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("Invalid IPv4 prefix '%lu' in network '%s'"),
-                           prefix, networkName);
+                           _("Invalid IPv4 prefix '%u' in network '%s'"),
+                           def->prefix, networkName);
             goto cleanup;
         }
     } else if (STREQ(def->family, "ipv6")) {
@@ -1176,8 +1127,8 @@ virNetworkIPDefParseXML(const char *networkName,
         }
         if (def->prefix > 128) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("Invalid IPv6 prefix '%lu' in network '%s'"),
-                           prefix, networkName);
+                           _("Invalid IPv6 prefix '%u' in network '%s'"),
+                           def->prefix, networkName);
             goto cleanup;
         }
     } else {
@@ -1217,19 +1168,11 @@ int
 virNetworkPortOptionsParseXML(xmlXPathContextPtr ctxt,
                               virTristateBool *isolatedPort)
 {
-    g_autofree char *str = NULL;
-    int tmp = VIR_TRISTATE_BOOL_ABSENT;
+    xmlNodePtr port_node = virXPathNode("./port", ctxt);
 
-    if ((str = virXPathString("string(./port/@isolated)", ctxt))) {
-        if ((tmp = virTristateBoolTypeFromString(str)) <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("unknown port isolated value '%s'"), str);
-            return -1;
-        }
-    }
-
-    *isolatedPort = tmp;
-    return 0;
+    return virXMLPropTristateBool(port_node, "isolated",
+                                  VIR_XML_PROP_NONE,
+                                  isolatedPort);
 }
 
 
@@ -1248,7 +1191,6 @@ virNetworkPortGroupParseXML(virPortGroupDef *def,
     xmlNodePtr vlanNode;
     xmlNodePtr bandwidth_node;
     g_autofree char *isDefault = NULL;
-    g_autofree char *trustGuestRxFilters = NULL;
 
     int ret = -1;
 
@@ -1265,17 +1207,10 @@ virNetworkPortGroupParseXML(virPortGroupDef *def,
     isDefault = virXPathString("string(./@default)", ctxt);
     def->isDefault = isDefault && STRCASEEQ(isDefault, "yes");
 
-    trustGuestRxFilters
-        = virXPathString("string(./@trustGuestRxFilters)", ctxt);
-    if (trustGuestRxFilters) {
-        if ((def->trustGuestRxFilters
-             = virTristateBoolTypeFromString(trustGuestRxFilters)) <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid trustGuestRxFilters setting '%s' "
-                             "in portgroup"), trustGuestRxFilters);
-            goto cleanup;
-        }
-    }
+    if (virXMLPropTristateBool(node, "trustGuestRxFilters",
+                               VIR_XML_PROP_NONE,
+                               &def->trustGuestRxFilters) < 0)
+        goto cleanup;
 
     virtPortNode = virXPathNode("./virtualport", ctxt);
     if (virtPortNode &&
@@ -1662,7 +1597,6 @@ virNetworkDefParseXML(xmlXPathContextPtr ctxt,
 {
     g_autoptr(virNetworkDef) def = NULL;
     g_autofree char *uuid = NULL;
-    g_autofree char *localOnly = NULL;
     g_autofree char *stp = NULL;
     g_autofree char *stpDelay = NULL;
     g_autofree char *macTableManager = NULL;
@@ -1676,11 +1610,11 @@ virNetworkDefParseXML(xmlXPathContextPtr ctxt,
     xmlNodePtr virtPortNode = NULL;
     xmlNodePtr forwardNode = NULL;
     g_autofree char *ipv6nogwStr = NULL;
-    g_autofree char *trustGuestRxFilters = NULL;
     VIR_XPATH_NODE_AUTORESTORE(ctxt)
     xmlNodePtr bandwidthNode = NULL;
     xmlNodePtr vlanNode;
     xmlNodePtr metadataNode = NULL;
+    xmlNodePtr domain_node = NULL;
 
     def = g_new0(virNetworkDef, 1);
 
@@ -1724,32 +1658,18 @@ virNetworkDefParseXML(xmlXPathContextPtr ctxt,
         }
     }
 
-    trustGuestRxFilters
-        = virXPathString("string(./@trustGuestRxFilters)", ctxt);
-    if (trustGuestRxFilters) {
-        if ((def->trustGuestRxFilters
-             = virTristateBoolTypeFromString(trustGuestRxFilters)) <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid trustGuestRxFilters setting '%s' "
-                             "in network '%s'"),
-                           trustGuestRxFilters, def->name);
-            return NULL;
-        }
-    }
+    if (virXMLPropTristateBool(ctxt->node, "trustGuestRxFilters",
+                               VIR_XML_PROP_NONE,
+                               &def->trustGuestRxFilters) < 0)
+        return NULL;
 
     /* Parse network domain information */
-    def->domain = virXPathString("string(./domain[1]/@name)", ctxt);
-    localOnly = virXPathString("string(./domain[1]/@localOnly)", ctxt);
-    if (localOnly) {
-        def->domainLocalOnly = virTristateBoolTypeFromString(localOnly);
-        if (def->domainLocalOnly <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid domain localOnly setting '%s' "
-                             "in network '%s'"),
-                           localOnly, def->name);
-            return NULL;
-        }
-    }
+    domain_node = virXPathNode("./domain[1]", ctxt);
+    def->domain = virXMLPropString(domain_node, "name");
+    if (virXMLPropTristateBool(domain_node, "localOnly",
+                               VIR_XML_PROP_NONE,
+                               &def->domainLocalOnly) < 0)
+        return NULL;
 
     if ((bandwidthNode = virXPathNode("./bandwidth", ctxt)) &&
         virNetDevBandwidthParse(&def->bandwidth, NULL, bandwidthNode, false) < 0)
@@ -1881,9 +1801,7 @@ virNetworkDefParseXML(xmlXPathContextPtr ctxt,
         for (i = 0; i < nRoutes; i++) {
             virNetDevIPRoute *route = NULL;
 
-            if (!(route = virNetDevIPRouteParseXML(def->name,
-                                                   routeNodes[i],
-                                                   ctxt)))
+            if (!(route = virNetDevIPRouteParseXML(def->name, routeNodes[i])))
                 return NULL;
             def->routes[i] = route;
             def->nroutes++;
@@ -2082,61 +2000,23 @@ virNetworkDefParseXML(xmlXPathContextPtr ctxt,
 }
 
 
-static virNetworkDef *
+virNetworkDef *
 virNetworkDefParse(const char *xmlStr,
                    const char *filename,
                    virNetworkXMLOption *xmlopt,
                    bool validate)
 {
     g_autoptr(xmlDoc) xml = NULL;
-    virNetworkDef *def = NULL;
+    g_autoptr(xmlXPathContext) ctxt = NULL;
     int keepBlanksDefault = xmlKeepBlanksDefault(0);
 
-    if ((xml = virXMLParse(filename, xmlStr, _("(network_definition)"),
-                           "network.rng", validate)))
-        def = virNetworkDefParseNode(xml, xmlDocGetRootElement(xml), xmlopt);
-
+    xml = virXMLParse(filename, xmlStr, _("(network_definition)"),
+                      "network", &ctxt, "network.rng", validate);
     xmlKeepBlanksDefault(keepBlanksDefault);
-    return def;
-}
 
-
-virNetworkDef *
-virNetworkDefParseString(const char *xmlStr,
-                         virNetworkXMLOption *xmlopt,
-                         bool validate)
-{
-    return virNetworkDefParse(xmlStr, NULL, xmlopt, validate);
-}
-
-
-virNetworkDef *
-virNetworkDefParseFile(const char *filename,
-                       virNetworkXMLOption *xmlopt)
-{
-    return virNetworkDefParse(NULL, filename, xmlopt, false);
-}
-
-
-virNetworkDef *
-virNetworkDefParseNode(xmlDocPtr xml,
-                       xmlNodePtr root,
-                       virNetworkXMLOption *xmlopt)
-{
-    g_autoptr(xmlXPathContext) ctxt = NULL;
-
-    if (!virXMLNodeNameEqual(root, "network")) {
-        virReportError(VIR_ERR_XML_ERROR,
-                       _("unexpected root element <%s>, "
-                         "expecting <network>"),
-                       root->name);
-        return NULL;
-    }
-
-    if (!(ctxt = virXMLXPathContextNew(xml)))
+    if (!xml)
         return NULL;
 
-    ctxt->node = root;
     return virNetworkDefParseXML(ctxt, xmlopt);
 }
 

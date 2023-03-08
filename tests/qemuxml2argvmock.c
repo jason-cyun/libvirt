@@ -23,25 +23,19 @@
 #include "internal.h"
 #include "viralloc.h"
 #include "vircommand.h"
-#include "vircrypto.h"
 #include "viridentitypriv.h"
 #include "virmock.h"
-#include "virlog.h"
 #include "virnetdev.h"
 #include "virnetdevbandwidth.h"
 #include "virnetdevip.h"
 #include "virnetdevtap.h"
 #include "virnetdevopenvswitch.h"
 #include "virnuma.h"
-#include "virrandom.h"
-#include "virscsi.h"
 #include "virscsivhost.h"
-#include "virstring.h"
 #include "virtpm.h"
 #include "virutil.h"
 #include "qemu/qemu_interface.h"
 #include "qemu/qemu_command.h"
-#include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -226,20 +220,28 @@ virNetDevOpenvswitchGetVhostuserIfname(const char *path G_GNUC_UNUSED,
 }
 
 int
-qemuInterfaceOpenVhostNet(virDomainDef *def G_GNUC_UNUSED,
-                          virDomainNetDef *net,
-                          int *vhostfd,
-                          size_t *vhostfdSize)
+qemuInterfaceOpenVhostNet(virDomainObj *vm G_GNUC_UNUSED,
+                          virDomainNetDef *net)
 {
+    qemuDomainNetworkPrivate *netpriv = QEMU_DOMAIN_NETWORK_PRIVATE(net);
+    size_t vhostfdSize = net->driver.virtio.queues;
     size_t i;
 
-    if (!virDomainNetIsVirtioModel(net)) {
-        *vhostfdSize = 0;
+    if (!vhostfdSize)
+         vhostfdSize = 1;
+
+    if (!virDomainNetIsVirtioModel(net))
         return 0;
+
+    for (i = 0; i < vhostfdSize; i++) {
+        g_autofree char *name = g_strdup_printf("vhostfd-%s%zu", net->info.alias, i);
+        int fd = STDERR_FILENO + 42 + i;
+
+        netpriv->vhostfds = g_slist_prepend(netpriv->vhostfds, qemuFDPassDirectNew(name, &fd));
     }
 
-    for (i = 0; i < *vhostfdSize; i++)
-        vhostfd[i] = STDERR_FILENO + 42 + i;
+    netpriv->vhostfds = g_slist_reverse(netpriv->vhostfds);
+
     return 0;
 }
 
@@ -263,7 +265,6 @@ qemuOpenChrChardevUNIXSocket(const virDomainChrSourceDef *dev G_GNUC_UNUSED)
 
 int
 qemuBuildTPMOpenBackendFDs(const char *tpmdev G_GNUC_UNUSED,
-                           const char *cancel_path G_GNUC_UNUSED,
                            int *tpmfd,
                            int *cancelfd)
 {

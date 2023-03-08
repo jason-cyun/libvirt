@@ -26,7 +26,6 @@
 #endif
 
 #include "internal.h"
-#include "virerror.h"
 #include "virthread.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
@@ -341,6 +340,9 @@ void vshSaveLibvirtError(void);
 void vshSaveLibvirtHelperError(void);
 
 /* file handling */
+void vshEditUnlinkTempfile(char *file);
+typedef char vshTempFile;
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(vshTempFile, vshEditUnlinkTempfile);
 char *vshEditWriteToTempFile(vshControl *ctl, const char *doc);
 int vshEditFile(vshControl *ctl, const char *filename);
 char *vshEditReadBackFile(vshControl *ctl, const char *filename);
@@ -517,6 +519,33 @@ void vshReadlineHistoryAdd(const char *cmd);
  */
 #define VSH_EXCLUSIVE_OPTIONS_VAR(VARNAME1, VARNAME2) \
     VSH_EXCLUSIVE_OPTIONS_EXPR(#VARNAME1, VARNAME1, #VARNAME2, VARNAME2)
+
+/* Macros to help dealing with alternative mutually exclusive options. */
+
+/* VSH_ALTERNATIVE_OPTIONS_EXPR:
+ *
+ * @NAME1: String containing the name of the option.
+ * @EXPR1: Expression to validate the variable (must evaluate to bool).
+ * @NAME2: String containing the name of the option.
+ * @EXPR2: Expression to validate the variable (must evaluate to bool).
+ *
+ * Require exactly one of the command options in virsh. Use the provided
+ * expression to check the variables.
+ *
+ * This helper does an early return and therefore it has to be called
+ * before anything that would require cleanup.
+ */
+#define VSH_ALTERNATIVE_OPTIONS_EXPR(NAME1, EXPR1, NAME2, EXPR2) \
+    do { \
+        bool _expr1 = EXPR1; \
+        bool _expr2 = EXPR2; \
+        VSH_EXCLUSIVE_OPTIONS_EXPR(NAME1, _expr1, NAME2, _expr2); \
+        if (!_expr1 && !_expr2) { \
+           vshError(ctl, _("Either --%s or --%s must be provided"), \
+                    NAME1, NAME2); \
+           return false; \
+        } \
+    } while (0)
 
 /* Macros to help dealing with required options. */
 

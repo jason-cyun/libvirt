@@ -16,10 +16,7 @@
  * License along with this library.  If not, see
  * <http://www.gnu.org/licenses/>.
  *
- * Notes:
- * netlink: http://lovezutto.googlepages.com/netlink.pdf
- *          iproute2 package
- *
+ * Notes: iproute2 package
  */
 
 #include <config.h>
@@ -27,8 +24,6 @@
 #include "virnetdevmacvlan.h"
 #include "virmacaddr.h"
 #include "virerror.h"
-#include "virthread.h"
-#include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_NET
 

@@ -22,7 +22,6 @@
 #include "domain_capabilities.h"
 #include "virfilewrapper.h"
 #include "configmake.h"
-#include "virtpm.h"
 
 
 #define VIR_FROM_THIS VIR_FROM_NONE
@@ -128,12 +127,6 @@ fillQemuCaps(virDomainCaps *domCaps,
     return 0;
 }
 
-
-/* Enough to tell capabilities code that swtpm is usable */
-bool virTPMHasSwtpm(void)
-{
-    return true;
-}
 
 #endif /* WITH_QEMU */
 
@@ -259,6 +252,7 @@ doTestQemuInternal(const char *version,
     g_autofree char *name = NULL;
     g_autofree char *capsName = NULL;
     g_autofree char *emulator = NULL;
+    int rc;
 
     name = g_strdup_printf("qemu_%s%s%s%s.%s",
                            version,
@@ -281,7 +275,21 @@ doTestQemuInternal(const char *version,
     };
     VIR_WARNINGS_RESET
 
-    if (virTestRun(name, test_virDomainCapsFormat, &data) < 0)
+    if (STRPREFIX(version, "3.") ||
+        STRPREFIX(version, "4.") ||
+        STRPREFIX(version, "5.")) {
+        g_setenv(TEST_TPM_ENV_VAR, TPM_VER_1_2, true);
+    } else if (STRPREFIX(version, "6.")) {
+        g_setenv(TEST_TPM_ENV_VAR, TPM_VER_1_2 TPM_VER_2_0, true);
+    } else {
+        g_setenv(TEST_TPM_ENV_VAR, TPM_VER_2_0, true);
+    }
+
+    rc = virTestRun(name, test_virDomainCapsFormat, &data);
+
+    g_unsetenv(TEST_TPM_ENV_VAR);
+
+    if (rc < 0)
         return -1;
 
     return 0;
@@ -329,8 +337,18 @@ doTestQemu(const char *inputDir G_GNUC_UNUSED,
                                VIR_DOMAIN_VIRT_KVM, opaque) < 0)
             ret = -1;
     } else if (STRPREFIX(arch, "riscv")) {
-        /* Unfortunately we have to skip RISC-V at the moment */
-        return 0;
+        /* For riscv64 we test two combinations:
+         *
+         *   - KVM with virt machine
+         *   - TCG with virt machine
+         */
+        if (doTestQemuInternal(version, "virt", arch,
+                               VIR_DOMAIN_VIRT_KVM, opaque) < 0)
+            ret = -1;
+
+        if (doTestQemuInternal(version, "virt", arch,
+                               VIR_DOMAIN_VIRT_QEMU, opaque) < 0)
+            ret = -1;
     } else {
         if (doTestQemuInternal(version, NULL, arch,
                                VIR_DOMAIN_VIRT_KVM, opaque) < 0)
@@ -389,8 +407,9 @@ mymain(void)
 #define DO_TEST_BHYVE(Name, Emulator, BhyveCaps, Type) \
     do { \
         g_autofree char *name = NULL; \
+        struct testData data; \
         name = g_strdup_printf("bhyve_%s.x86_64", Name); \
-        struct testData data = { \
+        data = (struct testData) { \
             .name = name, \
             .emulator = Emulator, \
             .arch = "x86_64", \
@@ -422,7 +441,8 @@ mymain(void)
      * to generate updated or new *.replies data files.
      *
      * If you manually edit replies files you can run
-     * "tests/qemucapsfixreplies foo.replies" to fix the replies ids.
+     * VIR_TEST_REGENERATE_OUTPUT=1 tests/qemucapabilitiesnumbering
+     * to fix the replies ids.
      *
      * Once a replies file has been generated and tweaked if necessary,
      * you can drop it into tests/qemucapabilitiesdata/ (with a sensible

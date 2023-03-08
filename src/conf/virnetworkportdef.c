@@ -23,8 +23,6 @@
 
 #include "viralloc.h"
 #include "virerror.h"
-#include "virstring.h"
-#include "virfile.h"
 #include "virnetdevmacvlan.h"
 #include "virnetworkportdef.h"
 #include "network_conf.h"
@@ -87,12 +85,11 @@ virNetworkPortDefParseXML(xmlXPathContextPtr ctxt)
     xmlNodePtr vlanNode;
     xmlNodePtr bandwidthNode;
     xmlNodePtr addressNode;
-    g_autofree char *trustGuestRxFilters = NULL;
+    xmlNodePtr rxfiltersNode = NULL;
+    xmlNodePtr plugNode = NULL;
     g_autofree char *mac = NULL;
     g_autofree char *macmgr = NULL;
     g_autofree char *mode = NULL;
-    g_autofree char *plugtype = NULL;
-    g_autofree char *managed = NULL;
     g_autofree char *driver = NULL;
 
     def = g_new0(virNetworkPortDef, 1);
@@ -169,25 +166,19 @@ virNetworkPortDefParseXML(xmlXPathContextPtr ctxt)
     if (virNetworkPortOptionsParseXML(ctxt, &def->isolatedPort) < 0)
         return NULL;
 
-    trustGuestRxFilters
-        = virXPathString("string(./rxfilters/@trustGuest)", ctxt);
-    if (trustGuestRxFilters) {
-        if ((def->trustGuestRxFilters
-             = virTristateBoolTypeFromString(trustGuestRxFilters)) <= 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid guest rx filters trust setting '%s' "),
-                           trustGuestRxFilters);
-            return NULL;
-        }
-    }
+    rxfiltersNode = virXPathNode("./rxfilters", ctxt);
+    if (virXMLPropTristateBool(rxfiltersNode, "trustGuest",
+                               VIR_XML_PROP_NONE,
+                               &def->trustGuestRxFilters) < 0)
+        return NULL;
 
-    plugtype = virXPathString("string(./plug/@type)", ctxt);
+    plugNode = virXPathNode("./plug", ctxt);
 
-    if (plugtype &&
-        (def->plugtype = virNetworkPortPlugTypeFromString(plugtype)) < 0) {
-        virReportError(VIR_ERR_XML_ERROR,
-                       _("Invalid network prt plug type '%s'"), plugtype);
-    }
+    if (virXMLPropEnum(plugNode, "type",
+                       virNetworkPortPlugTypeFromString,
+                       VIR_XML_PROP_NONE,
+                       &def->plugtype) < 0)
+        return NULL;
 
     switch (def->plugtype) {
     case VIR_NETWORK_PORT_PLUG_TYPE_NONE:
@@ -195,12 +186,12 @@ virNetworkPortDefParseXML(xmlXPathContextPtr ctxt)
 
     case VIR_NETWORK_PORT_PLUG_TYPE_NETWORK:
     case VIR_NETWORK_PORT_PLUG_TYPE_BRIDGE:
-        if (!(def->plug.bridge.brname = virXPathString("string(./plug/@bridge)", ctxt))) {
+        if (!(def->plug.bridge.brname = virXMLPropString(plugNode, "bridge"))) {
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("Missing network port bridge name"));
             return NULL;
         }
-        macmgr = virXPathString("string(./plug/@macTableManager)", ctxt);
+        macmgr = virXMLPropString(plugNode, "macTableManager");
         if (macmgr &&
             (def->plug.bridge.macTableManager =
              virNetworkBridgeMACTableManagerTypeFromString(macmgr)) <= 0) {
@@ -212,12 +203,12 @@ virNetworkPortDefParseXML(xmlXPathContextPtr ctxt)
         break;
 
     case VIR_NETWORK_PORT_PLUG_TYPE_DIRECT:
-        if (!(def->plug.direct.linkdev = virXPathString("string(./plug/@dev)", ctxt))) {
+        if (!(def->plug.direct.linkdev = virXMLPropString(plugNode, "dev"))) {
             virReportError(VIR_ERR_XML_ERROR, "%s",
                            _("Missing network port link device name"));
             return NULL;
         }
-        mode = virXPathString("string(./plug/@mode)", ctxt);
+        mode = virXMLPropString(plugNode, "mode");
         if (mode &&
             (def->plug.direct.mode =
              virNetDevMacVLanModeTypeFromString(mode)) < 0) {
@@ -228,14 +219,10 @@ virNetworkPortDefParseXML(xmlXPathContextPtr ctxt)
         break;
 
     case VIR_NETWORK_PORT_PLUG_TYPE_HOSTDEV_PCI:
-        managed = virXPathString("string(./plug/@managed)", ctxt);
-        if (managed &&
-            (def->plug.hostdevpci.managed =
-             virTristateBoolTypeFromString(managed)) < 0) {
-            virReportError(VIR_ERR_XML_ERROR,
-                           _("Invalid managed setting '%s' in network port"), mode);
+        if (virXMLPropTristateBool(plugNode, "managed",
+                                   VIR_XML_PROP_NONE,
+                                   &def->plug.hostdevpci.managed) < 0)
             return NULL;
-        }
         driver = virXPathString("string(./plug/driver/@name)", ctxt);
         if (driver &&
             (def->plug.hostdevpci.driver =
@@ -265,56 +252,19 @@ virNetworkPortDefParseXML(xmlXPathContextPtr ctxt)
 
 
 virNetworkPortDef *
-virNetworkPortDefParseNode(xmlDocPtr xml,
-                           xmlNodePtr root)
-{
-    g_autoptr(xmlXPathContext) ctxt = NULL;
-
-    if (STRNEQ((const char *)root->name, "networkport")) {
-        virReportError(VIR_ERR_XML_ERROR,
-                       "%s",
-                       _("unknown root element for network port"));
-        return NULL;
-    }
-
-    if (!(ctxt = virXMLXPathContextNew(xml)))
-        return NULL;
-
-    ctxt->node = root;
-    return virNetworkPortDefParseXML(ctxt);
-}
-
-
-static virNetworkPortDef *
 virNetworkPortDefParse(const char *xmlStr,
                        const char *filename,
                        unsigned int flags)
 {
-    virNetworkPortDef *def = NULL;
     g_autoptr(xmlDoc) xml = NULL;
+    g_autoptr(xmlXPathContext) ctxt = NULL;
+    bool validate = flags & VIR_NETWORK_PORT_CREATE_VALIDATE;
 
-    if ((xml = virXMLParse(filename, xmlStr, _("(networkport_definition)"),
-                           "networkport.rng",
-                           flags & VIR_NETWORK_PORT_CREATE_VALIDATE))) {
-        def = virNetworkPortDefParseNode(xml, xmlDocGetRootElement(xml));
-    }
+    if (!(xml = virXMLParse(filename, xmlStr, _("(networkport_definition)"),
+                            "networkport", &ctxt, "networkport.rng", validate)))
+        return NULL;
 
-    return def;
-}
-
-
-virNetworkPortDef *
-virNetworkPortDefParseString(const char *xmlStr,
-                             unsigned int flags)
-{
-    return virNetworkPortDefParse(xmlStr, NULL, flags);
-}
-
-
-virNetworkPortDef *
-virNetworkPortDefParseFile(const char *filename)
-{
-    return virNetworkPortDefParse(NULL, filename, 0);
+    return virNetworkPortDefParseXML(ctxt);
 }
 
 
@@ -395,8 +345,11 @@ virNetworkPortDefFormatBuf(virBuffer *buf,
             break;
 
         case VIR_NETWORK_PORT_PLUG_TYPE_HOSTDEV_PCI:
-            virBufferAsprintf(buf, " managed='%s'>\n",
-                              def->plug.hostdevpci.managed ? "yes" : "no");
+            if (def->plug.hostdevpci.managed) {
+                virBufferAsprintf(buf, " managed='%s'",
+                                  virTristateBoolTypeToString(def->plug.hostdevpci.managed));
+            }
+            virBufferAddLit(buf, ">\n");
             virBufferAdjustIndent(buf, 2);
             if (def->plug.hostdevpci.driver)
                 virBufferEscapeString(buf, "<driver name='%s'/>\n",
@@ -462,22 +415,18 @@ virNetworkPortDefDeleteStatus(virNetworkPortDef *def,
                               const char *dir)
 {
     char uuidstr[VIR_UUID_STRING_BUFLEN];
-    char *path;
-    int ret = -1;
+    g_autofree char *path = NULL;
 
     virUUIDFormat(def->uuid, uuidstr);
 
     if (!(path = virNetworkPortDefConfigFile(dir, uuidstr)))
-        goto cleanup;
+        return -1;
 
     if (unlink(path) < 0 && errno != ENOENT) {
         virReportSystemError(errno,
                              _("Unable to delete %s"), path);
-        goto cleanup;
+        return -1;
     }
 
-    ret = 0;
- cleanup:
-    VIR_FREE(path);
-    return ret;
+    return 0;
 }

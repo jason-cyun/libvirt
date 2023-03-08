@@ -22,7 +22,6 @@
 #pragma once
 
 #include "internal.h"
-#include "viruuid.h"
 #include "virnetdevvlan.h"
 #include "virnetdevvportprofile.h"
 #include "virnetdevbandwidth.h"
@@ -55,10 +54,10 @@ struct _virNetworkPortDef {
     virNetDevBandwidth *bandwidth;
     unsigned int class_id; /* class ID for bandwidth 'floor' */
     virNetDevVlan vlan;
-    int trustGuestRxFilters; /* enum virTristateBool */
+    virTristateBool trustGuestRxFilters;
     virTristateBool isolatedPort;
 
-    int plugtype; /* virNetworkPortPlugType */
+    virNetworkPortPlugType plugtype;
     union {
         struct {
             char *brname;
@@ -71,7 +70,7 @@ struct _virNetworkPortDef {
         struct {
             virPCIDeviceAddress addr; /* PCI Address of device */
             int driver; /* virNetworkForwardDriverNameType */
-            int managed;
+            virTristateBool managed;
         } hostdevpci;
     } plug;
 };
@@ -82,15 +81,9 @@ virNetworkPortDefFree(virNetworkPortDef *port);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virNetworkPortDef, virNetworkPortDefFree);
 
 virNetworkPortDef *
-virNetworkPortDefParseNode(xmlDocPtr xml,
-                           xmlNodePtr root);
-
-virNetworkPortDef *
-virNetworkPortDefParseString(const char *xml,
-                             unsigned int flags);
-
-virNetworkPortDef *
-virNetworkPortDefParseFile(const char *filename);
+virNetworkPortDefParse(const char *xmlStr,
+                       const char *filename,
+                       unsigned int flags);
 
 char *
 virNetworkPortDefFormat(const virNetworkPortDef *def);

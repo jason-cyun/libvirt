@@ -5,7 +5,7 @@
   <currentMemory unit='KiB'>1048576</currentMemory>
   <vcpu placement='static'>2</vcpu>
   <os>
-    <type arch='i686' machine='pc'>hvm</type>
+    <type arch='x86_64' machine='pc'>hvm</type>
     <boot dev='cdrom'/>
     <boot dev='hd'/>
     <bootmenu enable='yes'/>
@@ -16,29 +16,14 @@
     <pae/>
   </features>
   <cpu mode='custom' match='exact' check='none'>
-    <model fallback='allow'>core2duo</model>
-    <vendor>Intel</vendor>
-    <topology sockets='1' dies='1' cores='2' threads='1'/>
-    <feature policy='require' name='ds'/>
-    <feature policy='require' name='acpi'/>
-    <feature policy='require' name='ss'/>
-    <feature policy='require' name='ht'/>
-    <feature policy='require' name='tm'/>
-    <feature policy='require' name='pbe'/>
-    <feature policy='require' name='ds_cpl'/>
-    <feature policy='require' name='vmx'/>
-    <feature policy='require' name='est'/>
-    <feature policy='require' name='tm2'/>
-    <feature policy='require' name='cx16'/>
-    <feature policy='require' name='xtpr'/>
-    <feature policy='require' name='lahf_lm'/>
+    <model fallback='forbid'>qemu64</model>
   </cpu>
   <clock offset='utc'/>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
   <on_crash>restart</on_crash>
   <devices>
-    <emulator>/usr/bin/qemu-system-i386</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <controller type='ide' index='0'>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x1'/>
     </controller>

@@ -31,7 +31,6 @@
 #include "remote_protocol.h"
 #include "remote_driver.h"
 #include "util/virnetdevopenvswitch.h"
-#include "virstring.h"
 #include "virutil.h"
 
 #define VIR_FROM_THIS VIR_FROM_CONF
@@ -73,7 +72,7 @@ remoteConfigGetAuth(virConf *conf,
     return 0;
 }
 
-int
+void
 daemonConfigFilePath(bool privileged, char **configfile)
 {
     if (privileged) {
@@ -85,8 +84,6 @@ daemonConfigFilePath(bool privileged, char **configfile)
 
         *configfile = g_strdup_printf("%s/%s.conf", configdir, DAEMON_NAME);
     }
-
-    return 0;
 }
 
 struct daemonConfig*

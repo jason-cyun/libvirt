@@ -28,11 +28,6 @@
 #include "qemu_domain.h"
 #include "virlog.h"
 #include "virerror.h"
-#include "viralloc.h"
-#include "virpci.h"
-#include "virusb.h"
-#include "virscsi.h"
-#include "virnetdev.h"
 #include "virfile.h"
 #include "virhostdev.h"
 #include "virutil.h"
@@ -169,14 +164,14 @@ qemuHostdevPreparePCIDevicesCheckSupport(virDomainHostdevDef **hostdevs,
     /* assign defaults for hostdev passthrough */
     for (i = 0; i < nhostdevs; i++) {
         virDomainHostdevDef *hostdev = hostdevs[i];
-        int *backend = &hostdev->source.subsys.u.pci.backend;
+        virDomainHostdevSubsysPCIBackendType *backend = &hostdev->source.subsys.u.pci.backend;
 
         if (hostdev->mode != VIR_DOMAIN_HOSTDEV_MODE_SUBSYS)
             continue;
         if (hostdev->source.subsys.type != VIR_DOMAIN_HOSTDEV_SUBSYS_TYPE_PCI)
             continue;
 
-        switch ((virDomainHostdevSubsysPCIBackendType)*backend) {
+        switch (*backend) {
         case VIR_DOMAIN_HOSTDEV_PCI_BACKEND_DEFAULT:
             if (supportsPassthroughVFIO &&
                 virQEMUCapsGet(qemuCaps, QEMU_CAPS_DEVICE_VFIO_PCI)) {
@@ -272,27 +267,7 @@ qemuHostdevPrepareSCSIDevices(virQEMUDriver *driver,
                               virDomainHostdevDef **hostdevs,
                               int nhostdevs)
 {
-    size_t i;
     virHostdevManager *hostdev_mgr = driver->hostdevMgr;
-
-    /* Loop 1: Add the shared scsi host device to shared device
-     * table.
-     */
-    for (i = 0; i < nhostdevs; i++) {
-        virDomainDeviceDef dev;
-
-        if (!virHostdevIsSCSIDevice(hostdevs[i]))
-            continue;
-
-        dev.type = VIR_DOMAIN_DEVICE_HOSTDEV;
-        dev.data.hostdev = hostdevs[i];
-
-        if (qemuAddSharedDevice(driver, &dev, name) < 0)
-            return -1;
-
-        if (qemuSetUnprivSGIO(&dev) < 0)
-            return -1;
-    }
 
     return virHostdevPrepareSCSIDevices(hostdev_mgr, QEMU_DRIVER_NAME,
                                         name, hostdevs, nhostdevs);
@@ -429,18 +404,7 @@ qemuHostdevReAttachSCSIDevices(virQEMUDriver *driver,
                                virDomainHostdevDef **hostdevs,
                                int nhostdevs)
 {
-    size_t i;
     virHostdevManager *hostdev_mgr = driver->hostdevMgr;
-
-    for (i = 0; i < nhostdevs; i++) {
-        virDomainHostdevDef *hostdev = hostdevs[i];
-        virDomainDeviceDef dev;
-
-        dev.type = VIR_DOMAIN_DEVICE_HOSTDEV;
-        dev.data.hostdev = hostdev;
-
-        ignore_value(qemuRemoveSharedDevice(driver, &dev, name));
-    }
 
     virHostdevReAttachSCSIDevices(hostdev_mgr, QEMU_DRIVER_NAME,
                                   name, hostdevs, nhostdevs);

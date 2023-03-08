@@ -62,16 +62,16 @@
 #include <sys/file.h>
 
 #ifdef __linux__
-# if WITH_LINUX_MAGIC_H
-#  include <linux/magic.h>
-# endif
+# include <linux/magic.h>
 # include <sys/statfs.h>
-# if WITH_DECL_LO_FLAGS_AUTOCLEAR
-#  include <linux/loop.h>
-# endif
+# include <linux/loop.h>
 # include <sys/ioctl.h>
 # include <linux/cdrom.h>
-# include <linux/fs.h>
+/* These come from linux/fs.h, but that header conflicts with
+ * sys/mount.h on glibc 2.36+ */
+# define FS_IOC_GETFLAGS _IOR('f', 1, long)
+# define FS_IOC_SETFLAGS _IOW('f', 2, long)
+# define FS_NOCOW_FL 0x00800000
 #endif
 
 #if WITH_LIBATTR
@@ -201,6 +201,57 @@ struct _virFileWrapperFd {
 };
 
 #ifndef WIN32
+
+# ifdef __linux__
+
+/**
+ * virFileWrapperSetPipeSize:
+ * @fd: the fd of the pipe
+ *
+ * Set best pipe size on the passed file descriptor for bulk transfers of data.
+ *
+ * default pipe size (usually 64K) is generally not suited for large transfers
+ * to fast devices. A value of 1MB has been measured to improve virsh save
+ * by 400% in ideal conditions. We retry multiple times with smaller sizes
+ * on EPERM to account for possible small values of /proc/sys/fs/pipe-max-size.
+ *
+ * OS note: only for linux, on other OS this is a no-op.
+ */
+static int
+virFileWrapperSetPipeSize(int fd)
+{
+    int sz;
+
+    for (sz = 1024 * 1024; sz >= 64 * 1024; sz /= 2) {
+        int rv = fcntl(fd, F_SETPIPE_SZ, sz);
+
+        if (rv < 0 && errno == EPERM) {
+            VIR_DEBUG("EPERM trying to set fd %d pipe size to %d", fd, sz);
+            continue; /* retry with half the size */
+        }
+        if (rv < 0) {
+            virReportSystemError(errno, "%s",
+                                 _("unable to set pipe size"));
+            return -1;
+        }
+        VIR_DEBUG("fd %d pipe size adjusted to %d", fd, sz);
+        return 0;
+    }
+
+    VIR_WARN("unable to set pipe size, data transfer might be slow: %s",
+             g_strerror(errno));
+    return 0;
+}
+
+# else /* !__linux__ */
+static int
+virFileWrapperSetPipeSize(int fd G_GNUC_UNUSED)
+{
+    return 0;
+}
+# endif /* !__linux__ */
+
+
 /**
  * virFileWrapperFdNew:
  * @fd: pointer to fd to wrap
@@ -273,6 +324,9 @@ virFileWrapperFdNew(int *fd, const char *name, unsigned int flags)
     }
 
     if (virPipe(pipefd) < 0)
+        goto error;
+
+    if (virFileWrapperSetPipeSize(pipefd[output]) < 0)
         goto error;
 
     if (!(iohelper_path = virFileFindResource("libvirt_iohelper",
@@ -484,27 +538,49 @@ int virFileUnlock(int fd G_GNUC_UNUSED,
 #endif /* WIN32 */
 
 
+/**
+ * virFileRewrite:
+ * @path: file to rewrite
+ * @mode: mode of the file
+ * @uid: uid that should own file
+ * @gid: gid that should own file
+ * @rewrite: callback to write file contents
+ * @opaque: opaque data to pass to the callback
+ *
+ * Rewrite given @path atomically. This is achieved by writing a
+ * temporary file on a side and renaming it to the desired name.
+ * The temporary file is created using supplied @mode and
+ * @uid:@gid (pass -1 for current uid/gid) and written by
+ * @rewrite callback. It's callback's responsibility to report
+ * errors.
+ *
+ * Returns: 0 on success,
+ *         -1 otherwise (with error reported)
+ */
 int
 virFileRewrite(const char *path,
                mode_t mode,
+               uid_t uid, gid_t gid,
                virFileRewriteFunc rewrite,
                const void *opaque)
 {
     g_autofree char *newfile = NULL;
     int fd = -1;
     int ret = -1;
+    int rc;
 
     newfile = g_strdup_printf("%s.new", path);
 
-    if ((fd = open(newfile, O_WRONLY | O_CREAT | O_TRUNC, mode)) < 0) {
-        virReportSystemError(errno, _("cannot create file '%s'"),
+    if ((fd = virFileOpenAs(newfile, O_WRONLY | O_CREAT | O_TRUNC, mode,
+                            uid, gid,
+                            VIR_FILE_OPEN_FORCE_OWNER | VIR_FILE_OPEN_FORCE_MODE)) < 0) {
+        virReportSystemError(-fd,
+                             _("Failed to create file '%s'"),
                              newfile);
         goto cleanup;
     }
 
-    if (rewrite(fd, opaque) < 0) {
-        virReportSystemError(errno, _("cannot write data to file '%s'"),
-                             newfile);
+    if ((rc = rewrite(fd, newfile, opaque)) < 0) {
         goto cleanup;
     }
 
@@ -536,12 +612,18 @@ virFileRewrite(const char *path,
 
 
 static int
-virFileRewriteStrHelper(int fd, const void *opaque)
+virFileRewriteStrHelper(int fd,
+                        const char *path,
+                        const void *opaque)
 {
     const char *data = opaque;
 
-    if (safewrite(fd, data, strlen(data)) < 0)
+    if (safewrite(fd, data, strlen(data)) < 0) {
+        virReportSystemError(errno,
+                             _("cannot write data to file '%s'"),
+                             path);
         return -1;
+    }
 
     return 0;
 }
@@ -552,7 +634,7 @@ virFileRewriteStr(const char *path,
                   mode_t mode,
                   const char *str)
 {
-    return virFileRewrite(path, mode,
+    return virFileRewrite(path, mode, -1, -1,
                           virFileRewriteStrHelper, str);
 }
 
@@ -662,9 +744,7 @@ int virFileUpdatePerm(const char *path,
 }
 
 
-#if defined(__linux__) && WITH_DECL_LO_FLAGS_AUTOCLEAR
-
-# if WITH_DECL_LOOP_CTL_GET_FREE
+#if defined(__linux__)
 
 /* virFileLoopDeviceOpenLoopCtl() returns -1 when a real failure has occurred
  * while in the process of allocating or opening the loop device.  On success
@@ -709,7 +789,6 @@ static int virFileLoopDeviceOpenLoopCtl(char **dev_name, int *fd)
     *dev_name = looppath;
     return 0;
 }
-# endif /* WITH_DECL_LOOP_CTL_GET_FREE */
 
 static int virFileLoopDeviceOpenSearch(char **dev_name)
 {
@@ -778,7 +857,6 @@ static int virFileLoopDeviceOpen(char **dev_name)
 {
     int loop_fd = -1;
 
-# if WITH_DECL_LOOP_CTL_GET_FREE
     if (virFileLoopDeviceOpenLoopCtl(dev_name, &loop_fd) < 0)
         return -1;
 
@@ -786,7 +864,6 @@ static int virFileLoopDeviceOpen(char **dev_name)
 
     if (loop_fd >= 0)
         return loop_fd;
-# endif /* WITH_DECL_LOOP_CTL_GET_FREE */
 
     /* Without the loop control device we just use the old technique. */
     loop_fd = virFileLoopDeviceOpenSearch(dev_name);
@@ -967,8 +1044,7 @@ int virFileNBDDeviceAssociate(const char *file,
 
     VIR_DEBUG("Associated NBD device %s with file %s and format %s",
               nbddev, file, fmtstr);
-    *dev = nbddev;
-    nbddev = NULL;
+    *dev = g_steal_pointer(&nbddev);
 
     return 0;
 }
@@ -1085,17 +1161,17 @@ saferead(int fd, void *buf, size_t count)
     return nread;
 }
 
-/* Like write(), but restarts after EINTR. Doesn't play
- * nicely with nonblocking FD and EAGAIN, in which case
- * you want to use bare write(). Or even use virSocket()
- * if the FD is related to a socket rather than a plain
+/* Like write(), but restarts after EINTR. Encouraged by sc_avoid_write.
+ * Doesn't play nicely with nonblocking FD and EAGAIN, in which case
+ * you want to use bare write() and mark it's use with sc_avoid_write.
+ * Or even use virSocket() if the FD is related to a socket rather than a plain
  * file or pipe. */
 ssize_t
 safewrite(int fd, const void *buf, size_t count)
 {
     size_t nwritten = 0;
     while (count > 0) {
-        ssize_t r = write(fd, buf, count);
+        ssize_t r = write(fd, buf, count); /* sc_avoid_write */
 
         if (r < 0 && errno == EINTR)
             continue;
@@ -3231,41 +3307,44 @@ virFileRemoveLastComponent(char *path)
 # ifndef GPFS_SUPER_MAGIC
 #  define GPFS_SUPER_MAGIC 0x47504653
 # endif
-# ifndef QB_MAGIC
-#  define QB_MAGIC 0x51626d6e
-# endif
 
 # define VIR_ACFS_MAGIC 0x61636673
 
 # define PROC_MOUNTS "/proc/mounts"
 
+
+struct virFileSharedFsData {
+    const char *mnttype;
+    unsigned int magic;
+    unsigned int fstype;
+};
+
+static const struct virFileSharedFsData virFileSharedFsFUSE[] = {
+    { .mnttype = "fuse.glusterfs", .fstype = VIR_FILE_SHFS_GLUSTERFS },
+    { .mnttype = "fuse.quobyte", .fstype = VIR_FILE_SHFS_QB },
+};
+
 static int
-virFileIsSharedFixFUSE(const char *path,
-                       long long *f_type)
+virFileIsSharedFsFUSE(const char *path,
+                      unsigned int fstypes)
 {
     FILE *f = NULL;
     struct mntent mb;
     char mntbuf[1024];
-    char *mntDir = NULL;
-    char *mntType = NULL;
-    char *canonPath = NULL;
+    g_autofree char *canonPath = NULL;
     size_t maxMatching = 0;
-    int ret = -1;
+    bool isShared = false;
 
     if (!(canonPath = virFileCanonicalizePath(path))) {
-        virReportSystemError(errno,
-                             _("unable to canonicalize %s"),
-                             path);
+        virReportSystemError(errno, _("unable to canonicalize %s"), path);
         return -1;
     }
 
     VIR_DEBUG("Path canonicalization: %s->%s", path, canonPath);
 
     if (!(f = setmntent(PROC_MOUNTS, "r"))) {
-        virReportSystemError(errno,
-                             _("Unable to open %s"),
-                             PROC_MOUNTS);
-        goto cleanup;
+        virReportSystemError(errno, _("Unable to open %s"), PROC_MOUNTS);
+        return -1;
     }
 
     while (getmntent_r(f, &mb, mntbuf, sizeof(mntbuf))) {
@@ -3279,43 +3358,57 @@ virFileIsSharedFixFUSE(const char *path,
             continue;
 
         if (len > maxMatching) {
+            size_t i;
+            bool found = false;
+
+            for (i = 0; i < G_N_ELEMENTS(virFileSharedFsFUSE); i++) {
+                if (STREQ_NULLABLE(mb.mnt_type, virFileSharedFsFUSE[i].mnttype) &&
+                    (fstypes & virFileSharedFsFUSE[i].fstype) > 0) {
+                    found = true;
+                    break;
+                }
+            }
+
+            VIR_DEBUG("Updating shared='%d' for mountpoint '%s' type '%s'",
+                      found, p, mb.mnt_type);
+
+            isShared = found;
             maxMatching = len;
-            VIR_FREE(mntType);
-            VIR_FREE(mntDir);
-            mntDir = g_strdup(mb.mnt_dir);
-            mntType = g_strdup(mb.mnt_type);
         }
     }
 
-    if (STREQ_NULLABLE(mntType, "fuse.glusterfs")) {
-        VIR_DEBUG("Found gluster FUSE mountpoint=%s for path=%s. "
-                  "Fixing shared FS type", mntDir, canonPath);
-        *f_type = GFS2_MAGIC;
-    } else if (STREQ_NULLABLE(mntType, "fuse.quobyte")) {
-        VIR_DEBUG("Found Quobyte FUSE mountpoint=%s for path=%s. "
-                  "Fixing shared FS type", mntDir, canonPath);
-        *f_type = QB_MAGIC;
-    }
-
-    ret = 0;
- cleanup:
-    VIR_FREE(canonPath);
-    VIR_FREE(mntType);
-    VIR_FREE(mntDir);
     endmntent(f);
-    return ret;
+
+    if (isShared)
+        return 1;
+
+    return 0;
 }
+
+
+static const struct virFileSharedFsData virFileSharedFs[] = {
+    { .fstype = VIR_FILE_SHFS_NFS, .magic = NFS_SUPER_MAGIC },
+    { .fstype = VIR_FILE_SHFS_GFS2, .magic = GFS2_MAGIC },
+    { .fstype = VIR_FILE_SHFS_OCFS, .magic = OCFS2_SUPER_MAGIC },
+    { .fstype = VIR_FILE_SHFS_AFS, .magic = AFS_FS_MAGIC },
+    { .fstype = VIR_FILE_SHFS_SMB, .magic = SMB_SUPER_MAGIC },
+    { .fstype = VIR_FILE_SHFS_CIFS, .magic = CIFS_SUPER_MAGIC },
+    { .fstype = VIR_FILE_SHFS_CEPH, .magic = CEPH_SUPER_MAGIC },
+    { .fstype = VIR_FILE_SHFS_GPFS, .magic = GPFS_SUPER_MAGIC },
+    { .fstype = VIR_FILE_SHFS_ACFS, .magic = VIR_ACFS_MAGIC },
+};
 
 
 int
 virFileIsSharedFSType(const char *path,
-                      int fstypes)
+                      unsigned int fstypes)
 {
     g_autofree char *dirpath = NULL;
     char *p = NULL;
     struct statfs sb;
     int statfs_ret;
     long long f_type = 0;
+    size_t i;
 
     dirpath = g_strdup(path);
 
@@ -3354,44 +3447,18 @@ virFileIsSharedFSType(const char *path,
     f_type = sb.f_type;
 
     if (f_type == FUSE_SUPER_MAGIC) {
-        VIR_DEBUG("Found FUSE mount for path=%s. Trying to fix it", path);
-        virFileIsSharedFixFUSE(path, &f_type);
+        VIR_DEBUG("Found FUSE mount for path=%s", path);
+        return virFileIsSharedFsFUSE(path, fstypes);
     }
 
     VIR_DEBUG("Check if path %s with FS magic %lld is shared",
               path, f_type);
 
-    if ((fstypes & VIR_FILE_SHFS_NFS) &&
-        (f_type == NFS_SUPER_MAGIC))
-        return 1;
-
-    if ((fstypes & VIR_FILE_SHFS_GFS2) &&
-        (f_type == GFS2_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_OCFS) &&
-        (f_type == OCFS2_SUPER_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_AFS) &&
-        (f_type == AFS_FS_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_SMB) &&
-        (f_type == SMB_SUPER_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_CIFS) &&
-        (f_type == CIFS_SUPER_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_CEPH) &&
-        (f_type == CEPH_SUPER_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_GPFS) &&
-        (f_type == GPFS_SUPER_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_QB) &&
-        (f_type == QB_MAGIC))
-        return 1;
-    if ((fstypes & VIR_FILE_SHFS_ACFS) &&
-        (f_type == VIR_ACFS_MAGIC))
-        return 1;
+    for (i = 0; i < G_N_ELEMENTS(virFileSharedFs); i++) {
+        if (f_type == virFileSharedFs[i].magic &&
+            (fstypes & virFileSharedFs[i].fstype) > 0)
+            return 1;
+    }
 
     return 0;
 }
@@ -3516,7 +3583,7 @@ virFileFindHugeTLBFS(virHugeTLBFS **ret_fs,
 #else /* defined __linux__ */
 
 int virFileIsSharedFSType(const char *path G_GNUC_UNUSED,
-                          int fstypes G_GNUC_UNUSED)
+                          unsigned int fstypes G_GNUC_UNUSED)
 {
     /* XXX implement me :-) */
     return 0;
@@ -3578,7 +3645,8 @@ int virFileIsSharedFS(const char *path)
                                  VIR_FILE_SHFS_CEPH |
                                  VIR_FILE_SHFS_GPFS|
                                  VIR_FILE_SHFS_QB |
-                                 VIR_FILE_SHFS_ACFS);
+                                 VIR_FILE_SHFS_ACFS |
+                                 VIR_FILE_SHFS_GLUSTERFS);
 }
 
 
@@ -3591,7 +3659,8 @@ virFileIsClusterFS(const char *path)
     return virFileIsSharedFSType(path,
                                  VIR_FILE_SHFS_GFS2 |
                                  VIR_FILE_SHFS_OCFS |
-                                 VIR_FILE_SHFS_CEPH);
+                                 VIR_FILE_SHFS_CEPH |
+                                 VIR_FILE_SHFS_GLUSTERFS);
 }
 
 
@@ -3724,8 +3793,7 @@ virFileSetACLs(const char *file,
 void
 virFileFreeACLs(void **acl)
 {
-    acl_free(*acl);
-    *acl = NULL;
+    g_clear_pointer(acl, acl_free);
 }
 
 #else /* !defined(WITH_LIBACL) */
@@ -4497,3 +4565,218 @@ virFileSetCOW(const char *path,
     return 0;
 #endif /* ! __linux__ */
 }
+
+#ifndef WIN32
+struct runIOParams {
+    bool isBlockDev;
+    bool isDirect;
+    bool isWrite;
+    int fdin;
+    const char *fdinname;
+    int fdout;
+    const char *fdoutname;
+};
+
+/**
+ * runIOCopy: execute the IO copy based on the passed parameters
+ * @p: the IO parameters
+ *
+ * Execute the copy based on the passed parameters.
+ *
+ * Returns: size transferred, or < 0 on error.
+ */
+
+static off_t
+runIOCopy(const struct runIOParams p)
+{
+    g_autofree void *base = NULL; /* Location to be freed */
+    char *buf = NULL; /* Aligned location within base */
+    size_t buflen = 1024*1024;
+    intptr_t alignMask = 64*1024 - 1;
+    off_t total = 0;
+
+# if WITH_POSIX_MEMALIGN
+    if (posix_memalign(&base, alignMask + 1, buflen))
+        abort();
+    buf = base;
+# else
+    buf = g_new0(char, buflen + alignMask);
+    base = buf;
+    buf = (char *) (((intptr_t) base + alignMask) & ~alignMask);
+# endif
+
+    while (1) {
+        ssize_t got;
+
+        /* If we read with O_DIRECT from file we can't use saferead as
+         * it can lead to unaligned read after reading last bytes.
+         * If we write with O_DIRECT use should use saferead so that
+         * writes will be aligned.
+         * In other cases using saferead reduces number of syscalls.
+         */
+        if (!p.isWrite && p.isDirect) {
+            if ((got = read(p.fdin, buf, buflen)) < 0 &&
+                errno == EINTR)
+                continue;
+        } else {
+            got = saferead(p.fdin, buf, buflen);
+        }
+
+        if (got < 0) {
+            virReportSystemError(errno, _("Unable to read %s"), p.fdinname);
+            return -2;
+        }
+        if (got == 0)
+            break;
+
+        total += got;
+
+        /* handle last write size align in direct case */
+        if (got < buflen && p.isDirect && p.isWrite) {
+            ssize_t aligned_got = (got + alignMask) & ~alignMask;
+
+            memset(buf + got, 0, aligned_got - got);
+
+            if (safewrite(p.fdout, buf, aligned_got) < 0) {
+                virReportSystemError(errno, _("Unable to write %s"), p.fdoutname);
+                return -3;
+            }
+
+            if (!p.isBlockDev && ftruncate(p.fdout, total) < 0) {
+                virReportSystemError(errno, _("Unable to truncate %s"), p.fdoutname);
+                return -4;
+            }
+
+            break;
+        }
+
+        if (safewrite(p.fdout, buf, got) < 0) {
+            virReportSystemError(errno, _("Unable to write %s"), p.fdoutname);
+            return -3;
+        }
+    }
+    return total;
+}
+
+/**
+ * virFileDiskCopy: run IO to copy data between storage and a pipe or socket.
+ *
+ * @disk_fd:     the already open regular file or block device
+ * @disk_path:   the pathname corresponding to disk_fd (for error reporting)
+ * @remote_fd:   the pipe or socket
+ *               Use -1 to auto-choose between STDIN or STDOUT.
+ * @remote_path: the pathname corresponding to remote_fd (for error reporting)
+ *
+ * Note that the direction of the transfer is detected based on the @disk_fd
+ * file access mode (man 2 open). Therefore @disk_fd must be opened with
+ * O_RDONLY or O_WRONLY. O_RDWR is not supported.
+ *
+ * virFileDiskCopy always closes the file descriptor disk_fd,
+ * and any error during close(2) is reported and considered a failure.
+ *
+ * Returns: bytes transferred or < 0 on failure.
+ */
+
+off_t
+virFileDiskCopy(int disk_fd, const char *disk_path, int remote_fd, const char *remote_path)
+{
+    int ret = -1;
+    off_t total = 0;
+    struct stat sb;
+    struct runIOParams p;
+    int oflags = -1;
+
+    oflags = fcntl(disk_fd, F_GETFL);
+
+    if (oflags < 0) {
+        virReportSystemError(errno,
+                             _("unable to determine access mode of %s"),
+                             disk_path);
+        goto cleanup;
+    }
+    if (fstat(disk_fd, &sb) < 0) {
+        virReportSystemError(errno,
+                             _("unable to stat file descriptor %d path %s"),
+                             disk_fd, disk_path);
+        goto cleanup;
+    }
+    p.isBlockDev = S_ISBLK(sb.st_mode);
+    p.isDirect = O_DIRECT && (oflags & O_DIRECT);
+
+    switch (oflags & O_ACCMODE) {
+    case O_RDONLY:
+        p.isWrite = false;
+        p.fdin = disk_fd;
+        p.fdinname = disk_path;
+        p.fdout = remote_fd >= 0 ? remote_fd : STDOUT_FILENO;
+        p.fdoutname = remote_path;
+        break;
+    case O_WRONLY:
+        p.isWrite = true;
+        p.fdin = remote_fd >= 0 ? remote_fd : STDIN_FILENO;
+        p.fdinname = remote_path;
+        p.fdout = disk_fd;
+        p.fdoutname = disk_path;
+        break;
+    case O_RDWR:
+    default:
+        virReportSystemError(EINVAL, _("Unable to process file with flags %d"),
+                             (oflags & O_ACCMODE));
+        goto cleanup;
+    }
+    /* To make the implementation simpler, we give up on any
+     * attempt to use O_DIRECT in a non-trivial manner.  */
+    if (!p.isBlockDev && p.isDirect) {
+        off_t off;
+        if (p.isWrite) {
+            /*
+             * note: for write we do not only check that disk_fd is seekable,
+             * we also want to know that the file is empty, so we need SEEK_END.
+             */
+            if ((off = lseek(disk_fd, 0, SEEK_END)) != 0) {
+                virReportSystemError(off < 0 ? errno : EINVAL, "%s",
+                                     _("O_DIRECT write needs empty seekable file"));
+                goto cleanup;
+            }
+        } else if ((off = lseek(disk_fd, 0, SEEK_CUR)) != 0) {
+            virReportSystemError(off < 0 ? errno : EINVAL, "%s",
+                                 _("O_DIRECT read needs entire seekable file"));
+            goto cleanup;
+        }
+    }
+    total = runIOCopy(p);
+    if (total < 0)
+        goto cleanup;
+
+    /* Ensure all data is written */
+    if (virFileDataSync(p.fdout) < 0) {
+        if (errno != EINVAL && errno != EROFS) {
+            /* fdatasync() may fail on some special FDs, e.g. pipes */
+            virReportSystemError(errno, _("unable to fsync %s"), p.fdoutname);
+            goto cleanup;
+        }
+    }
+
+    ret = 0;
+
+ cleanup:
+    if (VIR_CLOSE(disk_fd) < 0 && ret == 0) {
+        virReportSystemError(errno, _("Unable to close %s"), disk_path);
+        ret = -1;
+    }
+    return ret;
+}
+
+#else /* WIN32 */
+
+off_t
+virFileDiskCopy(int disk_fd G_GNUC_UNUSED,
+                const char *disk_path G_GNUC_UNUSED,
+                int remote_fd G_GNUC_UNUSED,
+                const char *remote_path G_GNUC_UNUSED)
+{
+    virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                   _("virFileDiskCopy unsupported on this platform"));
+    return -1;
+}
+#endif /* WIN32 */

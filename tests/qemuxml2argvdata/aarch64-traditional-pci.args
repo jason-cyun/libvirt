@@ -1,26 +1,25 @@
 LC_ALL=C \
 PATH=/bin \
-HOME=/tmp/lib/domain--1-guest \
+HOME=/var/lib/libvirt/qemu/domain--1-guest \
 USER=test \
 LOGNAME=test \
-XDG_DATA_HOME=/tmp/lib/domain--1-guest/.local/share \
-XDG_CACHE_HOME=/tmp/lib/domain--1-guest/.cache \
-XDG_CONFIG_HOME=/tmp/lib/domain--1-guest/.config \
-QEMU_AUDIO_DRV=none \
+XDG_DATA_HOME=/var/lib/libvirt/qemu/domain--1-guest/.local/share \
+XDG_CACHE_HOME=/var/lib/libvirt/qemu/domain--1-guest/.cache \
+XDG_CONFIG_HOME=/var/lib/libvirt/qemu/domain--1-guest/.config \
 /usr/bin/qemu-system-aarch64 \
 -name guest=guest,debug-threads=on \
 -S \
--object secret,id=masterKey0,format=raw,file=/tmp/lib/domain--1-guest/master-key.aes \
--machine virt,usb=off,dump-guest-core=off,gic-version=2 \
+-object secret,id=masterKey0,format=raw,file=/var/lib/libvirt/qemu/domain--1-guest/master-key.aes \
+-machine virt,usb=off,gic-version=2,dump-guest-core=off \
 -accel tcg \
 -m 1024 \
--realtime mlock=off \
+-overcommit mem-lock=off \
 -smp 1,sockets=1,cores=1,threads=1 \
 -uuid 496d7ea8-9739-544b-4ebd-ef08be936e8b \
 -display none \
 -no-user-config \
 -nodefaults \
--chardev socket,id=charmonitor,path=/tmp/lib/domain--1-guest/monitor.sock,server=on,wait=off \
+-chardev socket,id=charmonitor,fd=1729,server=on,wait=off \
 -mon chardev=charmonitor,id=monitor,mode=control \
 -rtc base=utc \
 -no-shutdown \
@@ -31,4 +30,5 @@ QEMU_AUDIO_DRV=none \
 -device pcie-root-port,port=9,chassis=3,id=pci.3,bus=pcie.0,addr=0x1.0x1 \
 -chardev pty,id=charserial0 \
 -device pci-serial,chardev=charserial0,id=serial0,bus=pci.2,addr=0x1 \
+-audiodev '{"id":"audio1","driver":"none"}' \
 -msg timestamp=on

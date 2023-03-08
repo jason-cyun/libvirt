@@ -15,13 +15,12 @@ RUN zypper dist-upgrade -y && \
            ca-certificates \
            ccache \
            clang \
+           codespell \
            cpp \
            cppi \
            cyrus-sasl-devel \
-           dbus-1-devel \
            device-mapper-devel \
            diffutils \
-           dnsmasq \
            dwarves \
            ebtables \
            fuse-devel \
@@ -66,26 +65,24 @@ RUN zypper dist-upgrade -y && \
            ninja \
            numad \
            open-iscsi \
-           parted \
            parted-devel \
            perl-base \
            pkgconfig \
            polkit \
            python3-base \
            python3-docutils \
-           python3-flake8 \
+           python39-flake8 \
            qemu-tools \
-           radvd \
            readline-devel \
            rpcgen \
            rpm-build \
            sanlock-devel \
            scrub \
            sed \
+           systemd-rpm-macros \
            systemtap-sdt-devel \
            wireshark-devel \
-           xen-devel \
-           xfsprogs-devel && \
+           xen-devel && \
     zypper clean --all && \
     rpm -qa | sort > /packages.txt && \
     mkdir -p /usr/libexec/ccache-wrappers && \
@@ -93,8 +90,8 @@ RUN zypper dist-upgrade -y && \
     ln -s /usr/bin/ccache /usr/libexec/ccache-wrappers/clang && \
     ln -s /usr/bin/ccache /usr/libexec/ccache-wrappers/gcc
 
+ENV CCACHE_WRAPPERSDIR "/usr/libexec/ccache-wrappers"
 ENV LANG "en_US.UTF-8"
 ENV MAKE "/usr/bin/make"
 ENV NINJA "/usr/bin/ninja"
 ENV PYTHON "/usr/bin/python3"
-ENV CCACHE_WRAPPERSDIR "/usr/libexec/ccache-wrappers"

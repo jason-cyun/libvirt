@@ -22,7 +22,6 @@
 
 #include "virnetclientstream.h"
 #include "virnetclient.h"
-#include "viralloc.h"
 #include "virerror.h"
 #include "virlog.h"
 #include "virthread.h"
@@ -286,18 +285,18 @@ int virNetClientStreamSetError(virNetClientStream *st,
         st->err.code = err.code;
     }
     if (err.message) {
-        st->err.message = g_steal_pointer(&*err.message);
+        st->err.message = g_steal_pointer(err.message);
     }
     st->err.domain = err.domain;
     st->err.level = err.level;
     if (err.str1) {
-        st->err.str1 = g_steal_pointer(&*err.str1);
+        st->err.str1 = g_steal_pointer(err.str1);
     }
     if (err.str2) {
-        st->err.str2 = g_steal_pointer(&*err.str2);
+        st->err.str2 = g_steal_pointer(err.str2);
     }
     if (err.str3) {
-        st->err.str3 = g_steal_pointer(&*err.str3);
+        st->err.str3 = g_steal_pointer(err.str3);
     }
     st->err.int1 = err.int1;
     st->err.int2 = err.int2;
@@ -728,7 +727,7 @@ int virNetClientStreamEventAddCallback(virNetClientStream *st,
          virEventAddTimeout(-1,
                             virNetClientStreamEventTimer,
                             st,
-                            virObjectFreeCallback)) < 0) {
+                            virObjectUnref)) < 0) {
         virObjectUnref(st);
         goto cleanup;
     }

@@ -40,6 +40,8 @@ VIR_LOG_INIT("storage.storage_backend_disk");
 
 #define SECTOR_SIZE 512
 
+#define PARTED "parted"
+
 static bool
 virStorageVolPartFindExtended(virStorageVolDef *def,
                               const void *opaque G_GNUC_UNUSED)
@@ -469,6 +471,32 @@ virStorageBackendDiskStartPool(virStoragePoolObj *pool)
     format = virStoragePoolFormatDiskTypeToString(def->source.format);
     if (!virStorageBackendDeviceIsEmpty(path, format, false))
         return -1;
+
+    return 0;
+}
+
+
+static int
+virStorageBackendDiskCheckPool(virStoragePoolObj *pool,
+                               bool *isActive)
+{
+    virStoragePoolDef *def = virStoragePoolObjGetDef(pool);
+    const char *path = def->source.devices[0].path;
+
+    *isActive = false;
+
+    if (!virFileExists(path))
+        return 0;
+
+    if (def->source.format == VIR_STORAGE_POOL_DISK_UNKNOWN)
+        def->source.format = VIR_STORAGE_POOL_DISK_DOS;
+
+    if (!virStorageBackendDeviceIsEmpty(path,
+                                        virStoragePoolFormatDiskTypeToString(def->source.format),
+                                        false))
+        return -1;
+
+    *isActive = true;
 
     return 0;
 }
@@ -971,6 +999,7 @@ virStorageBackend virStorageBackendDisk = {
     .buildPool = virStorageBackendDiskBuildPool,
     .refreshPool = virStorageBackendDiskRefreshPool,
     .deletePool = virStorageBackendDiskDeletePool,
+    .checkPool = virStorageBackendDiskCheckPool,
 
     .createVol = virStorageBackendDiskCreateVol,
     .deleteVol = virStorageBackendDiskDeleteVol,

@@ -27,7 +27,7 @@ wise thing to do in most cases. See the `connection URI <uri.html>`__
 page for a full descriptions of the values allowed.
 
 OnDevice the application obtains a
-`virConnectPtr </html/libvirt-libvirt-host.html#virConnectPtr>`__
+`virConnectPtr <html/libvirt-libvirt-host.html#virConnectPtr>`__
 connection to the hypervisor it can then use it to manage the
 hypervisor's available domains and related virtualization resources,
 such as storage and networking. All those are exposed as first class
@@ -219,7 +219,7 @@ Daemon and Remote Access
 
 Access to libvirt drivers is primarily handled by the libvirtd daemon
 through the `remote <remote.html>`__ driver via an
-`RPC <internals/rpc.html>`__. Some hypervisors do support client-side
+`RPC <kbase/internals/rpc.html>`__. Some hypervisors do support client-side
 connections and responses, such as Test, OpenVZ, VMware, VirtualBox
 (vbox), ESX, Hyper-V, Xen, and Virtuozzo. The libvirtd daemon service is
 started on the host at system boot time and can also be restarted at any
@@ -234,8 +234,9 @@ The libvirt client `applications <apps.html>`__ use a `URI <uri.html>`__
 to obtain the ``virConnectPtr``. The ``virConnectPtr`` keeps track of
 the driver connection plus a variety of other connections (network,
 interface, storage, etc.). The ``virConnectPtr`` is then used as a
-parameter to other virtualization `functions <#Functions>`__. Depending
-upon the driver being used, calls will be routed through the remote
+parameter to other virtualization functions
+(see `Functions and Naming Conventions`_).
+Depending upon the driver being used, calls will be routed through the remote
 driver to the libvirtd daemon. The daemon will reference the connection
 specific driver in order to retrieve the requested information and then
 pass back status and/or data through the connection back to the
@@ -260,6 +261,6 @@ rules and guidelines. In order to add new API functionality follow the
 instructions regarding `implementing a new API in
 libvirt <api_extension.html>`__.
 
-.. |first class objects exposed by the API| image:: libvirt-object-model.png
-.. |The libvirt driver architecture| image:: libvirt-driver-arch.png
-.. |The libvirt daemon and remote architecture| image:: libvirt-daemon-arch.png
+.. |first class objects exposed by the API| image:: images/libvirt-object-model.png
+.. |The libvirt driver architecture| image:: images/libvirt-driver-arch.png
+.. |The libvirt daemon and remote architecture| image:: images/libvirt-daemon-arch.png

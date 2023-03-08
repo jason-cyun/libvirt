@@ -230,6 +230,9 @@ const REMOTE_NODE_MEMORY_PARAMETERS_MAX = 64;
 /* Upper limit on migrate parameters */
 const REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX = 64;
 
+/* Upper limit on save/restore parameters */
+const REMOTE_DOMAIN_SAVE_PARAMS_MAX = 64;
+
 /* Upper limit on number of job stats */
 const REMOTE_DOMAIN_JOB_STATS_MAX = 64;
 
@@ -271,6 +274,9 @@ const REMOTE_NODE_SEV_INFO_MAX = 64;
 
 /* Upper limit on number of launch security information entries */
 const REMOTE_DOMAIN_LAUNCH_SECURITY_INFO_PARAMS_MAX = 64;
+
+/* Upper limit on number of launch security state entries */
+const REMOTE_DOMAIN_LAUNCH_SECURITY_STATE_PARAMS_MAX = 64;
 
 /* Upper limit on number of parameters describing a guest */
 const REMOTE_DOMAIN_GUEST_INFO_PARAMS_MAX = 2048;
@@ -977,6 +983,12 @@ struct remote_domain_save_flags_args {
     unsigned int flags;
 };
 
+struct remote_domain_save_params_args {
+    remote_nonnull_domain dom;
+    remote_typed_param params<REMOTE_DOMAIN_SAVE_PARAMS_MAX>;
+    unsigned int flags;
+};
+
 struct remote_domain_restore_args {
     remote_nonnull_string from;
 };
@@ -984,6 +996,11 @@ struct remote_domain_restore_args {
 struct remote_domain_restore_flags_args {
     remote_nonnull_string from;
     remote_string dxml;
+    unsigned int flags;
+};
+
+struct remote_domain_restore_params_args {
+    remote_typed_param params<REMOTE_DOMAIN_SAVE_PARAMS_MAX>;
     unsigned int flags;
 };
 
@@ -2475,6 +2492,12 @@ struct remote_domain_abort_job_args {
 };
 
 
+struct remote_domain_abort_job_flags_args {
+    remote_nonnull_domain dom;
+    unsigned int flags;
+};
+
+
 struct remote_domain_migrate_get_max_downtime_args {
     remote_nonnull_domain dom;
     unsigned int flags;
@@ -3642,6 +3665,12 @@ struct remote_domain_get_launch_security_info_ret {
     remote_typed_param params<REMOTE_DOMAIN_LAUNCH_SECURITY_INFO_PARAMS_MAX>;
 };
 
+struct remote_domain_set_launch_security_state_args {
+    remote_nonnull_domain dom;
+    remote_typed_param params<REMOTE_DOMAIN_LAUNCH_SECURITY_STATE_PARAMS_MAX>;
+    unsigned int flags;
+};
+
 /* nwfilter binding */
 
 struct remote_nwfilter_binding_lookup_by_port_dev_args {
@@ -3900,6 +3929,12 @@ struct remote_domain_event_memory_device_size_change_msg {
     unsigned hyper size;
 };
 
+
+struct remote_domain_fd_associate_args {
+    remote_nonnull_domain dom;
+    remote_nonnull_string name;
+    unsigned int flags;
+};
 /*----- Protocol. -----*/
 
 /* Define the program number, protocol version and procedure numbers here. */
@@ -3939,8 +3974,9 @@ enum remote_procedure {
      *   Declare the access control requirements for the API. May be repeated
      *   multiple times, if multiple rules are required.
      *
-     *     <object> is one of 'connect', 'domain', 'network', 'storagepool',
-     *              'interface', 'nodedev', 'secret'.
+     *     <object> is one of 'connect', 'domain', 'interface', 'network',
+     *              'network_port', 'node_device', 'nwfilter',
+     *              'nwfilter_binding', 'secret', 'storage_pool', 'storage_vol'
      *     <permission> is one of the permissions in access/viraccessperm.h
      *     <flagname> indicates the rule only applies if the named flag
      *     is set in the API call
@@ -6387,12 +6423,14 @@ enum remote_procedure {
 
     /**
      * @generate: none
+     * @priority: high
      * @acl: connect:getattr
      */
     REMOTE_PROC_CONNECT_REGISTER_CLOSE_CALLBACK = 360,
 
     /**
      * @generate: none
+     * @priority: high
      * @acl: connect:getattr
      */
     REMOTE_PROC_CONNECT_UNREGISTER_CLOSE_CALLBACK = 361,
@@ -6905,5 +6943,36 @@ enum remote_procedure {
      * @generate: both
      * @acl: none
      */
-    REMOTE_PROC_DOMAIN_EVENT_MEMORY_DEVICE_SIZE_CHANGE = 438
+    REMOTE_PROC_DOMAIN_EVENT_MEMORY_DEVICE_SIZE_CHANGE = 438,
+
+    /**
+     * @generate: both
+     * @acl: domain:write
+     */
+    REMOTE_PROC_DOMAIN_SET_LAUNCH_SECURITY_STATE = 439,
+
+    /**
+     * @generate: both
+     * @acl: domain:hibernate
+     */
+    REMOTE_PROC_DOMAIN_SAVE_PARAMS = 440,
+
+    /**
+     * @generate: both
+     * @acl: domain:start
+     * @acl: domain:write
+     */
+    REMOTE_PROC_DOMAIN_RESTORE_PARAMS = 441,
+
+    /**
+     * @generate: both
+     * @acl: domain:write
+     */
+    REMOTE_PROC_DOMAIN_ABORT_JOB_FLAGS = 442,
+
+    /**
+     * @generate: none
+     * @acl: domain:write
+     */
+    REMOTE_PROC_DOMAIN_FD_ASSOCIATE = 443
 };

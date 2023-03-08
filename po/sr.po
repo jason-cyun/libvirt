@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: libvirt 6.0.0\n"
 "Report-Msgid-Bugs-To: https://libvirt.org/bugs.html\n"
-"POT-Creation-Date: 2021-11-25 08:59+0000\n"
+"POT-Creation-Date: 2023-02-22 13:50+0000\n"
 "PO-Revision-Date: 2015-03-03 07:52+0000\n"
 "Last-Translator: Copied by Zanata <copied-by-zanata@zanata.org>\n"
 "Language-Team: Serbian (http://www.transifex.com/projects/p/fedora/language/"
@@ -354,19 +354,13 @@ msgid "%s %s '%s' has unsupported type '%s', expecting '%s' or '%s'"
 msgstr ""
 
 #, c-format
+msgid ""
+"%s (on destination side) does not support the --migration option needed for "
+"migration with shared storage"
+msgstr ""
+
+#, c-format
 msgid "%s (out of %d)"
-msgstr ""
-
-#, fuzzy, c-format
-msgid "%s 3d acceleration is not supported"
-msgstr "верзија отиска није подржана (%d > %d)"
-
-#, c-format
-msgid "%s array element does not contain a string"
-msgstr ""
-
-#, c-format
-msgid "%s array element is missing item %zu"
 msgstr ""
 
 #, c-format
@@ -454,10 +448,6 @@ msgid "%s is missing 'type' property"
 msgstr ""
 
 #, c-format
-msgid "%s is missing or not an array"
-msgstr ""
-
-#, c-format
 msgid "%s is not an executable"
 msgstr ""
 
@@ -474,6 +464,10 @@ msgid "%s length greater than maximum: %d > %d"
 msgstr "vCPU бафер дужине мапе је прешао свој максимум: %d > %d"
 
 #, c-format
+msgid "%s memory device info is not handled yet"
+msgstr ""
+
+#, c-format
 msgid "%s model of watchdog can go only on PCI bus"
 msgstr ""
 
@@ -486,6 +480,15 @@ msgid "%s model of watchdog is allowed for s390 and s390x only"
 msgstr ""
 
 #, c-format
+msgid "%s model of watchdog is only part of q35 machine"
+msgstr ""
+
+#, c-format
+msgid ""
+"%s model of watchdog is part of the machine and cannot have any address set."
+msgstr ""
+
+#, c-format
 msgid "%s model of watchdog is virtual and cannot go on any bus."
 msgstr ""
 
@@ -495,10 +498,6 @@ msgstr ""
 
 #, c-format
 msgid "%s namespace is not available"
-msgstr ""
-
-#, c-format
-msgid "%s not available, firewall backend will not function"
 msgstr ""
 
 #, fuzzy, c-format
@@ -620,14 +619,6 @@ msgid "%s: IPv4 family specified for non-IPv4 gateway '%s' in route definition"
 msgstr ""
 
 #, c-format
-msgid "%s: Invalid metric specified in route definition"
-msgstr ""
-
-#, c-format
-msgid "%s: Invalid metric value, must be > 0 in route definition"
-msgstr ""
-
-#, c-format
 msgid "%s: Invalid netmask '%s' for address '%s' (both must be IPv4)"
 msgstr ""
 
@@ -637,10 +628,6 @@ msgstr ""
 
 #, c-format
 msgid "%s: Invalid prefix %u specified in route definition, must be 0 - 32"
-msgstr ""
-
-#, c-format
-msgid "%s: Invalid prefix specified in route definition"
 msgstr ""
 
 #, c-format
@@ -756,9 +743,13 @@ msgstr ""
 msgid "%s: expected an unsigned integer for '%s' parameter"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "%s: failed to communicate with bridge helper: %s%s"
-msgstr "%s: неуспело уписивање датотеке дневника: %s"
+#, c-format
+msgid "%s: failed to communicate with bridge helper: %s"
+msgstr ""
+
+#, c-format
+msgid "%s: failed to generate UNIX socket path"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "%s: failed to read temporary file: %s"
@@ -860,11 +851,11 @@ msgid "%s: try --help for more details\n"
 msgstr ""
 
 #, c-format
-msgid "%s: unable to determine access mode of fd %d"
+msgid "%s: unexpected URI transport '%s'\n"
 msgstr ""
 
 #, c-format
-msgid "%s: unexpected URI transport '%s'\n"
+msgid "%s: unknown remote mode '%s'"
 msgstr ""
 
 #, fuzzy, c-format
@@ -915,6 +906,10 @@ msgstr ""
 
 #, c-format
 msgid "'%s'"
+msgstr ""
+
+#, c-format
+msgid "'%s' D-Bus address is not handled"
 msgstr ""
 
 #, fuzzy, c-format
@@ -997,6 +992,9 @@ msgstr ""
 msgid "':' not allowed in RBD source volume name '%s'"
 msgstr ""
 
+msgid "'<local>' element missing for 'udp' socket interface"
+msgstr ""
+
 msgid "'adapter' name must be specified for scsi hostdev source"
 msgstr ""
 
@@ -1008,9 +1006,6 @@ msgstr ""
 
 msgid ""
 "'arch' element cannot be used inside 'cpu' element with 'match' attribute'"
-msgstr ""
-
-msgid "'base' and 'baseNode' can't be used together"
 msgstr ""
 
 msgid "'cache' refers to a non-existent NUMA node cache"
@@ -1031,7 +1026,11 @@ msgid ""
 "type instead"
 msgstr ""
 
-msgid "'disk' missing in reply of guest-get-fsinfo"
+msgid "'disk' missing or not an array in reply of guest-get-fsinfo"
+msgstr ""
+
+#, c-format
+msgid "'extended_l2' not supported with compat level %s"
 msgstr ""
 
 msgid "'floor' attribute allowed only in <inbound> element"
@@ -1062,13 +1061,16 @@ msgstr ""
 msgid "'iothread' is only supported for virtio-scsi controller"
 msgstr ""
 
-msgid "'jack' audio backend is not supported with this QEMU"
-msgstr ""
-
 msgid "'logical-id' missing in reply of guest-get-vcpus"
 msgstr ""
 
 msgid "'login-time' missing in reply of guest-get-users"
+msgstr ""
+
+msgid "'manual' memory snapshot mode not supported"
+msgstr ""
+
+msgid "'manual' snapshot mode is not supported by the test driver"
 msgstr ""
 
 msgid "'max_sectors' is only supported by virtio-scsi controller"
@@ -1098,6 +1100,9 @@ msgstr ""
 msgid "'netns' namespace source can only be used with sharenet"
 msgstr ""
 
+msgid "'network' attribute is required for listen type 'network'"
+msgstr ""
+
 #, fuzzy
 msgid "'network' attribute is valid only for listen type 'network'"
 msgstr ""
@@ -1105,9 +1110,6 @@ msgstr ""
 "type='network'/>"
 
 msgid "'nfs' host must use TCP protocol"
-msgstr ""
-
-msgid "'nfs' protocol is not supported with this QEMU binary"
 msgstr ""
 
 msgid "'nfs' protocol requires the usage of exactly one host"
@@ -1134,15 +1136,11 @@ msgstr ""
 msgid "'pool' and 'volume' must be specified together for 'pool' type source"
 msgstr ""
 
-#, c-format
-msgid "'queues' attribute must be positive number: %s"
-msgstr ""
-
 msgid "'queues' is only supported by virtio-scsi controller"
 msgstr ""
 
 msgid ""
-"'reconnect' attribute  unsupported 'server' mode for <interface "
+"'reconnect' attribute unsupported 'server' mode for <interface "
 "type='vhostuser'>"
 msgstr ""
 
@@ -1152,23 +1150,10 @@ msgid ""
 msgstr ""
 
 #, c-format
-msgid "'rx_queue_size' attribute must be positive number: %s"
-msgstr ""
-
-msgid "'sgio' is not supported for SCSI generic device yet "
-msgstr ""
-
-#, c-format
 msgid "'sibling_id %d' does not refer to a valid cell within NUMA 'cell id %d'"
 msgstr ""
 
 msgid "'socket' attribute is valid only for listen type 'socket'"
-msgstr ""
-
-msgid "'ssh' protocol is not yet supported"
-msgstr ""
-
-msgid "'startupPolicy' is only valid for 'file' type volume"
 msgstr ""
 
 msgid "'target' refers to a non-existent NUMA node"
@@ -1177,11 +1162,13 @@ msgstr ""
 msgid "'tftp' protocol is not supported with this QEMU binary"
 msgstr ""
 
-msgid "'trim' algorithm not supported"
+msgid "'tlsHostname' field is not supported by this QEMU"
 msgstr ""
 
-#, c-format
-msgid "'tx_queue_size' attribute must be positive number: %s"
+msgid "'tlsHostname' field is supported only with NBD disks"
+msgstr ""
+
+msgid "'trim' algorithm not supported"
 msgstr ""
 
 msgid "'type' missing in reply of guest-get-fsinfo"
@@ -1265,10 +1252,6 @@ msgstr ""
 msgid "(metadata_xml)"
 msgstr ""
 
-#, fuzzy
-msgid "(network status)"
-msgstr "име мреже"
-
 msgid "(network_definition)"
 msgstr ""
 
@@ -1289,10 +1272,6 @@ msgstr ""
 
 msgid "(nwfilterbinding_status)"
 msgstr ""
-
-#, fuzzy
-msgid "(pool state)"
-msgstr "нема стања"
 
 msgid "(qemu_migration_cookie)"
 msgstr ""
@@ -1400,10 +1379,13 @@ msgstr ""
 msgid "/proc/net/dev: Interface not found"
 msgstr ""
 
-msgid "64-bit PCI hole setting is only for root PCI controllers"
+msgid "3d acceleration is not supported by this QEMU binary"
 msgstr ""
 
-msgid "64-bit PCI hole size setting is not supported with this QEMU binary"
+msgid "3d acceleration is supported only with 'virtio' video device"
+msgstr ""
+
+msgid "64-bit PCI hole setting is only for root PCI controllers"
 msgstr ""
 
 #, c-format
@@ -1412,6 +1394,10 @@ msgstr ""
 
 #, c-format
 msgid "<%s>..."
+msgstr ""
+
+#, c-format
+msgid "<active_pcr_banks/> requires TPM version '%s'"
 msgstr ""
 
 #, c-format
@@ -1507,9 +1493,6 @@ msgstr ""
 
 #, c-format
 msgid "A domain definition can have no more than one cipher node with name %s"
-msgstr ""
-
-msgid "A field data length violates the resource length boundary."
 msgstr ""
 
 #, fuzzy
@@ -1664,10 +1647,6 @@ msgstr ""
 msgid "Ancestor model %s not found for CPU model %s"
 msgstr ""
 
-#, c-format
-msgid "Another close callback is already defined for domain %s"
-msgstr ""
-
 msgid "Another relabel transaction is already started"
 msgstr ""
 
@@ -1763,9 +1742,6 @@ msgstr ""
 
 #, c-format
 msgid "Attempt to overwrite resctrlid='%s' with id='%s'"
-msgstr ""
-
-msgid "Attempt to pass closed vhostuser FD"
 msgstr ""
 
 msgid "Attempt to send a non-blocking message with a synchronous reply"
@@ -1913,6 +1889,9 @@ msgid ""
 "Both port and URI requested for disk migration while being mutually exclusive"
 msgstr ""
 
+msgid "Both secret and the secret header are required"
+msgstr ""
+
 msgid "Bounded"
 msgstr ""
 
@@ -1963,9 +1942,6 @@ msgid "Busy"
 msgstr ""
 
 msgid "CA certificate:"
-msgstr ""
-
-msgid "CCW address type is not supported by this QEMU"
 msgstr ""
 
 #, c-format
@@ -2065,6 +2041,18 @@ msgstr "CPU време:"
 
 #, c-format
 msgid ""
+"CPU maximum physical address bits number specification cannot be used with "
+"mode='%s'"
+msgstr ""
+
+#, c-format
+msgid ""
+"CPU maximum physical address bits specification is not supported for '%s' "
+"architecture"
+msgstr ""
+
+#, c-format
+msgid ""
 "CPU mode '%s' for %s %s domain on %s host is not supported by hypervisor"
 msgstr ""
 
@@ -2139,7 +2127,7 @@ msgid "CPU vendor specified without CPU model"
 msgstr ""
 
 #, c-format
-msgid "CPU vendor value 0x%2lx already defined"
+msgid "CPU vendor value 0x%2llx already defined"
 msgstr ""
 
 msgid "CPU vendors do not match"
@@ -2235,10 +2223,6 @@ msgstr ""
 msgid "Call to '%s' returned something, expecting an empty result"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "Call to utsname failed: %d"
-msgstr "неуспела радња: %s"
-
 #, c-format
 msgid "Calling %s from '%s' failed"
 msgstr ""
@@ -2247,7 +2231,7 @@ msgid "Can only modify disk quota"
 msgstr ""
 
 #, c-format
-msgid "Can only open VNC or SPICE graphics backends, not %s"
+msgid "Can only open VNC, SPICE or D-Bus p2p graphics backends, not %s"
 msgstr ""
 
 msgid "Can't add USB hub: USB is disabled for this domain"
@@ -2322,8 +2306,7 @@ msgstr ""
 
 #, c-format
 msgid ""
-"Can't get the UUID of the file to be attached as harddisk/dvd/floppy: %s, rc="
-"%08x"
+"Can't get the UUID of the file to be attached as harddisk/dvd/floppy: %s"
 msgstr ""
 
 msgid "Can't initialize Parallels SDK"
@@ -2464,10 +2447,6 @@ msgid "Cannot check QEMU module directory %s"
 msgstr ""
 
 msgid "Cannot check address family on this platform"
-msgstr ""
-
-#, c-format
-msgid "Cannot check dnsmasq binary %s"
 msgstr ""
 
 #, c-format
@@ -2615,10 +2594,6 @@ msgid "Cannot extract running %s hypervisor version\n"
 msgstr "Не могу да извучем верзију текућег %s хипервизора\n"
 
 #, c-format
-msgid "Cannot find %s - Possibly the package isn't installed"
-msgstr ""
-
-#, c-format
 msgid "Cannot find '%s' in node device database"
 msgstr ""
 
@@ -2631,7 +2606,7 @@ msgid "Cannot find 'iothread' : %u"
 msgstr ""
 
 #, c-format
-msgid "Cannot find CPU model with PVR 0x%03lx"
+msgid "Cannot find CPU model with PVR 0x%03llx"
 msgstr ""
 
 #, c-format
@@ -2639,7 +2614,7 @@ msgid "Cannot find CPU model with PVR 0x%08x"
 msgstr ""
 
 #, c-format
-msgid "Cannot find CPU vendor with vendor id 0x%02lx"
+msgid "Cannot find CPU vendor with vendor id 0x%02llx"
 msgstr ""
 
 #, c-format
@@ -2656,10 +2631,6 @@ msgstr ""
 
 #, c-format
 msgid "Cannot find byte stats for block device '%s'"
-msgstr ""
-
-#, c-format
-msgid "Cannot find name for FD %d socket family %d"
 msgstr ""
 
 #, c-format
@@ -2909,13 +2880,6 @@ msgstr ""
 msgid "Cannot parse <address> 'port' attribute"
 msgstr "Није могуће рашчланити <source> „port“ особину уз спрегу прикључка"
 
-#, fuzzy
-msgid "Cannot parse <local> 'port' attribute with socket interface"
-msgstr "Није могуће рашчланити <source> „port“ особину уз спрегу прикључка"
-
-msgid "Cannot parse <source> 'port' attribute with socket interface"
-msgstr "Није могуће рашчланити <source> „port“ особину уз спрегу прикључка"
-
 #, c-format
 msgid "Cannot parse MAC address '%s' in network '%s'"
 msgstr ""
@@ -2945,10 +2909,6 @@ msgid "Cannot parse category in %s"
 msgstr ""
 
 msgid "Cannot parse cbm_mask from resctrl cache info"
-msgstr ""
-
-#, c-format
-msgid "Cannot parse controller index %s"
 msgstr ""
 
 #, fuzzy
@@ -2981,10 +2941,6 @@ msgstr "не могу да рашчланим место почетка уређ
 
 msgid "Cannot parse uuid attribute of element <address>"
 msgstr ""
-
-#, fuzzy, c-format
-msgid "Cannot parse version string '%s'"
-msgstr "не могу да рашчланим место почетка уређаја"
 
 #, c-format
 msgid ""
@@ -3088,13 +3044,13 @@ msgstr "не могу да поставим спољашњи SSF %d (%s)"
 msgid "Cannot set interface MAC on '%s'"
 msgstr "не могу да поставим спољашњи SSF %d (%s)"
 
+#, c-format
+msgid "Cannot set interface MAC to %s for ifname %s vf %d"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "Cannot set interface MAC to %s on '%s'"
 msgstr "Неуспело добављање статистике спреге %s %s"
-
-#, c-format
-msgid "Cannot set interface MAC/vlanid to %s/%d for ifname %s vf %d"
-msgstr ""
 
 #, fuzzy, c-format
 msgid "Cannot set interface MTU on '%s'"
@@ -3104,24 +3060,13 @@ msgstr "не могу да поставим спољашњи SSF %d (%s)"
 msgid "Cannot set interface flags on '%s'"
 msgstr "Неуспело добављање статистике спреге %s %s"
 
+#, c-format
+msgid "Cannot set interface vlanid to %d for ifname %s vf %d"
+msgstr ""
+
 #, fuzzy
 msgid "Cannot set memory higher than max memory"
 msgstr "не могу да поставим меморију већу од максималне меморије"
-
-msgid "Cannot set ownerId data in JSON document"
-msgstr ""
-
-msgid "Cannot set ownerName data in JSON document"
-msgstr ""
-
-msgid "Cannot set ownerPid data in JSON document"
-msgstr ""
-
-msgid "Cannot set ownerUUID data in JSON document"
-msgstr ""
-
-msgid "Cannot set restricted data in JSON document"
-msgstr ""
 
 #, fuzzy, c-format
 msgid "Cannot set scheduler parameters for pid %lld"
@@ -3172,19 +3117,6 @@ msgid "Cannot unshare mount namespace"
 msgstr ""
 
 msgid "Cannot unshare uninitialized CURL handle"
-msgstr ""
-
-msgid "Cannot update the read-only keyword: RO section not initialized."
-msgstr ""
-
-msgid ""
-"Cannot update the read-write keyword: read-write section not initialized."
-msgstr ""
-
-msgid "Cannot update the resource: a NULL keyword pointer has been provided."
-msgstr ""
-
-msgid "Cannot update the resource: a NULL resource pointer has been provided."
 msgstr ""
 
 #, c-format
@@ -3393,9 +3325,6 @@ msgstr ""
 msgid "Checkpoints have inconsistent relations for domain %s"
 msgstr ""
 
-msgid "Checksum validation has failed"
-msgstr ""
-
 #, c-format
 msgid "Child process (%lld) unexpected %s"
 msgstr ""
@@ -3455,11 +3384,6 @@ msgid "Client's username is not on the list of allowed clients"
 msgstr ""
 
 msgid "Clone an existing volume within the parent pool."
-msgstr ""
-
-#, c-format
-msgid ""
-"Close callback for domain %s already registered with another connection %p"
 msgstr ""
 
 #, c-format
@@ -3672,10 +3596,6 @@ msgstr ""
 msgid "Copy failed"
 msgstr "неуспела радња"
 
-#, c-format
-msgid "Copying definition of '%d' type is not implemented yet."
-msgstr ""
-
 msgid "Core dump a domain."
 msgstr "Избаци срж домена"
 
@@ -3730,7 +3650,7 @@ msgid "Could not attach serial port %zu"
 msgstr ""
 
 #, c-format
-msgid "Could not attach the file as harddisk/dvd/floppy: %s, rc=%08x"
+msgid "Could not attach the file as harddisk/dvd/floppy: %s"
 msgstr ""
 
 msgid "Could not build CURL header list"
@@ -3805,6 +3725,9 @@ msgstr "не могу да се повежем са Xen складиштем"
 msgid "Could not create harddisk, rc=%08x"
 msgstr ""
 
+msgid "Could not create log directory"
+msgstr ""
+
 #, fuzzy
 msgid "Could not create monitor"
 msgstr "не могу да се повежем са Xen складиштем"
@@ -3847,10 +3770,6 @@ msgstr ""
 #, fuzzy, c-format
 msgid "Could not destroy domain: %s"
 msgstr "Неуспело уништавање домена %s"
-
-#, fuzzy, c-format
-msgid "Could not determine kernel version from string %s"
-msgstr "не могу да одредим максималне vcpus за домен"
 
 #, c-format
 msgid "Could not dlsym %s from '%s': %s"
@@ -3995,7 +3914,7 @@ msgid "Could not find physical NIC with name '%s'"
 msgstr ""
 
 #, c-format
-msgid "Could not find placement for v1 controller %s at %s"
+msgid "Could not find placement for v1 controller %s"
 msgstr ""
 
 msgid "Could not find placement for v2 controller"
@@ -4075,8 +3994,7 @@ msgstr ""
 msgid "Could not get EPR items"
 msgstr ""
 
-#, c-format
-msgid "Could not get IMedium, rc=%08x"
+msgid "Could not get IMedium"
 msgstr ""
 
 msgid "Could not get Msvm_DiskDrive default InstanceID"
@@ -4108,17 +4026,14 @@ msgstr "неуспело добављање имена домаћина"
 msgid "Could not get current time"
 msgstr "не могу да се повежем са Xen складиштем"
 
-#, c-format
-msgid "Could not get device port, rc=%08x"
+msgid "Could not get device port"
 msgstr ""
 
-#, c-format
-msgid "Could not get device slot, rc=%08x"
+msgid "Could not get device slot"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "Could not get device type, rc=%08x"
-msgstr "врста циљног уређаја"
+msgid "Could not get device type"
+msgstr ""
 
 #, c-format
 msgid "Could not get free memory for host %s"
@@ -4156,20 +4071,16 @@ msgstr ""
 msgid "Could not get iterator index for iterator ID %u"
 msgstr ""
 
-#, c-format
-msgid "Could not get list of Defined Domains, rc=%08x"
+msgid "Could not get list of Defined Domains"
 msgstr ""
 
-#, c-format
-msgid "Could not get list of Domains, rc=%08x"
+msgid "Could not get list of Domains"
 msgstr ""
 
-#, c-format
-msgid "Could not get list of domains, rc=%08x"
+msgid "Could not get list of domains"
 msgstr ""
 
-#, c-format
-msgid "Could not get list of machines, rc=%08x"
+msgid "Could not get list of machines"
 msgstr ""
 
 #, c-format
@@ -4177,8 +4088,7 @@ msgid ""
 "Could not get maximum definition of Msvm_ProcessorSettingData for host %s"
 msgstr ""
 
-#, c-format
-msgid "Could not get medium storage location, rc=%08x"
+msgid "Could not get medium storage location"
 msgstr ""
 
 #, c-format
@@ -4192,16 +4102,17 @@ msgstr ""
 msgid "Could not get nth (%u) value of variable '%s'"
 msgstr ""
 
-#, c-format
-msgid "Could not get number of Defined Domains, rc=%08x"
+msgid "Could not get number of Defined Domains"
 msgstr ""
 
-#, c-format
-msgid "Could not get number of Domains, rc=%08x"
+msgid "Could not get number of Domains"
 msgstr ""
 
 #, c-format
 msgid "Could not get parent of '%s'"
+msgstr ""
+
+msgid "Could not get process ID of passt"
 msgstr ""
 
 msgid "Could not get process id of swtpm"
@@ -4210,8 +4121,7 @@ msgstr ""
 msgid "Could not get process id of vhost-user-gpu"
 msgstr ""
 
-#, c-format
-msgid "Could not get read only state, rc=%08x"
+msgid "Could not get read only state"
 msgstr ""
 
 msgid "Could not get response"
@@ -4241,12 +4151,10 @@ msgstr ""
 msgid "Could not get snapshot name"
 msgstr "неуспело добављање имена домаћина"
 
-#, c-format
-msgid "Could not get storage controller bus, rc=%08x"
+msgid "Could not get storage controller bus"
 msgstr ""
 
-#, c-format
-msgid "Could not get storage controller by name, rc=%08x"
+msgid "Could not get storage controller by name"
 msgstr ""
 
 #, fuzzy, c-format
@@ -4437,9 +4345,6 @@ msgstr ""
 msgid "Could not parse VPS ID %s"
 msgstr ""
 
-msgid "Could not parse a resource field data - VPD has invalid format"
-msgstr ""
-
 #, c-format
 msgid "Could not parse barrier and limit of '%s' from config for container %d"
 msgstr ""
@@ -4501,12 +4406,6 @@ msgid "Could not read 'VE_PRIVATE' from config for container %d"
 msgstr ""
 
 msgid "Could not read a device name from the <name> element"
-msgstr ""
-
-msgid "Could not read a part of a resource - VPD has invalid format"
-msgstr ""
-
-msgid "Could not read a resource field header - VPD has invalid format"
 msgstr ""
 
 #, fuzzy, c-format
@@ -4674,11 +4573,11 @@ msgid "Could not set wsman namespace address for xmlNodeParam"
 msgstr ""
 
 #, c-format
-msgid "Could not start 'slirp'. exitstatus: %d"
+msgid "Could not start 'passt': %s"
 msgstr ""
 
 #, c-format
-msgid "Could not start 'swtpm'. exitstatus: %d, error: %s"
+msgid "Could not start 'slirp'. exitstatus: %d"
 msgstr ""
 
 #, c-format
@@ -4709,10 +4608,6 @@ msgid "Could not transfer data: %s (%d)"
 msgstr ""
 
 msgid "Could not translate keycode"
-msgstr ""
-
-#, c-format
-msgid "Could not update the VPD resource keyword: %s"
 msgstr ""
 
 msgid "Could not verify disk address"
@@ -4834,6 +4729,9 @@ msgstr "неуспела радња"
 msgid "Creation of %s volumes is not supported"
 msgstr "Врста мреже %d није подржана"
 
+msgid "Crypto device is missing alias"
+msgstr ""
+
 msgid "Current memory size too large"
 msgstr ""
 
@@ -4842,6 +4740,12 @@ msgstr ""
 
 #, c-format
 msgid "Custom loader requires explicit %s configuration"
+msgstr ""
+
+msgid "D-Bus audio is not supported with this QEMU"
+msgstr ""
+
+msgid "D-Bus p2p with an address is not supported"
 msgstr ""
 
 msgid "DAC imagelabel couldn't be determined"
@@ -5437,7 +5341,7 @@ msgstr ""
 
 #, c-format
 msgid ""
-"Domain has %d interfaces. Please specify which one to detach using --mac"
+"Domain has %zd interfaces. Please specify which one to detach using --mac"
 msgstr ""
 
 #, c-format
@@ -5552,6 +5456,10 @@ msgstr "Домен %s је направљен из %s\n"
 #, fuzzy, c-format
 msgid "Domain snapshot %s deleted\n"
 msgstr "Домен %s је уништен\n"
+
+#, c-format
+msgid "Domain snapshot %s reverted\n"
+msgstr ""
 
 #, fuzzy
 msgid "Domain snapshot not found"
@@ -5718,6 +5626,10 @@ msgstr ""
 msgid "Either 'name' or 'parent' must be specified for the 'scsi_host' adapter"
 msgstr ""
 
+#, c-format
+msgid "Either --%s or --%s must be provided"
+msgstr ""
+
 msgid "Eject the media"
 msgstr ""
 
@@ -5760,7 +5672,8 @@ msgstr "укључи"
 msgid "End of file from agent socket"
 msgstr ""
 
-msgid "End of file from qemu monitor"
+#, c-format
+msgid "End of file from qemu monitor (vm='%s')"
 msgstr ""
 
 msgid "End of file while reading data"
@@ -5865,7 +5778,8 @@ msgstr ""
 msgid "Error while processing command's IO"
 msgstr ""
 
-msgid "Error while processing monitor IO"
+#, c-format
+msgid "Error while processing monitor IO (vm='%s')"
 msgstr ""
 
 msgid "Error while reading /proc/cgroups"
@@ -6218,7 +6132,7 @@ msgid "Failed to add signal handle watch"
 msgstr ""
 
 #, c-format
-msgid "Failed to add storage controller (name: %s, busType: %d), rc=%08x"
+msgid "Failed to add storage controller (name: %s, busType: %d)"
 msgstr ""
 
 #, fuzzy, c-format
@@ -6332,8 +6246,7 @@ msgstr "Неуспело рашчлањивање режима „%s“"
 msgid "Failed to change size of volume '%s' to %s"
 msgstr "Неуспело чување домена %s у %s"
 
-#, c-format
-msgid "Failed to change storage controller model, rc=%08x"
+msgid "Failed to change storage controller model"
 msgstr ""
 
 #, fuzzy, c-format
@@ -6404,10 +6317,6 @@ msgstr "Неуспело компајлирање regex %s"
 #, fuzzy, c-format
 msgid "Failed to connect socket to '%s'"
 msgstr "Неуспело прављење диска %s"
-
-#, fuzzy, c-format
-msgid "Failed to connect to remote libvirt URI %s: %s"
-msgstr "неуспело повезивање са хипервизором"
 
 #, fuzzy
 msgid "Failed to connect to ssh agent"
@@ -6575,6 +6484,13 @@ msgstr "Неуспело прављење диска из %s"
 msgid "Failed to create nvram dir %s"
 msgstr "Неуспело прављење диска %s"
 
+msgid "Failed to create or modify the state XML attribute"
+msgstr ""
+
+#, c-format
+msgid "Failed to create passt state dir %s"
+msgstr ""
+
 #, c-format
 msgid "Failed to create pool %s"
 msgstr "Неуспело прављење складишта %s"
@@ -6631,9 +6547,15 @@ msgstr "Неуспело прављење домена из %s"
 msgid "Failed to create thread to handle daemon restart"
 msgstr "Неуспело прављење домена из %s"
 
+msgid "Failed to create thread to handle domain death"
+msgstr ""
+
 #, fuzzy
 msgid "Failed to create thread to handle domain shutdown"
 msgstr "Неуспело прављење домена из %s"
+
+msgid "Failed to create thread to handle firewall reload/restart"
+msgstr ""
 
 #, fuzzy
 msgid "Failed to create thread to handle pool refresh"
@@ -7110,9 +7032,8 @@ msgstr ""
 msgid "Failed to get snapshot count"
 msgstr "Неуспело добављање података о диску"
 
-#, fuzzy, c-format
-msgid "Failed to get storage controller name, rc=%08x"
-msgstr "Неуспело враћање домена из %s"
+msgid "Failed to get storage controller name"
+msgstr ""
 
 #, fuzzy
 msgid "Failed to get the number of active networks"
@@ -7156,10 +7077,6 @@ msgstr "Неуспело проналажење мреже: %s"
 
 #, fuzzy, c-format
 msgid "Failed to initialize TLS session: %s"
-msgstr "неуспело покретање SASL библиотеке: %d (%s)"
-
-#, fuzzy
-msgid "Failed to initialize a valid firewall backend"
 msgstr "неуспело покретање SASL библиотеке: %d (%s)"
 
 #, fuzzy
@@ -7219,10 +7136,6 @@ msgstr "Неуспело укидање дефиниције складишта 
 #, c-format
 msgid "Failed to kill process %lld"
 msgstr ""
-
-#, fuzzy, c-format
-msgid "Failed to kill process %lld: %s"
-msgstr "неуспела изградња складишта %s"
 
 msgid "Failed to list active domains"
 msgstr "Неуспело исписивање активних домена"
@@ -7505,8 +7418,7 @@ msgid "Failed to open storage volume with path '%s'"
 msgstr "Неуспело проналажење управљачког програма складишта: %s"
 
 #, c-format
-msgid ""
-"Failed to open the following disk/dvd/floppy to the machine: %s, rc=%08x"
+msgid "Failed to open the following disk/dvd/floppy to the machine: %s"
 msgstr ""
 
 #, fuzzy, c-format
@@ -7515,6 +7427,10 @@ msgstr "Неуспело компајлирање regex %s"
 
 #, c-format
 msgid "Failed to parse %s: only com1 and com2 supported."
+msgstr ""
+
+#, c-format
+msgid "Failed to parse CCW address '%s'"
 msgstr ""
 
 #, fuzzy, c-format
@@ -7571,6 +7487,9 @@ msgstr "Неуспело враћање домена из %s"
 msgid "Failed to parse memory"
 msgstr "Неуспело рашчлањивање режима „%s“"
 
+msgid "Failed to parse memory allocation threads"
+msgstr ""
+
 #, fuzzy
 msgid "Failed to parse memory slot count"
 msgstr "Неуспешно рашчлањавање vzlist излаза"
@@ -7602,6 +7521,10 @@ msgstr "Неуспело прављење мреже из %s"
 #, fuzzy, c-format
 msgid "Failed to parse rate '%s'"
 msgstr "Неуспело рашчлањивање режима „%s“"
+
+#, c-format
+msgid "Failed to parse rotated index from '%s'"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "Failed to parse snapshot XML from file '%s'"
@@ -7810,10 +7733,6 @@ msgid "Failed to release lock: %s"
 msgstr "Неуспело прављење диска %s"
 
 #, fuzzy, c-format
-msgid "Failed to release port %d"
-msgstr "Неуспело прављење складишта %s"
-
-#, fuzzy, c-format
 msgid "Failed to remove capability %s: %d"
 msgstr "неуспело преузимање могућности"
 
@@ -7945,6 +7864,10 @@ msgstr "Неуспело прављење диска из %s"
 msgid "Failed to retrieve vcpu state bitmap"
 msgstr "Неуспело прављење диска %s"
 
+#, c-format
+msgid "Failed to revert snapshot %s"
+msgstr ""
+
 msgid "Failed to rollback network config change transaction"
 msgstr ""
 
@@ -7964,9 +7887,8 @@ msgstr ""
 msgid "Failed to save '%s' for '%s'"
 msgstr "Неуспело чување домена %s у %s"
 
-#, fuzzy, c-format
-msgid "Failed to save VM settings, rc=%08x"
-msgstr "Неуспело чување домена %s у %s"
+msgid "Failed to save VM settings"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "Failed to save domain '%d' with libxenlight"
@@ -8056,6 +7978,10 @@ msgstr "Неуспело добављање података о спрези"
 #, fuzzy, c-format
 msgid "Failed to set interface type to '%s' in xml document"
 msgstr "Неуспело добављање статистике спреге %s %s"
+
+#, c-format
+msgid "Failed to set logging priority, argument '%s' is invalid"
+msgstr ""
 
 #, c-format
 msgid "Failed to set logging priority, argument '%u' is invalid"
@@ -8536,6 +8462,13 @@ msgstr ""
 msgid "Firmware entry must have either value or 'file' attribute"
 msgstr ""
 
+#, c-format
+msgid "Firmware flash mode value '%s' unexpected"
+msgstr ""
+
+msgid "Firmware flash mode value was malformed"
+msgstr ""
+
 msgid ""
 "First file-based harddisk has no source, cannot deduce datastore and path "
 "for VMX file"
@@ -8645,6 +8578,9 @@ msgid ""
 "explanation of fields"
 msgstr ""
 
+msgid "Get domain launch security info"
+msgstr ""
+
 msgid "Get information of domain's mounted filesystems."
 msgstr ""
 
@@ -8735,6 +8671,9 @@ msgstr "Неуспело добављање статистике спреге %s
 msgid "Get the CPU models for an arch."
 msgstr ""
 
+msgid "Get the launch security parameters for a guest domain"
+msgstr ""
+
 msgid "Get the maximum migration bandwidth"
 msgstr ""
 
@@ -8768,6 +8707,10 @@ msgid "Gets or sets the domain's system time"
 msgstr ""
 
 msgid "Gets statistics about one or more (or all) domains"
+msgstr ""
+
+#, c-format
+msgid "Global feature %d should have already been handled"
 msgstr ""
 
 msgid "Got empty feature list from resctrl"
@@ -8811,9 +8754,6 @@ msgid "HMAT is not supported with this QEMU"
 msgstr ""
 
 msgid "HTM configuration is not supported by this QEMU binary"
-msgstr ""
-
-msgid "HTP resizing is not supported by this QEMU binary"
 msgstr ""
 
 #, c-format
@@ -8892,6 +8832,11 @@ msgid "Host CPU provides forbidden features"
 msgstr ""
 
 msgid "Host SMBIOS information is not available"
+msgstr ""
+
+msgid ""
+"Host not compatible with KVM; HW virtualization CPU features not found. Only "
+"emulated CPUs are available; performance will be significantly limited"
 msgstr ""
 
 msgid "Host sysinfo extraction not supported on this platform"
@@ -9023,7 +8968,19 @@ msgid "IOMMU device: '%s' is only supported with ARM Virt machines"
 msgstr ""
 
 #, c-format
+msgid "IOMMU device: '%s' is only supported with Q35 and ARM Virt machines"
+msgstr ""
+
+#, c-format
 msgid "IOMMU device: '%s' is only supported with Q35 machines"
+msgstr ""
+
+#, c-format
+msgid "IOMMU device: '%s' needs a PCI address"
+msgstr ""
+
+#, c-format
+msgid "IOMMU device: '%s' requires ACPI"
 msgstr ""
 
 msgid "IOMMU eim requires interrupt remapping to be enabled"
@@ -9040,9 +8997,6 @@ msgid "IOThread ID number"
 msgstr ""
 
 msgid "IOThread to be used by supported device"
-msgstr ""
-
-msgid "IOThreads for virtio-scsi not supported for this QEMU"
 msgstr ""
 
 #, c-format
@@ -9144,9 +9098,6 @@ msgid ""
 msgstr ""
 
 msgid "Incorrect data type"
-msgstr ""
-
-msgid "Incorrect disk format"
 msgstr ""
 
 msgid "Incorrect number of cells in a table row"
@@ -9283,10 +9234,6 @@ msgid ""
 msgstr ""
 
 #, c-format
-msgid "Invalid \"nativeMode='%s'\" in vlan <tag> element"
-msgstr ""
-
-#, c-format
 msgid "Invalid %s attribute 'vcpus' value '%s'"
 msgstr ""
 
@@ -9299,10 +9246,6 @@ msgstr ""
 
 #, c-format
 msgid "Invalid 'level' attribute in cache element for NUMA node %d"
-msgstr ""
-
-#, c-format
-msgid "Invalid 'removed' attribute for feature %s in model %s"
 msgstr ""
 
 #, c-format
@@ -9356,11 +9299,11 @@ msgid "Invalid IP address in static host definition for network '%s'"
 msgstr ""
 
 #, c-format
-msgid "Invalid IPv4 prefix '%lu' in network '%s'"
+msgid "Invalid IPv4 prefix '%u' in network '%s'"
 msgstr ""
 
 #, c-format
-msgid "Invalid IPv6 prefix '%lu' in network '%s'"
+msgid "Invalid IPv6 prefix '%u' in network '%s'"
 msgstr ""
 
 msgid "Invalid NULL callback provided"
@@ -9415,17 +9358,6 @@ msgstr ""
 msgid "Invalid STP state value %d received for '%s'. Must be -1, 0, or 1."
 msgstr ""
 
-#, fuzzy
-msgid "Invalid TSC frequency"
-msgstr "CPU учестаност:"
-
-msgid "Invalid TSC scaling attribute"
-msgstr ""
-
-#, c-format
-msgid "Invalid ULong value specified for prefix in definition of network '%s'"
-msgstr ""
-
 #, c-format
 msgid "Invalid URI path '%s', try '/system'"
 msgstr ""
@@ -9449,6 +9381,10 @@ msgid "Invalid address '%s' in <ip>"
 msgstr "неисправна MAC адреса: %s"
 
 #, c-format
+msgid "Invalid address '%s' in <portForward>"
+msgstr ""
+
+#, c-format
 msgid "Invalid address '%s' in network '%s'"
 msgstr ""
 
@@ -9466,17 +9402,13 @@ msgstr "неисправна MAC адреса"
 msgid "Invalid argument"
 msgstr ""
 
-#, c-format
-msgid ""
-"Invalid attempt to reset PCI device %s. Only PCI endpoint devices can be "
-"reset"
+msgid "Invalid async job start"
 msgstr ""
 
 #, c-format
 msgid ""
-"Invalid attempt to set <interface type='ethernet'> device name with <source "
-"dev='%s'/>. Use <target dev='%s'/> (for host-side) or <guest dev='%s'/> (for "
-"guest-side) instead."
+"Invalid attempt to reset PCI device %s. Only PCI endpoint devices can be "
+"reset"
 msgstr ""
 
 msgid ""
@@ -9614,10 +9546,6 @@ msgstr ""
 msgid "Invalid delay value in network '%s'"
 msgstr "Неуспело укидање дефиниције мреже %s"
 
-#, fuzzy, c-format
-msgid "Invalid destination '%s' for output '%s'"
-msgstr "Неисправна „%s“ врста магистрале за дискетну јединицу"
-
 #, c-format
 msgid "Invalid device %s driver file %s is not a symlink"
 msgstr ""
@@ -9637,14 +9565,6 @@ msgstr ""
 msgid "Invalid disk read error policy: '%s'"
 msgstr ""
 
-#, c-format
-msgid "Invalid dns enable setting '%s' in network '%s'"
-msgstr ""
-
-#, c-format
-msgid "Invalid dns forwardPlainNames setting '%s' in network '%s'"
-msgstr ""
-
 #, fuzzy
 msgid "Invalid domain checkpoint"
 msgstr "неисправан показивач домена у"
@@ -9652,10 +9572,6 @@ msgstr "неисправан показивач домена у"
 #, fuzzy, c-format
 msgid "Invalid domain checkpoint: %s"
 msgstr "неисправан показивач домена у %s"
-
-#, c-format
-msgid "Invalid domain localOnly setting '%s' in network '%s'"
-msgstr ""
 
 #, fuzzy
 msgid "Invalid domain snapshot"
@@ -9725,7 +9641,8 @@ msgstr ""
 msgid "Invalid file descriptor while waiting for agent"
 msgstr ""
 
-msgid "Invalid file descriptor while waiting for monitor"
+#, c-format
+msgid "Invalid file descriptor while waiting for monitor (vm='%s')"
 msgstr ""
 
 msgid "Invalid firmware name"
@@ -9757,10 +9674,6 @@ msgid "Invalid forwarder element, must contain at least one of addr or domain"
 msgstr ""
 
 #, c-format
-msgid "Invalid guest rx filters trust setting '%s' "
-msgstr ""
-
-#, c-format
 msgid "Invalid harddisk device name: %s"
 msgstr "Неисправан назив чврстог диска: %s"
 
@@ -9784,15 +9697,8 @@ msgstr "неуспело добављање диска „%s“"
 msgid "Invalid integer value '%s' in file '%s'"
 msgstr "неисправан показивач диска складиштења везе у %s"
 
-#, fuzzy
-msgid "Invalid ip address prefix value"
-msgstr "неисправна MAC адреса"
-
 #, c-format
 msgid "Invalid ipv6 setting '%s' in network '%s'"
-msgstr ""
-
-msgid "Invalid job flags"
 msgstr ""
 
 #, c-format
@@ -9812,11 +9718,15 @@ msgid "Invalid lifecycle type '%s'."
 msgstr ""
 
 #, c-format
-msgid "Invalid localPtr value '%s' in network '%s'"
+msgid "Invalid log destination '%s' for log output '%s'"
 msgstr ""
 
 #, c-format
 msgid "Invalid log priority %d"
+msgstr ""
+
+#, c-format
+msgid "Invalid log priority '%s' for log output '%s'"
 msgstr ""
 
 #, c-format
@@ -9840,28 +9750,9 @@ msgstr ""
 msgid "Invalid macTableManager setting '%s' in network port"
 msgstr ""
 
-#, c-format
-msgid "Invalid managed setting '%s' in network port"
-msgstr ""
-
-msgid "Invalid match attribute for CPU specification"
-msgstr ""
-
 #, fuzzy, c-format
 msgid "Invalid match string '%s'"
 msgstr "неисправан показивач домена у %s"
-
-#, c-format
-msgid "Invalid maxEventChannels: %i"
-msgstr ""
-
-#, c-format
-msgid "Invalid maxGrantFrames: %i"
-msgstr ""
-
-#, c-format
-msgid "Invalid memory core dump attribute value '%s'"
-msgstr ""
 
 #, c-format
 msgid "Invalid message prog=%d type=%d serial=%u proc=%d"
@@ -9932,10 +9823,6 @@ msgstr "неисправан показивач везе у"
 msgid "Invalid network port pointer: %s"
 msgstr "неисправан показивач везе у %s"
 
-#, fuzzy, c-format
-msgid "Invalid network prt plug type '%s'"
-msgstr "неисправан показивач везе у %s"
-
 #, c-format
 msgid "Invalid node id %u "
 msgstr ""
@@ -9960,33 +9847,19 @@ msgstr "Неважећи параметар за virXPathNode()"
 msgid "Invalid parameter to virXPathBoolean()"
 msgstr "Неважећи параметар за virXPathBoolean()"
 
-#, fuzzy
-msgid "Invalid parameter to virXPathLong()"
-msgstr "Неважећи параметар за virXPathString()"
-
-#, fuzzy
-msgid "Invalid parameter to virXPathLongLong()"
-msgstr "Неважећи параметар за virXPathBoolean()"
-
 msgid "Invalid parameter to virXPathNode()"
 msgstr "Неважећи параметар за virXPathNode()"
 
 msgid "Invalid parameter to virXPathNodeSet()"
 msgstr "Неважећи параметар за virXPathNodeSet()"
 
-msgid "Invalid parameter to virXPathNumber()"
-msgstr "Неважећи параметар за virXPathNumber()"
-
-msgid "Invalid parameter to virXPathString()"
-msgstr "Неважећи параметар за virXPathString()"
-
-#, fuzzy
-msgid "Invalid parameter to virXPathULong()"
-msgstr "Неважећи параметар за virXPathString()"
-
 #, fuzzy
 msgid "Invalid parameter type passed to free"
 msgstr "Неважећи параметар за virXPathNode()"
+
+#, c-format
+msgid "Invalid parameters macaddr=%p allowRetry=%p"
+msgstr ""
 
 msgid "Invalid partial specification for virtio ccw address"
 msgstr ""
@@ -10018,7 +9891,7 @@ msgid "Invalid port range '%u-%u'."
 msgstr ""
 
 #, c-format
-msgid "Invalid ports: %i"
+msgid "Invalid portForward proto value %u"
 msgstr ""
 
 #, c-format
@@ -10031,10 +9904,6 @@ msgstr ""
 
 #, fuzzy, c-format
 msgid "Invalid priority '%s' for filter '%s'"
-msgstr "Неисправна „%s“ врста магистрале за дискетну јединицу"
-
-#, fuzzy, c-format
-msgid "Invalid priority '%s' for output '%s'"
 msgstr "Неисправна „%s“ врста магистрале за дискетну јединицу"
 
 #, c-format
@@ -10120,10 +9989,6 @@ msgstr "неисправна MAC адреса"
 msgid "Invalid target domain state '%s'. Refusing snapshot reversion"
 msgstr ""
 
-#, c-format
-msgid "Invalid target index '%i' in PCI controller"
-msgstr ""
-
 #, fuzzy
 msgid "Invalid target model for serial device"
 msgstr "циљ уређаја диска"
@@ -10132,14 +9997,6 @@ msgstr "циљ уређаја диска"
 msgid ""
 "Invalid to specify MAC address '%s' in network '%s' IPv6 static host "
 "definition"
-msgstr ""
-
-#, c-format
-msgid "Invalid trustGuestRxFilters setting '%s' in network '%s'"
-msgstr ""
-
-#, c-format
-msgid "Invalid trustGuestRxFilters setting '%s' in portgroup"
 msgstr ""
 
 #, c-format
@@ -10192,9 +10049,31 @@ msgid "Invalid value for attribute '%s' in element '%s': '%s'."
 msgstr ""
 
 #, c-format
+msgid "Invalid value for attribute '%s' in element '%s': '%s'. Expected UUID"
+msgstr ""
+
+#, c-format
 msgid ""
 "Invalid value for attribute '%s' in element '%s': '%s'. Expected integer "
 "value"
+msgstr ""
+
+#, c-format
+msgid ""
+"Invalid value for attribute '%s' in element '%s': '%s'. Expected long long "
+"integer value"
+msgstr ""
+
+#, c-format
+msgid ""
+"Invalid value for attribute '%s' in element '%s': '%s'. Expected non-"
+"negative integer value"
+msgstr ""
+
+#, c-format
+msgid ""
+"Invalid value for attribute '%s' in element '%s': '%s'. Expected non-"
+"negative value"
 msgstr ""
 
 #, c-format
@@ -10235,10 +10114,6 @@ msgid "Invalid value for timeout"
 msgstr ""
 
 #, c-format
-msgid "Invalid value in migratable attribute: '%s'"
-msgstr ""
-
-#, c-format
 msgid "Invalid value of %d for I/O weight"
 msgstr ""
 
@@ -10253,10 +10128,6 @@ msgstr ""
 #, fuzzy, c-format
 msgid "Invalid value of 'nodeset': %s"
 msgstr "Неисправан назив дискетног уређаја: %s"
-
-#, c-format
-msgid "Invalid vectors: %i"
-msgstr ""
 
 #, c-format
 msgid "Invalid vendor element in CPU model %s"
@@ -10309,6 +10180,9 @@ msgstr ""
 msgid "JSON backing volume definition '%s' must not have nested format drivers"
 msgstr ""
 
+msgid "JSON string array contains non-string element"
+msgstr ""
+
 #, c-format
 msgid "Job submission failed on interface '%s'"
 msgstr ""
@@ -10320,10 +10194,6 @@ msgid "Just a hint to ignore contiguous free ranges smaller than this (Bytes)"
 msgstr ""
 
 msgid "KVM device assignment is no longer supported on this system"
-msgstr ""
-
-#, c-format
-msgid "KVM is not supported by '%s' on this host"
 msgstr ""
 
 msgid "KVM is not supported on this platform"
@@ -10350,9 +10220,6 @@ msgid "Key of the current session differs from the key at last login"
 msgstr ""
 
 msgid "Known, but different label format present, requires build --overwrite"
-msgstr ""
-
-msgid "LUKS encrypted QCOW2 images are not supported by this QEMU"
 msgstr ""
 
 msgid "LXC Guest Enter Namespace"
@@ -10460,6 +10327,12 @@ msgstr ""
 
 #, c-format
 msgid "Lockspace resource '%s' is not locked"
+msgstr ""
+
+#, c-format
+msgid ""
+"Log output '%s' does not meet the format requirements for destination type "
+"'%s'"
 msgstr ""
 
 msgid "Logging filters: "
@@ -10582,21 +10455,12 @@ msgid "Malformed format for filter '%s'"
 msgstr "Лоша величина %s"
 
 #, c-format
-msgid "Malformed format for output '%s'"
-msgstr ""
-
-msgid "Malformed guest-get-fsinfo 'disk' data array"
-msgstr ""
-
-msgid "Malformed guest-get-fsinfo data array"
+msgid "Malformed format for log output '%s'"
 msgstr ""
 
 #, fuzzy
 msgid "Malformed id field in JSON state document"
 msgstr "лоше обликован uuid елемент"
-
-msgid "Malformed ip-addresses array"
-msgstr ""
 
 #, fuzzy
 msgid "Malformed lease_entries array"
@@ -10699,6 +10563,10 @@ msgstr "Највише меморије:"
 
 #, c-format
 msgid "Maximum CPUs greater than specified machine type limit %u"
+msgstr ""
+
+#, c-format
+msgid "Maximum supported number of ISA serial ports is '%d'"
 msgstr ""
 
 msgid "Media Registry is null"
@@ -10931,9 +10799,6 @@ msgstr ""
 msgid "Missing 'link' attribute for NIC"
 msgstr "недостаје особина типа домена"
 
-msgid "Missing 'model' attribute in mediated device's <hostdev> element"
-msgstr ""
-
 #, c-format
 msgid "Missing 'name' property in %s lookup"
 msgstr ""
@@ -10999,9 +10864,6 @@ msgstr ""
 msgid "Missing CPU model name"
 msgstr ""
 
-msgid "Missing CPU vendor value"
-msgstr ""
-
 #, fuzzy
 msgid "Missing ID parameter for domain object"
 msgstr "недостају циљни подаци за уређај"
@@ -11012,6 +10874,9 @@ msgstr ""
 
 #, c-format
 msgid "Missing IP address in static host definition for network '%s'"
+msgstr ""
+
+msgid "Missing LISTEN_FDNAMES env from systemd socket activation"
 msgstr ""
 
 #, fuzzy, c-format
@@ -11040,7 +10905,10 @@ msgstr ""
 msgid "Missing VIR_CRED_AUTHNAME credential type"
 msgstr ""
 
-msgid "Missing VIR_CRED_PASSPHRASE or VIR_CRED_NOECHOPROMPT credential type"
+msgid "Missing XPath context"
+msgstr ""
+
+msgid "Missing XPath expression"
 msgstr ""
 
 #, fuzzy
@@ -11112,9 +10980,6 @@ msgid "Missing device name for container-side veth"
 msgstr "Недостаје особина изворног сервиса за знаковни уређај"
 
 msgid "Missing disk file path in domain"
-msgstr ""
-
-msgid "Missing disk info when adding volume"
 msgstr ""
 
 #, fuzzy
@@ -11284,15 +11149,11 @@ msgid "Missing or invalid 'vlan-table' array in query-rx-filter response"
 msgstr ""
 
 #, c-format
+msgid "Missing or invalid CPU address size in %s"
+msgstr ""
+
+#, c-format
 msgid "Missing or invalid CPU frequency in %s"
-msgstr ""
-
-#, c-format
-msgid "Missing or invalid PVR mask in CPU model %s"
-msgstr ""
-
-#, c-format
-msgid "Missing or invalid PVR value in CPU model %s"
 msgstr ""
 
 #, c-format
@@ -11312,16 +11173,7 @@ msgid ""
 "response"
 msgstr ""
 
-msgid "Missing or invalid fd in add-fd response"
-msgstr ""
-
-msgid "Missing or invalid fdset-id in add-fd response"
-msgstr ""
-
 msgid "Missing or invalid name in query-rx-filter response"
-msgstr ""
-
-msgid "Missing or invalid return data in add-fd response"
 msgstr ""
 
 msgid "Missing or invalid scsi adapter 'unique_id' value"
@@ -11557,6 +11409,9 @@ msgstr ""
 msgid "Multiple graphics devices are not supported"
 msgstr ""
 
+msgid "Multiple iTCO watchdogs are not supported"
+msgstr ""
+
 msgid "Multiple interfaces attached to bridge"
 msgstr ""
 
@@ -11586,10 +11441,6 @@ msgstr ""
 
 msgid "NBD URI must be supplied when migration URI uses UNIX transport method"
 msgstr ""
-
-#, fuzzy
-msgid "NBD migration with TLS is not supported"
-msgstr "Врста мреже %d није подржана"
 
 msgid "NBD migration with TLS is not supported over UNIX socket"
 msgstr ""
@@ -11681,10 +11532,6 @@ msgstr ""
 msgid "NUMA tuning is not available in session mode"
 msgstr ""
 
-msgid ""
-"NUMA without specified memory backing is not supported with this QEMU binary"
-msgstr ""
-
 #, c-format
 msgid "NVMe device %s already in use by driver %s domain %s"
 msgstr ""
@@ -11704,6 +11551,12 @@ msgid "NVMe disks are not supported with this QEMU binary"
 msgstr ""
 
 msgid "NVMe namespace can't be zero"
+msgstr ""
+
+msgid "NVRAM is not permitted when loader is stateless"
+msgstr ""
+
+msgid "NVRAM template is not permitted when loader is stateless"
 msgstr ""
 
 msgid "Name"
@@ -11898,69 +11751,6 @@ msgstr ""
 
 msgid "Nicdev support unavailable"
 msgstr ""
-
-#, fuzzy
-msgid "No <local> 'address' attribute specified with socket interface"
-msgstr "Ниједна <source> „address“ особина није одређена уз спрегу прикључка"
-
-#, fuzzy
-msgid "No <local> 'port' attribute specified with socket interface"
-msgstr "Ниједна <source> „port“ особина није одређена уз спрегу прикључка"
-
-msgid "No <source> 'address' attribute specified with socket interface"
-msgstr "Ниједна <source> „address“ особина није одређена уз спрегу прикључка"
-
-#, fuzzy
-msgid ""
-"No <source> 'bridge' attribute specified with <interface type='bridge'/>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
-
-#, fuzzy
-msgid "No <source> 'dev' attribute specified with <interface type='direct'/>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
-
-msgid "No <source> 'dev' attribute specified with <interface type='vdpa'/>"
-msgstr ""
-
-#, fuzzy
-msgid ""
-"No <source> 'mode' attribute specified with <interface type='vhostuser'/>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
-
-#, fuzzy
-msgid ""
-"No <source> 'name' attribute specified with <interface type='internal'/>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
-
-msgid ""
-"No <source> 'network' attribute specified with <interface type='network'/>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
-
-#, fuzzy
-msgid ""
-"No <source> 'path' attribute specified with <interface type='vhostuser'/>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
-
-msgid "No <source> 'port' attribute specified with socket interface"
-msgstr "Ниједна <source> „port“ особина није одређена уз спрегу прикључка"
-
-#, fuzzy
-msgid "No <source> 'type' attribute specified for <interface type='vhostuser'>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
 
 msgid "No CA certificate path set to match server key/cert"
 msgstr ""
@@ -12210,9 +12000,6 @@ msgstr ""
 msgid "No open log file %s"
 msgstr "не постоји датотека подешавања за %s"
 
-msgid "No output from iptables --version"
-msgstr ""
-
 msgid "No per-CPU stats available"
 msgstr ""
 
@@ -12398,6 +12185,9 @@ msgstr ""
 msgid "Not detaching active device %s"
 msgstr "откачи уређај диска"
 
+msgid "Not enough arguments passed, nothing to set"
+msgstr ""
+
 #, c-format
 msgid "Not enough free space in pool for volume '%s'"
 msgstr ""
@@ -12529,7 +12319,10 @@ msgstr ""
 msgid "Only 1 thread per core is supported"
 msgstr ""
 
-msgid "Only IPv4 or IPv6 addresses can be used with iptables"
+msgid "Only EFI firmware permits NVRAM"
+msgstr ""
+
+msgid "Only IPv4 or IPv6 addresses can be used with a prefix"
 msgstr ""
 
 msgid "Only PCI device addresses with function=0 are supported"
@@ -12633,6 +12426,12 @@ msgid "Only one hostdev of model vfio-ap is supported"
 msgstr ""
 
 msgid "Only one primary video device is supported"
+msgstr ""
+
+msgid "Only one vgpu device can have 'ramfb' enabled"
+msgstr ""
+
+msgid "Only pflash loader type permits NVRAM"
 msgstr ""
 
 msgid "Only ploop disk images are supported by vz driver."
@@ -12758,11 +12557,6 @@ msgstr ""
 #, fuzzy
 msgid "Outgoing migration"
 msgstr "пресељење уживо"
-
-#, c-format
-msgid ""
-"Output '%s' does not meet the format requirements for destination type '%s'"
-msgstr ""
 
 msgid "Output a secret value"
 msgstr ""
@@ -12985,9 +12779,6 @@ msgstr ""
 msgid "Password may not contain ',' character"
 msgstr ""
 
-msgid "Password request failed"
-msgstr ""
-
 #, c-format
 msgid "Password set successfully for %s in %s"
 msgstr ""
@@ -13049,9 +12840,6 @@ msgid ""
 msgstr ""
 
 msgid "Per-node binding is not compatible with automatic NUMA placement."
-msgstr ""
-
-msgid "Per-node memory binding is not supported with this QEMU"
 msgstr ""
 
 msgid "Perf not supported on this platform"
@@ -13214,14 +13002,6 @@ msgstr ""
 msgid "Probing TSC is not supported on this platform"
 msgstr ""
 
-#, c-format
-msgid "Process %d %p %p [[[[%s]]][[[%s]]]"
-msgstr ""
-
-#, c-format
-msgid "Process %zu %p %p [[[%s]]][[[%s]]]"
-msgstr ""
-
 msgid "Process CPU affinity is not supported on this platform"
 msgstr ""
 
@@ -13254,16 +13034,6 @@ msgstr ""
 
 #, c-format
 msgid "Protocol '%s' is not supported for tcp character device."
-msgstr ""
-
-#, c-format
-msgid ""
-"Publicly routable address %s is prohibited. The version of dnsmasq on this "
-"host (%d.%d) doesn't support the bind-dynamic option or use SO_BINDTODEVICE "
-"on listening sockets, one of which is required for safe operation on a "
-"publicly routable subnet (see CVE-2012-3411). You must either upgrade "
-"dnsmasq, or use a private/local subnet range for this network (as described "
-"in RFC1918/RFC3484/RFC4193)."
 msgstr ""
 
 msgid "Pull aborted"
@@ -13309,11 +13079,20 @@ msgstr ""
 msgid "QEMU does not support SEV guest"
 msgstr ""
 
+msgid "QEMU does not support calculating dirty page rate"
+msgstr ""
+
 #, c-format
 msgid "QEMU does not support device assignment mode '%s'"
 msgstr ""
 
+msgid "QEMU does not support dirty page rate calculation mode."
+msgstr ""
+
 msgid "QEMU does not support multiple listens for one graphics device."
+msgstr ""
+
+msgid "QEMU does not support setting a launch secret"
 msgstr ""
 
 msgid "QEMU guest agent is not available due to an error"
@@ -13334,6 +13113,9 @@ msgstr ""
 
 msgid ""
 "QEMU reports invalid default CPU model \"host\" for non-kvm domain virt type"
+msgstr ""
+
+msgid "QEMU reports migration is still running"
 msgstr ""
 
 #, c-format
@@ -13669,6 +13451,9 @@ msgstr ""
 msgid "Returns a list of secrets"
 msgstr "Враћа списак мрежа."
 
+msgid "Returns basic SEV information about the node."
+msgstr ""
+
 #, fuzzy
 msgid "Returns basic information about a checkpoint."
 msgstr "Враћа основне податке о домену."
@@ -13771,9 +13556,6 @@ msgstr "пресели домен на другог домаћина"
 msgid "Revert domain to snapshot"
 msgstr "пресели домен на другог домаћина"
 
-msgid "Root element is not 'node'"
-msgstr ""
-
 #, c-format
 msgid "Route address '%s' conflicts with IP address for '%s'"
 msgstr ""
@@ -13808,6 +13590,9 @@ msgstr "Текући хипервизор: %s %d.%d.%d\n"
 msgid "S3 state is disabled for this domain"
 msgstr ""
 
+msgid "S390 PV launch security is not supported by this host or kernel"
+msgstr ""
+
 msgid "S390 PV launch security is not supported with this QEMU binary"
 msgstr ""
 
@@ -13839,6 +13624,9 @@ msgstr ""
 
 #, c-format
 msgid "SATA unit index %d out of [0..29] range"
+msgstr ""
+
+msgid "SCHED_CORE not supported by kernel"
 msgstr ""
 
 #, c-format
@@ -13900,6 +13688,9 @@ msgid "SCSI_host host device must use 'pci' or 'ccw' address type"
 msgstr ""
 
 msgid "SEV launch security is not supported with this QEMU binary"
+msgstr ""
+
+msgid "SEV measured direct kernel boot is not supported with this QEMU binary"
 msgstr ""
 
 msgid "SHUTDOWN_TIMEOUT must be equal or greater than 0"
@@ -14090,9 +13881,6 @@ msgid ""
 "\n"
 msgstr ""
 
-msgid "Selecting disks to migrate is not implemented for tunnelled migration"
-msgstr ""
-
 msgid "Send keycodes (integers or symbolic names) to the guest"
 msgstr ""
 
@@ -14155,7 +13943,13 @@ msgstr ""
 msgid "Server to retrieve threadpool attributes from."
 msgstr ""
 
+msgid "Set a secret in the guest domain's memory"
+msgstr ""
+
 msgid "Set a secret value."
+msgstr ""
+
+msgid "Set domain launch security state"
 msgstr ""
 
 msgid ""
@@ -14204,13 +13998,6 @@ msgstr ""
 
 #, c-format
 msgid "Setting different SELinux label on %s which is already in use"
-msgstr ""
-
-#, c-format
-msgid "Setting disk %s is not allowed for disk of network type"
-msgstr ""
-
-msgid "Setting disk 'requisite' is allowed only for cdrom or floppy"
 msgstr ""
 
 #, fuzzy
@@ -14318,15 +14105,17 @@ msgstr "xen магистрала не подржава %s уређај за ун
 msgid "Setup time:"
 msgstr "CPU време:"
 
-msgid "Shared memory mapping is not supported with this QEMU"
-msgstr ""
-
 #, fuzzy
 msgid "Shared memory:\n"
 msgstr "Употребљена меморија:"
 
 #, c-format
 msgid "Shell '%s' should have absolute path"
+msgstr ""
+
+msgid ""
+"Shortcut for calling the command with a single CPU model and no additional "
+"features"
 msgstr ""
 
 msgid "Should define both master and slave path attributes for nmdm device"
@@ -14430,6 +14219,9 @@ msgstr ""
 msgid "Snapshot List"
 msgstr ""
 
+msgid "Snapshot delete"
+msgstr ""
+
 msgid "Snapshot is Null"
 msgstr ""
 
@@ -14511,6 +14303,9 @@ msgid "Specifies if pages from different numa nodes can be merged"
 msgstr ""
 
 msgid "Specifying mount point is not supported for now"
+msgstr ""
+
+msgid "Spice audio is not supported without spice graphics"
 msgstr ""
 
 msgid "Start"
@@ -14825,6 +14620,10 @@ msgid "System token in %s was corrupt"
 msgstr ""
 
 #, c-format
+msgid "TCG features are incompatible with domain type '%s'"
+msgstr ""
+
+#, c-format
 msgid "TLS handshake failed %s"
 msgstr ""
 
@@ -14848,10 +14647,6 @@ msgid "TPM 1.2 is not supported with the SPAPR device model"
 msgstr ""
 
 #, c-format
-msgid "TPM Proxy model %s is only available for PPC64 guests"
-msgstr ""
-
-#, c-format
 msgid "TPM Proxy model %s requires 'Passthrough' backend"
 msgstr ""
 
@@ -14860,7 +14655,7 @@ msgid "TPM device path %s is invalid"
 msgstr ""
 
 #, c-format
-msgid "TPM model '%s' is only available for x86 and aarch64 guests"
+msgid "TPM version '%s' is not supported"
 msgstr ""
 
 msgid "Table row cannot be empty"
@@ -14906,6 +14701,9 @@ msgstr ""
 
 #, c-format
 msgid "Target CPU feature policy %s does not match source %s"
+msgstr ""
+
+msgid "Target CPU maxphysaddr does not match source"
 msgstr ""
 
 #, c-format
@@ -15004,6 +14802,9 @@ msgid "Target USB vendor ID does not match source"
 msgstr ""
 
 msgid "Target USB version does not match source"
+msgstr ""
+
+msgid "Target active PCR banks doesn't match source"
 msgstr ""
 
 #, fuzzy
@@ -15356,7 +15157,7 @@ msgstr ""
 "Назив датотеке мрежног подешавања „%s“ се не поклапа са називом мреже „%s“"
 
 #, c-format
-msgid "Target domain watchdog count %d does not match source %d"
+msgid "Target domain watchdog device count %zu does not match source %zu"
 msgstr ""
 
 msgid "Target filesystem access mode does not match source"
@@ -15478,6 +15279,10 @@ msgid ""
 msgstr ""
 
 #, c-format
+msgid "Target serial model %s does not match source %s"
+msgstr ""
+
+#, c-format
 msgid "Target serial port %d does not match source %d"
 msgstr ""
 
@@ -15530,7 +15335,7 @@ msgstr ""
 "Назив датотеке мрежног подешавања „%s“ се не поклапа са називом мреже „%s“"
 
 #, c-format
-msgid "Target timer presence %d does not match source %d"
+msgid "Target timer presence '%s' does not match source '%s'"
 msgstr ""
 
 #, c-format
@@ -15598,6 +15403,10 @@ msgid "Thawed %d filesystem(s)\n"
 msgstr ""
 
 #, c-format
+msgid "The %s interface already exists"
+msgstr ""
+
+#, c-format
 msgid "The '%s' device is not supported by this QEMU binary"
 msgstr ""
 
@@ -15618,6 +15427,14 @@ msgstr "наредба „%s“ не подржава опцију --%s"
 msgid ""
 "The 'eoi' attribute of the '%s' feature is not supported for architecture "
 "'%s' or machine type '%s'"
+msgstr ""
+
+msgid "The 'passt' backend can only be used with interface type='user'"
+msgstr ""
+
+msgid ""
+"The 'range' of a 'portForward' requires 'start' attribute if 'end', 'to', or "
+"'exclude' is specified"
 msgstr ""
 
 #, c-format
@@ -15680,6 +15497,9 @@ msgstr ""
 msgid "The XML configuration was changed by another user."
 msgstr ""
 
+msgid "The associated audio is not of 'dbus' kind."
+msgstr ""
+
 #, c-format
 msgid "The certificate %s basic constraints do not show a CA"
 msgstr ""
@@ -15737,6 +15557,10 @@ msgid ""
 msgstr ""
 
 #, c-format
+msgid "The device at PCI address %s needs to be an integrated device (bus=0)"
+msgstr ""
+
+#, c-format
 msgid ""
 "The device at PCI address %s requires hotplug capability, but the PCI "
 "controller with index='%d' doesn't support hotplug"
@@ -15771,22 +15595,23 @@ msgid ""
 "The ich9-intel-hda audio controller is not supported in this QEMU binary"
 msgstr ""
 
-msgid "The keyword is not comprised only of uppercase ASCII letters or digits"
-msgstr ""
-
-#, c-format
-msgid "The keyword length is not 2 bytes: %s"
-msgstr ""
-
 msgid "The machine has no snapshot and it should have it"
+msgstr ""
+
+msgid "The maximum 'start' value for <clock offset='absolute'> is 253402300799"
 msgstr ""
 
 msgid "The minimum lease time should be greater than 2 minutes"
 msgstr ""
 
 msgid ""
-"The overall maximum number of clients must be greater than the maximum "
-"number of clients waiting for authentication"
+"The number of virtual CPU address bits cannot exceed the number supported by "
+"the host CPU"
+msgstr ""
+
+msgid ""
+"The overall maximum number of clients must not be less than the number of "
+"clients waiting for authentication"
 msgstr ""
 
 msgid "The read only disk has no parent"
@@ -15813,9 +15638,6 @@ msgstr ""
 msgid "The slirp-helper doesn't support migration"
 msgstr "складиште не подржава прављење диска"
 
-msgid "The string resource has invalid characters in its value"
-msgstr ""
-
 #, c-format
 msgid "The vbox driver does not support %s SCSI controller model"
 msgstr ""
@@ -15831,12 +15653,6 @@ msgstr "xen магистрала не подржава %s уређај за ун
 #, fuzzy, c-format
 msgid "The vbox driver does not support %s disk device"
 msgstr "xen магистрала не подржава %s уређај за унос"
-
-#, c-format
-msgid ""
-"The version of dnsmasq on this host (%d.%d) doesn't adequately support IPv6 "
-"dhcp range or dhcp host specification. Version %d.%d or later is required."
-msgstr ""
 
 msgid "There are no more free CCW devnos."
 msgstr ""
@@ -16163,10 +15979,6 @@ msgid "Trying to lock unknown SharedCURL lock %d"
 msgstr ""
 
 #, c-format
-msgid "Trying to remove mismatching close callback for domain %s"
-msgstr ""
-
-#, c-format
 msgid "Trying to unlock unknown SharedCURL lock %d"
 msgstr ""
 
@@ -16349,10 +16161,6 @@ msgstr "неуспело тумачење %s датотеке подешавањ
 #, fuzzy, c-format
 msgid "Unable to access file descriptor %d"
 msgstr "Неуспело постављање неблокирајуће заставице описника датотека"
-
-#, c-format
-msgid "Unable to access file descriptor %d path %s"
-msgstr ""
 
 msgid "Unable to access kernel32.dll"
 msgstr ""
@@ -16577,16 +16385,11 @@ msgstr ""
 msgid "Unable to close %s"
 msgstr ""
 
-#, c-format
-msgid "Unable to close HardDisk, rc=%08x"
+msgid "Unable to close HardDisk"
 msgstr ""
 
 msgid "Unable to close disk children"
 msgstr ""
-
-#, fuzzy, c-format
-msgid "Unable to close file '%s'"
-msgstr "Неуспело рашчлањивање режима „%s“"
 
 msgid "Unable to close recursively all disks"
 msgstr ""
@@ -16595,8 +16398,10 @@ msgstr ""
 msgid "Unable to close the VPD file, fd: %d"
 msgstr ""
 
-#, c-format
-msgid "Unable to close the new medium, rc=%08x"
+msgid "Unable to close the new medium"
+msgstr ""
+
+msgid "Unable to compile regex"
 msgstr ""
 
 #, c-format
@@ -16630,8 +16435,7 @@ msgstr ""
 msgid "Unable to create %s"
 msgstr "Неуспело прављење диска %s"
 
-#, c-format
-msgid "Unable to create HardDisk, rc=%08x"
+msgid "Unable to create HardDisk"
 msgstr ""
 
 #, fuzzy
@@ -16807,8 +16611,7 @@ msgstr "Неуспело уништавање диска %s"
 msgid "Unable to delete lockspace resource %s"
 msgstr "Неуспело брисање складишта %s"
 
-#, c-format
-msgid "Unable to delete medium, rc=%08x"
+msgid "Unable to delete medium"
 msgstr ""
 
 #, fuzzy, c-format
@@ -16821,6 +16624,9 @@ msgstr ""
 
 #, c-format
 msgid "Unable to destroy '%s': device in use"
+msgstr ""
+
+msgid "Unable to detect SCHED_CORE"
 msgstr ""
 
 #, fuzzy, c-format
@@ -16905,6 +16711,9 @@ msgstr ""
 msgid "Unable to find 'devices' cgroups controller mount"
 msgstr ""
 
+msgid "Unable to find 'dnsmasq' binary in $PATH"
+msgstr ""
+
 msgid "Unable to find 'memory' cgroups controller mount"
 msgstr ""
 
@@ -16933,6 +16742,13 @@ msgid "Unable to find a satisfying vhost-user-gpu"
 msgstr ""
 
 msgid "Unable to find a satisfying virtiofsd"
+msgstr ""
+
+msgid "Unable to find a vCPU that is online"
+msgstr ""
+
+#, c-format
+msgid "Unable to find address for mdev parent device '%s'"
 msgstr ""
 
 #, c-format
@@ -17002,10 +16818,6 @@ msgid "Unable to format time"
 msgstr "не могу да генеришем uuid"
 
 msgid "Unable to freeze filesystems"
-msgstr ""
-
-#, c-format
-msgid "Unable to generate diffie-hellman parameters: %s"
 msgstr ""
 
 #, fuzzy, c-format
@@ -17130,10 +16942,6 @@ msgstr "Неуспело добављање података о спрези"
 msgid "Unable to get daemon logging outputs information"
 msgstr "Неуспело добављање података о диску"
 
-#, fuzzy, c-format
-msgid "Unable to get device ID '%s'"
-msgstr "неуспело добављање диска „%s“"
-
 msgid "Unable to get device master from netlink on this platform"
 msgstr ""
 
@@ -17187,12 +16995,10 @@ msgstr "Неуспело добављање података о диску"
 msgid "Unable to get hard disk id"
 msgstr "не могу да генеришем uuid"
 
-#, c-format
-msgid "Unable to get hard disk id, rc=%08x"
+msgid "Unable to get hardDisk Id"
 msgstr ""
 
-#, c-format
-msgid "Unable to get hardDisk Id, rc=%08x"
+msgid "Unable to get host SEV information"
 msgstr ""
 
 #, fuzzy
@@ -17223,6 +17029,9 @@ msgstr "Неуспело добављање података о спрези"
 msgid "Unable to get kvm descriptor: %s"
 msgstr "неуспело добављање мреже „%s“"
 
+msgid "Unable to get launch security parameters"
+msgstr ""
+
 #, fuzzy
 msgid "Unable to get local socket name"
 msgstr "неуспело добављање имена домаћина"
@@ -17235,9 +17044,8 @@ msgstr "Неуспело добављање статистике блока %s %
 msgid "Unable to get medium location"
 msgstr "Неуспело добављање података о диску"
 
-#, fuzzy, c-format
-msgid "Unable to get medium uuid, rc=%08x"
-msgstr "не могу да генеришем uuid"
+msgid "Unable to get medium uuid"
+msgstr ""
 
 #, fuzzy
 msgid "Unable to get memory parameters"
@@ -17246,10 +17054,6 @@ msgstr "Не могу да изменим највећу количину мем
 #, fuzzy
 msgid "Unable to get memory stats"
 msgstr "Не могу да изменим највећу количину меморије"
-
-#, c-format
-msgid "Unable to get minor number of device '%s'"
-msgstr ""
 
 #, fuzzy
 msgid "Unable to get node cpu stats"
@@ -17361,9 +17165,6 @@ msgstr ""
 msgid "Unable to init device stream mutex"
 msgstr ""
 
-msgid "Unable to init qemu driver mutexes"
-msgstr ""
-
 msgid "Unable to initialize RW lock"
 msgstr ""
 
@@ -17380,10 +17181,6 @@ msgstr ""
 #, fuzzy
 msgid "Unable to initialize condition variable"
 msgstr "неуспело уписивање датотеке подешавања"
-
-#, c-format
-msgid "Unable to initialize diffie-hellman parameters: %s"
-msgstr ""
 
 #, fuzzy, c-format
 msgid "Unable to initialize lease %s"
@@ -17524,12 +17321,10 @@ msgstr ""
 msgid "Unable to open /proc/mounts"
 msgstr ""
 
-#, c-format
-msgid "Unable to open HardDisk, rc=%08x"
+msgid "Unable to open HardDisk"
 msgstr ""
 
-#, c-format
-msgid "Unable to open Machine, rc=%08x"
+msgid "Unable to open Machine"
 msgstr ""
 
 msgid "Unable to open UNIX socket"
@@ -17652,10 +17447,6 @@ msgstr "Неуспело добављање статистике блока %s %
 msgid "Unable to parse ovs-vsctl output"
 msgstr "Неуспешно рашчлањавање vzlist излаза"
 
-#, fuzzy, c-format
-msgid "Unable to parse port id '%s'"
-msgstr "Неуспело рашчлањивање режима „%s“"
-
 #, fuzzy
 msgid "Unable to parse quota"
 msgstr "Неуспело рашчлањивање режима „%s“"
@@ -17686,10 +17477,6 @@ msgstr "Неуспело рашчлањивање режима „%s“"
 #, fuzzy, c-format
 msgid "Unable to parse: %s"
 msgstr "Неуспело рашчлањивање режима „%s“"
-
-#, fuzzy, c-format
-msgid "Unable to pre-create chardev file '%s'"
-msgstr "Неуспело прављење диска %s"
 
 #, c-format
 msgid "Unable to preserve mac/vlan tag for device = %s, vf = %d"
@@ -17834,8 +17621,7 @@ msgstr ""
 msgid "Unable to read virtiofsd pidfile '%s'"
 msgstr "неуспело читање %s датотеке подешавања"
 
-#, c-format
-msgid "Unable to register Machine, rc=%08x"
+msgid "Unable to register Machine"
 msgstr ""
 
 msgid "Unable to register async IO callback"
@@ -17966,6 +17752,10 @@ msgid "Unable to retrieve threadpool parameters"
 msgstr ""
 
 #, c-format
+msgid "Unable to run among %llu"
+msgstr ""
+
+#, c-format
 msgid "Unable to run command to get OVS master for interface %s"
 msgstr ""
 
@@ -18042,6 +17832,9 @@ msgstr ""
 msgid "Unable to send SIGTERM to init pid %llu"
 msgstr ""
 
+msgid "Unable to send a VF SETLINK request on this platform"
+msgstr ""
+
 #, fuzzy
 msgid "Unable to send container continue message"
 msgstr "Није могуће поставити заставицу за надгледање затварања-при-извршавању"
@@ -18066,6 +17859,9 @@ msgid "Unable to set FD %d blocking"
 msgstr ""
 
 msgid "Unable to set IPV6_V6ONLY flag"
+msgstr ""
+
+msgid "Unable to set SCHED_CORE"
 msgstr ""
 
 #, fuzzy, c-format
@@ -18099,6 +17895,15 @@ msgstr ""
 #, fuzzy, c-format
 msgid "Unable to set XATTR %s on %s"
 msgstr "Неуспело чување домена %s у %s"
+
+msgid "Unable to set a VF MAC on this platform"
+msgstr ""
+
+msgid "Unable to set a VF VLAN on this platform"
+msgstr ""
+
+msgid "Unable to set a VF config on this platform"
+msgstr ""
 
 #, fuzzy
 msgid "Unable to set agent close-on-exec flag"
@@ -18154,6 +17959,9 @@ msgstr ""
 #, fuzzy
 msgid "Unable to set interface parameters"
 msgstr "Неуспело добављање података о спрези"
+
+msgid "Unable to set launch security state"
+msgstr ""
 
 msgid "Unable to set monitor close-on-exec flag"
 msgstr "Није могуће поставити заставицу за надгледање затварања-при-извршавању"
@@ -18280,8 +18088,7 @@ msgstr "Неуспело укидање дефиниције мреже %s"
 msgid "Unable to unlink path '%s'"
 msgstr "Неуспело укидање дефиниције складишта %s"
 
-#, c-format
-msgid "Unable to unregister machine, rc=%08x"
+msgid "Unable to unregister machine"
 msgstr ""
 
 msgid "Unable to update server's tls related files."
@@ -18314,9 +18121,9 @@ msgstr ""
 msgid "Unable to wait on epoll"
 msgstr ""
 
-#, fuzzy
-msgid "Unable to wait on monitor condition"
-msgstr "Није могуће поставити заставицу за надгледање затварања-при-извршавању"
+#, c-format
+msgid "Unable to wait on monitor condition (vm='%s')"
+msgstr ""
 
 msgid "Unable to wait on parent process"
 msgstr ""
@@ -18464,12 +18271,6 @@ msgstr ""
 msgid "Unexpected QEMU monitor still active during domain deletion"
 msgstr ""
 
-msgid "Unexpected RV keyword in the read-write section."
-msgstr ""
-
-msgid "Unexpected RW keyword in the read-only section."
-msgstr ""
-
 #, c-format
 msgid "Unexpected SCSI controller model %d"
 msgstr ""
@@ -18514,9 +18315,6 @@ msgid "Unexpected element '%s' in CPU map '%s'"
 msgstr ""
 
 msgid "Unexpected event thread still active during domain deletion"
-msgstr ""
-
-msgid "Unexpected field value format encountered."
 msgstr ""
 
 #, fuzzy, c-format
@@ -18565,10 +18363,6 @@ msgstr "неочекивана врста домена %d"
 msgid "Unexpected network port type %s"
 msgstr "неочекивана врста складишта"
 
-#, fuzzy, c-format
-msgid "Unexpected network protocol '%s'"
-msgstr "неочекивани подаци „%s“"
-
 msgid "Unexpected output of cloud-hypervisor binary"
 msgstr ""
 
@@ -18604,10 +18398,6 @@ msgstr ""
 
 #, fuzzy, c-format
 msgid "Unexpected signal received: %d"
-msgstr "неочекивана врста домена %d"
-
-#, fuzzy, c-format
-msgid "Unexpected socket family %d"
 msgstr "неочекивана врста домена %d"
 
 #, fuzzy, c-format
@@ -18674,10 +18464,6 @@ msgid "Unknown LXC namespace source '%s'"
 msgstr ""
 
 #, c-format
-msgid "Unknown PCI device <driver name='%s'/> has been specified"
-msgstr ""
-
-#, c-format
 msgid "Unknown PCI header type '%d' for device '%s'"
 msgstr ""
 
@@ -18699,14 +18485,6 @@ msgstr ""
 #, c-format
 msgid "Unknown SCSI subsystem protocol '%s'"
 msgstr ""
-
-#, fuzzy, c-format
-msgid "Unknown TPM backend type '%s'"
-msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
-msgid "Unknown TPM frontend model '%s'"
-msgstr "непознат „%s“ уређај за покретање"
 
 #, fuzzy, c-format
 msgid "Unknown URI parameter '%s'"
@@ -18740,6 +18518,10 @@ msgstr "непознат „%s“ уређај за покретање"
 msgid "Unknown cache type '%s'"
 msgstr "непозната врста ауторизације %s"
 
+#, c-format
+msgid "Unknown calculation mode '%s'"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "Unknown cgroup controller '%s'"
 msgstr "непозната врста ауторизације %s"
@@ -18767,6 +18549,10 @@ msgstr ""
 #, fuzzy, c-format
 msgid "Unknown data source '%s'"
 msgstr "непозната врста ауторизације %s"
+
+#, c-format
+msgid "Unknown dirty page rate calculation mode: %s"
+msgstr ""
 
 #, c-format
 msgid "Unknown dirty rate status: %s"
@@ -18827,14 +18613,6 @@ msgstr ""
 msgid "Unknown input device type"
 msgstr "недостаје врста уређаја за унос"
 
-#, c-format
-msgid "Unknown interface <driver name='%s'> has been specified"
-msgstr ""
-
-#, c-format
-msgid "Unknown interface <driver txmode='%s'> has been specified"
-msgstr ""
-
 #, fuzzy
 msgid "Unknown invocation state"
 msgstr "непозната врста аутентификације %s"
@@ -18879,10 +18657,6 @@ msgid ""
 "'paravirt'"
 msgstr ""
 
-#, fuzzy
-msgid "Unknown mode has been specified"
-msgstr "Домену %s је укинута дефиниција\n"
-
 #, fuzzy, c-format
 msgid "Unknown model type '%s'"
 msgstr "непозната врста „%s“"
@@ -18918,6 +18692,10 @@ msgstr ""
 #, fuzzy
 msgid "Unknown return code"
 msgstr "непозната процедура: %d"
+
+#, c-format
+msgid "Unknown sched_core value %s"
+msgstr ""
 
 #, c-format
 msgid "Unknown scsi_host subsystem protocol '%s'"
@@ -19091,10 +18869,6 @@ msgid "Unsupported SMBIOS mode '%s'"
 msgstr ""
 
 #, fuzzy, c-format
-msgid "Unsupported TPM version '%s'"
-msgstr "магистрала за унос %s није подржана"
-
-#, fuzzy, c-format
 msgid "Unsupported URI scheme '%s'"
 msgstr "магистрала за унос %s није подржана"
 
@@ -19256,7 +19030,7 @@ msgid "Unsupported hostdev type %s"
 msgstr "неподржана врста аутентификације %d"
 
 #, c-format
-msgid "Unsupported interface %s for TPM 1.2"
+msgid "Unsupported interface '%s' for TPM 1.2"
 msgstr ""
 
 #, fuzzy
@@ -19462,13 +19236,6 @@ msgstr ""
 msgid "User namespace support is recommended"
 msgstr ""
 
-msgid ""
-"Username and key file path must be provided for private key authentication"
-msgstr ""
-
-msgid "Username must be provided for ssh agent authentication"
-msgstr ""
-
 msgid "Username request failed"
 msgstr ""
 
@@ -19519,6 +19286,9 @@ msgstr ""
 msgid "VFIO device assignment is currently not supported on this system"
 msgstr ""
 
+msgid "VM disk source and snapshot disk source are not the same"
+msgstr ""
+
 msgid "VM is already active"
 msgstr "VM је већ активан"
 
@@ -19557,6 +19327,10 @@ msgstr ""
 msgid "VNC Password authentication not supported by bhyve"
 msgstr ""
 
+#, c-format
+msgid "VNC password is %zu characters long, only 8 permitted"
+msgstr ""
+
 msgid "VNC power control is not available"
 msgstr ""
 
@@ -19576,10 +19350,6 @@ msgstr ""
 
 #, c-format
 msgid "Value of cputune '%s' must be in range [%llu, %llu]"
-msgstr ""
-
-#, c-format
-msgid "Value of cputune 'shares' must be in range [%llu, %llu]"
 msgstr ""
 
 #, fuzzy
@@ -19664,10 +19434,6 @@ msgstr ""
 msgid "VxHS protocol accepts only one host"
 msgstr ""
 
-#, fuzzy
-msgid "VxHS protocol does not support URI syntax"
-msgstr "складиште не подржава брисање диска"
-
 msgid "VxHS protocol is not supported with this QEMU binary"
 msgstr ""
 
@@ -19734,13 +19500,6 @@ msgid "Write to '%s' to trigger host scan failed"
 msgstr ""
 
 #, fuzzy
-msgid ""
-"Wrong <source> 'mode' attribute specified with <interface type='vhostuser'/>"
-msgstr ""
-"Ниједна <source> „network“ особина није одређена преко <interface "
-"type='network'/>"
-
-#, fuzzy
 msgid "Wrong MAC address"
 msgstr "MAC адреса"
 
@@ -19785,22 +19544,7 @@ msgstr ""
 msgid "XML document failed to validate against schema: %s"
 msgstr ""
 
-msgid "XML does not contain expected 'bios' element"
-msgstr ""
-
-msgid "XML does not contain expected 'chassis' element"
-msgstr ""
-
-msgid "XML does not contain expected 'cookie' element"
-msgstr ""
-
 msgid "XML does not contain expected 'cpu' element"
-msgstr ""
-
-msgid "XML does not contain expected 'sysinfo' element"
-msgstr ""
-
-msgid "XML does not contain expected 'system' element"
 msgstr ""
 
 #, fuzzy, c-format
@@ -19832,10 +19576,6 @@ msgid "You are trying to remove a snapshot which does not exists"
 msgstr ""
 
 msgid "You must map the root user of container"
-msgstr ""
-
-#, c-format
-msgid "[%s]"
 msgstr ""
 
 #, fuzzy, c-format
@@ -19935,9 +19675,6 @@ msgstr ""
 msgid "active"
 msgstr "ради"
 
-msgid "active commit not supported with this QEMU binary"
-msgstr ""
-
 #, c-format
 msgid "active commit requested but '%s' is not active"
 msgstr ""
@@ -19995,6 +19732,10 @@ msgstr ""
 #, fuzzy
 msgid "address of disk device"
 msgstr "управљачки програм уређаја диска"
+
+#, c-format
+msgid "address of type '%s' is supported only for hostdevs"
+msgstr ""
 
 msgid "address source: 'lease' or 'agent'"
 msgstr ""
@@ -20121,6 +19862,10 @@ msgstr ""
 msgid "another backup job is already running"
 msgstr "Домен је већ покренут"
 
+#, c-format
+msgid "another migration job is already running for domain '%s'"
+msgstr ""
+
 #, fuzzy
 msgid "any configuration"
 msgstr "подаци о домену"
@@ -20130,9 +19875,6 @@ msgid "ap-domain value '%s' is out of range for '%s'"
 msgstr ""
 
 msgid "apparmor_parser exited with error"
-msgstr ""
-
-msgid "append not supported in this QEMU binary"
 msgstr ""
 
 msgid "applyDHCPOnlyRules failed - spoofing not protected!"
@@ -20187,6 +19929,9 @@ msgstr ""
 msgid "array element missing in guest-get-vcpus return value"
 msgstr ""
 
+msgid "associate a FD with a domain"
+msgstr ""
+
 msgid ""
 "at least 1 server is necessary in JSON backing definition for gluster volume"
 msgstr ""
@@ -20195,6 +19940,9 @@ msgstr ""
 msgid ""
 "at line %d: %s%s\n"
 "%s"
+msgstr ""
+
+msgid "at most 1 fd can be passed to qemu along with a command"
 msgstr ""
 
 msgid "at most one CPU cache element may be specified"
@@ -20305,6 +20053,13 @@ msgstr ""
 msgid "authentication failed: %s"
 msgstr "неуспела аутентификација: %s"
 
+#, c-format
+msgid "authentication is not supported for protocol '%s'"
+msgstr ""
+
+msgid "authentication is supported only for network backed disks"
+msgstr ""
+
 msgid "authentication required"
 msgstr "аутентификација неопходна"
 
@@ -20379,10 +20134,10 @@ msgstr ""
 msgid "backing store protocol '%s' is not yet supported"
 msgstr "Врста мреже %d није подржана"
 
-msgid "backingStore is not supported with vhostuser disk"
+msgid "backingStore is not supported with NVRAM"
 msgstr ""
 
-msgid "backingStore of mirror target is not supported by this qemu"
+msgid "backingStore is not supported with vhostuser disk"
 msgstr ""
 
 msgid ""
@@ -20390,13 +20145,10 @@ msgid ""
 "sense"
 msgstr ""
 
+msgid "backup"
+msgstr ""
+
 msgid "backup TLS directory not configured"
-msgstr ""
-
-msgid "backup is not supported with this QEMU"
-msgstr ""
-
-msgid "backup job"
 msgstr ""
 
 msgid "backup job data missing"
@@ -20509,6 +20261,10 @@ msgstr ""
 msgid "block I/O throttle limit value must be no more than %llu"
 msgstr ""
 
+#, c-format
+msgid "block commit failed while deleting disk '%s' snapshot: '%s'"
+msgstr ""
+
 msgid "block copy still active"
 msgstr ""
 
@@ -20521,6 +20277,9 @@ msgstr "блок уређај"
 
 #, c-format
 msgid "block device snapshot target '%s' doesn't exist"
+msgstr ""
+
+msgid "block info is not supported for FD passed disk image"
 msgstr ""
 
 msgid "block info is not supported for vhostuser disk"
@@ -20767,6 +20526,9 @@ msgid ""
 "hypervisor driver"
 msgstr ""
 
+msgid "can't add memory backend as guest has no NUMA nodes configured"
+msgstr ""
+
 #, c-format
 msgid ""
 "can't add memory backend for guest node '%d' as the guest has only '%zu' "
@@ -20777,6 +20539,9 @@ msgid "can't change link state: device alias not found"
 msgstr ""
 
 msgid "can't change media while a block job is running on the device"
+msgstr ""
+
+msgid "can't change nodeset for strict mode for running domain"
 msgstr ""
 
 msgid "can't change numatune mode for running domain"
@@ -20964,6 +20729,9 @@ msgid "cannot become session leader"
 msgstr ""
 
 msgid "cannot block signals"
+msgstr ""
+
+msgid "cannot both keep and delete TPM"
 msgstr ""
 
 msgid "cannot both keep and delete nvram"
@@ -21202,6 +20970,9 @@ msgstr "име неактивног домена"
 msgid "cannot delete domain snapshot for running domain"
 msgstr "Добавља статистику мрежне спреге за текући домен."
 
+msgid "cannot delete external snapshots when there is another active block job"
+msgstr ""
+
 #, c-format
 msgid "cannot delete inactive domain with %d checkpoints"
 msgstr ""
@@ -21281,9 +21052,6 @@ msgid "cannot extract iothreadsched nodes"
 msgstr ""
 
 msgid "cannot extract memorytune nodes"
-msgstr ""
-
-msgid "cannot extract numatune nodes"
 msgstr ""
 
 msgid "cannot extract resource nodes"
@@ -21430,6 +21198,10 @@ msgid "cannot get CPU affinity of process %d"
 msgstr "не могу да поставим безбедносни props %d (%s)"
 
 msgid "cannot get RSS for domain"
+msgstr ""
+
+#, c-format
+msgid "cannot get cert distinguished name: %s"
 msgstr ""
 
 msgid "cannot get children disk"
@@ -21606,6 +21378,10 @@ msgstr "пресели домен на другог домаћина"
 msgid "cannot migrate domain with I/O error"
 msgstr "пресели домен на другог домаћина"
 
+#, c-format
+msgid "cannot migrate domain: %s"
+msgstr ""
+
 msgid "cannot migrate this domain without dbus-vmstate support"
 msgstr ""
 
@@ -21683,6 +21459,9 @@ msgid "cannot modify memory targetNode from '%d' to '%d'"
 msgstr ""
 
 msgid "cannot modify network device address type"
+msgstr ""
+
+msgid "cannot modify network device backend settings"
 msgstr ""
 
 msgid "cannot modify network device boot index setting"
@@ -21781,10 +21560,6 @@ msgid "cannot parse MAC address '%s' from file '%s'"
 msgstr ""
 
 #, fuzzy, c-format
-msgid "cannot parse cache mode '%s' for virtiofs"
-msgstr "не могу да рашчланим место завршетка уређаја"
-
-#, fuzzy, c-format
 msgid "cannot parse cpu sys stat '%s'"
 msgstr "не могу да рашчланим место почетка уређаја"
 
@@ -21841,11 +21616,11 @@ msgid "cannot parse rdp port %s"
 msgstr "не могу да уклоним подешавање за %s"
 
 #, c-format
-msgid "cannot parse sandbox mode '%s' for virtiofs"
+msgid "cannot parse target for lunStr '%s'"
 msgstr ""
 
 #, c-format
-msgid "cannot parse target for lunStr '%s'"
+msgid "cannot parse thread pool size '%s' for virtiofs"
 msgstr ""
 
 #, c-format
@@ -22313,6 +22088,11 @@ msgstr ""
 msgid "cannot use custom tap device in session mode"
 msgstr ""
 
+msgid ""
+"cannot use feature-based firmware autoselection when firmware autoselection "
+"is disabled"
+msgstr ""
+
 msgid "cannot use namespaces in session mode"
 msgstr ""
 
@@ -22371,10 +22151,10 @@ msgstr ""
 msgid "cd: command valid only in interactive mode"
 msgstr ""
 
-msgid "cdrom device without source path not supported"
+msgid "cdrom device with virtio bus isn't supported"
 msgstr ""
 
-msgid "cdrom/floppy device hotplug isn't supported"
+msgid "cdrom device without source path not supported"
 msgstr ""
 
 msgid "cell number must be non-negative integer or -1"
@@ -22429,6 +22209,9 @@ msgstr "промени доделу меморије"
 
 msgid "change number of virtual CPUs"
 msgstr "промени број виртуелних CPU-а"
+
+msgid "change of nodeset for running domain requires restrictive numa mode"
+msgstr ""
 
 msgid "change of nodeset for running domain requires strict numa mode"
 msgstr ""
@@ -22515,6 +22298,14 @@ msgstr "недостају подаци о коренском уређају %s"
 #, fuzzy
 msgid "character device name"
 msgstr "врста циљног уређаја"
+
+#, c-format
+msgid "chardev '%s' not supported in this QEMU binary"
+msgstr ""
+
+#, c-format
+msgid "chardev '%s' not supported without spice graphics"
+msgstr ""
 
 #, fuzzy
 msgid "chardev already exists"
@@ -22912,6 +22703,9 @@ msgstr ""
 msgid "copy of read-only disks is not supported"
 msgstr "Врста мреже %d није подржана"
 
+msgid "copy to a FD passed disk source is not yet supported"
+msgstr ""
+
 msgid "copy-on-write ploop volumes are not yet supported"
 msgstr ""
 
@@ -22939,7 +22733,7 @@ msgid "could not allocate memory"
 msgstr "нестало меморије"
 
 #, c-format
-msgid "could not attach shared folder '%s', rc=%08x"
+msgid "could not attach shared folder '%s'"
 msgstr ""
 
 msgid "could not build absolute core file path"
@@ -22952,15 +22746,15 @@ msgid "could not build absolute output file path"
 msgstr ""
 
 #, c-format
-msgid "could not change ACPI status to: %s, rc=%08x"
+msgid "could not change ACPI status to: %s"
 msgstr ""
 
 #, c-format
-msgid "could not change APIC status to: %s, rc=%08x"
+msgid "could not change APIC status to: %s"
 msgstr ""
 
 #, c-format
-msgid "could not change PAE status to: %s, rc=%08x"
+msgid "could not change PAE status to: %s"
 msgstr ""
 
 msgid "could not close handshake fd"
@@ -22997,19 +22791,17 @@ msgstr "не могу да се повежем са Xen складиштем %s"
 msgid "could not create profile"
 msgstr "не могу да се повежем са Xen складиштем"
 
-#, fuzzy, c-format
-msgid "could not define a domain, rc=%08x"
-msgstr "Неуспело дефинисање домена из %s"
+msgid "could not define a domain"
+msgstr ""
 
 msgid "could not delete snapshot"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "could not delete the domain, rc=%08x"
-msgstr "не могу да одредим максималне vcpus за домен"
+msgid "could not delete the domain"
+msgstr ""
 
 #, c-format
-msgid "could not detach shared folder '%s', rc=%08x"
+msgid "could not detach shared folder '%s'"
 msgstr ""
 
 msgid "could not determine max vcpus for the domain"
@@ -23017,6 +22809,9 @@ msgstr "не могу да одредим максималне vcpus за дом
 
 #, c-format
 msgid "could not find backing store index '%u' in chain for '%s'"
+msgstr ""
+
+msgid "could not find base disk source in disk source chain"
 msgstr ""
 
 #, c-format
@@ -23208,20 +23003,20 @@ msgid "could not set PATH"
 msgstr ""
 
 #, c-format
-msgid "could not set the memory size of the domain to: %llu Kb, rc=%08x"
+msgid "could not set the memory size of the domain to: %llu Kb"
 msgstr ""
 
 #, c-format
-msgid "could not set the memory size of the domain to: %lu Kb, rc=%08x"
+msgid "could not set the memory size of the domain to: %lu Kb"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "could not set the number of cpus of the domain to: %u, rc=%08x"
-msgstr "не могу да одредим максималне vcpus за домен"
+#, c-format
+msgid "could not set the number of cpus of the domain to: %u"
+msgstr ""
 
-#, fuzzy, c-format
-msgid "could not set the number of virtual CPUs to: %u, rc=%08x"
-msgstr "Мења број виртуелних CPU-а активних у домену госта."
+#, c-format
+msgid "could not set the number of virtual CPUs to: %u"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "could not take a screenshot of %s"
@@ -23318,10 +23113,6 @@ msgstr ""
 
 #, fuzzy, c-format
 msgid "couldn't write dnsmasq config file '%s'"
-msgstr "неуспело уписивање датотеке подешавања: %s"
-
-#, fuzzy, c-format
-msgid "couldn't write radvd config file '%s'"
 msgstr "неуспело уписивање датотеке подешавања: %s"
 
 msgid "cow feature may only be used for 'fs' and 'dir' pools"
@@ -23436,6 +23227,18 @@ msgid "creation of qcow2 encrypted image is not supported"
 msgstr "Врста мреже %d није подржана"
 
 #, c-format
+msgid "crypto backend %s is not supported"
+msgstr ""
+
+#, c-format
+msgid "crypto model %s is not supported"
+msgstr ""
+
+#, c-format
+msgid "crypto type %s is not supported"
+msgstr ""
+
+#, c-format
 msgid ""
 "curl_easy_getinfo(CURLINFO_REDIRECT_URL) returned an error: %s (%d) : %s"
 msgstr ""
@@ -23467,6 +23270,9 @@ msgstr ""
 msgid "current bridge device name"
 msgstr ""
 
+msgid "current job is not outgoing migration in post-copy mode"
+msgstr ""
+
 msgid "current vcpu count must equal maximum"
 msgstr ""
 
@@ -23481,6 +23287,9 @@ msgid "custom alias name of interface device"
 msgstr ""
 
 msgid "custom configuration parameters specified"
+msgstr ""
+
+msgid "custom device configuration"
 msgstr ""
 
 msgid "custom device tree blob used"
@@ -23629,19 +23438,17 @@ msgstr ""
 msgid "delete the specified network port"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "deleting %s drive failed: %s"
-msgstr "неуспела радња: %s"
-
-msgid "deleting committed images is not supported by this VM"
-msgstr ""
-
 msgid ""
-"deleting drive is not supported.  This may leak data if disk is reassigned"
+"deleting external snapshot that has internal snapshot as parent not supported"
 msgstr ""
 
-#, c-format
-msgid "deletion of %d external disk snapshots not supported yet"
+msgid "deletion of external and internal children disk snapshots not supported"
+msgstr ""
+
+msgid "deletion of external children disk snapshots not supported"
+msgstr ""
+
+msgid "deletion of external disk snapshots with children not supported"
 msgstr ""
 
 #, c-format
@@ -23709,9 +23516,6 @@ msgstr "верзија отиска није подржана (%d > %d)"
 #, fuzzy
 msgid "detailed domain vcpu information"
 msgstr "подаци о домену"
-
-msgid "detect_zeroes is not supported by this QEMU binary"
-msgstr ""
 
 msgid "detect_zeroes is not supported with vhostuser disk"
 msgstr ""
@@ -23847,6 +23651,22 @@ msgstr ""
 msgid "directory to switch to (default: home or else root)"
 msgstr ""
 
+msgid ""
+"dirty page rate calculation mode, either of these 3 options 'page-sampling, "
+"dirty-bitmap, dirty-ring' can be specified."
+msgstr ""
+
+msgid "dirty ring must be power of 2 and ranges [1024, 65536]"
+msgstr ""
+
+#, c-format
+msgid ""
+"dirty ring size of KVM feature '%s' differs: source: '%d', destination: '%d'"
+msgstr ""
+
+msgid "dirty-ring calculation mode requires dirty-ring feature enabled."
+msgstr ""
+
 msgid "disable"
 msgstr "искључи"
 
@@ -23862,12 +23682,6 @@ msgstr ""
 #, fuzzy
 msgid "disabled"
 msgstr "искључи"
-
-msgid "disabling audio mixing engine is not supported with this QEMU"
-msgstr ""
-
-msgid "discard is not supported by this QEMU binary"
-msgstr ""
 
 #, c-format
 msgid "discard is not supported for model '%s'"
@@ -23891,9 +23705,6 @@ msgid "disconnected"
 msgstr ""
 
 msgid "discover potential storage pool sources"
-msgstr ""
-
-msgid "disjoint NUMA cpu ranges are not supported with this QEMU"
 msgstr ""
 
 #, c-format
@@ -24021,6 +23832,12 @@ msgstr ""
 msgid "disk format %s is not supported"
 msgstr "Врста мреже %d није подржана"
 
+#, c-format
+msgid ""
+"disk image '%s' for internal snapshot '%s' is not the same as disk image "
+"currently used by VM"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "disk image format not supported: %s"
 msgstr "верзија отиска није подржана (%d > %d)"
@@ -24071,6 +23888,13 @@ msgstr ""
 #, fuzzy
 msgid "disk source path is missing"
 msgstr "недостаје путања извора"
+
+#, c-format
+msgid "disk startupPolicy '%s' is not allowed for disk of '%s' type"
+msgstr ""
+
+msgid "disk startupPolicy 'requisite' is allowed only for cdrom or floppy"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "disk target %s not found"
@@ -24130,7 +23954,7 @@ msgid "display the progress of save"
 msgstr ""
 
 #, c-format
-msgid "dnsmasq binary %s is not executable"
+msgid "dnsmasq version >= %u.%u required but %lu.%lu found"
 msgstr ""
 
 msgid "do not enable STP for this bridge"
@@ -24232,10 +24056,6 @@ msgstr ""
 msgid "domain already has a vsock device"
 msgstr "Домен је већ активан"
 
-#, fuzzy
-msgid "domain already has a watchdog"
-msgstr "Домен је већ активан"
-
 msgid "domain architecture (/domain/os/type/@arch)"
 msgstr ""
 
@@ -24269,7 +24089,7 @@ msgstr ""
 msgid "domain control interface state"
 msgstr "домен није у стању гашења"
 
-msgid "domain core dump job"
+msgid "domain core dump"
 msgstr ""
 
 #, fuzzy
@@ -24302,10 +24122,6 @@ msgstr ""
 #, fuzzy
 msgid "domain has no snapshots"
 msgstr "домен није у стању гашења"
-
-#, fuzzy
-msgid "domain has no watchdog"
-msgstr "домен се не извршава"
 
 #, fuzzy
 msgid "domain has to be shutoff before renaming"
@@ -24376,6 +24192,9 @@ msgstr ""
 msgid "domain moment %s already exists"
 msgstr "диск складиштења већ постоји"
 
+msgid "domain must be in a paused state"
+msgstr ""
+
 msgid "domain must have at least one disk to perform backup"
 msgstr ""
 
@@ -24388,9 +24207,8 @@ msgstr "име домена или uuid"
 msgid "domain name, id or uuid"
 msgstr "име домена, id или uuid"
 
-#, fuzzy
-msgid "domain save job"
-msgstr "стање домена"
+msgid "domain save"
+msgstr ""
 
 #, fuzzy
 msgid "domain snapshot XML"
@@ -24446,18 +24264,8 @@ msgstr "domainMigratePrepare није поставио ури"
 msgid "domainMigratePrepare3 did not set uri"
 msgstr "domainMigratePrepare није поставио ури"
 
-msgid "domainbackup"
-msgstr ""
-
-msgid "domaincheckpoint"
-msgstr ""
-
 msgid "domains in 'doms' array must belong to a single connection"
 msgstr ""
-
-#, fuzzy
-msgid "domainsnapshot"
-msgstr "стање домена"
 
 #, c-format
 msgid "doms array in %s must contain at least one domain"
@@ -24483,9 +24291,9 @@ msgstr ""
 msgid "download volume contents to a file"
 msgstr "лоша вредност дужине опсега диска"
 
-#, fuzzy
-msgid "drive hotplug is not supported"
-msgstr "Врста мреже %d није подржана"
+#, c-format
+msgid "driver does not support FD passing for disk '%s'"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "driver does not support net model '%s'"
@@ -24510,10 +24318,6 @@ msgstr ""
 
 msgid "dump the core of a domain to a file for analysis"
 msgstr "избаци срж домена у датотеку ради анализе"
-
-#, fuzzy
-msgid "dump-guest-memory is not supported"
-msgstr "Врста мреже %d није подржана"
 
 #, fuzzy, c-format
 msgid "dumpformat '%d' is not supported"
@@ -24708,6 +24512,9 @@ msgid "encryption format of inputvol must be LUKS"
 msgstr ""
 
 msgid "encryption is not supported with vhostuser disk"
+msgstr ""
+
+msgid "encryption is supported only with 'raw' and 'qcow2' image format"
 msgstr ""
 
 #, c-format
@@ -25116,6 +24923,10 @@ msgstr "очекујем разделник у списку"
 msgid "expecting a value"
 msgstr "очекујем вредност"
 
+#, c-format
+msgid "expecting a value for value of type %s"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "expecting absolute path: %s"
 msgstr "очекујем разделник"
@@ -25139,12 +24950,6 @@ msgstr ""
 
 #, c-format
 msgid "external active snapshots are not supported on '%s' disks"
-msgstr ""
-
-#, c-format
-msgid ""
-"external active snapshots are not supported on 'network' disks using '%s' "
-"protocol"
 msgstr ""
 
 msgid "external active snapshots are not supported on scsi passthrough devices"
@@ -25176,10 +24981,6 @@ msgid ""
 msgstr ""
 
 #, c-format
-msgid "external snapshot for readonly disk %s is not supported"
-msgstr ""
-
-#, c-format
 msgid "external snapshot format for disk %s is unsupported: %s"
 msgstr ""
 
@@ -25202,9 +25003,6 @@ msgstr ""
 #, fuzzy, c-format
 msgid "failed Xen syscall %s"
 msgstr "неуспело добављање диска „%s“"
-
-msgid "failed due to I/O error"
-msgstr ""
 
 #, fuzzy
 msgid "failed probing capabilities"
@@ -25376,13 +25174,16 @@ msgstr "Неуспело добављање статистике спреге %s
 msgid "failed to create RBD snapshot %s@%s"
 msgstr "Неуспело прављење складишта %s"
 
+msgid "failed to create XML node"
+msgstr ""
+
 #, fuzzy
 msgid "failed to create a new XML namespace"
 msgstr "Неуспело прављење XML-а"
 
-#, fuzzy, c-format
-msgid "failed to create channel dir '%s': %s"
-msgstr "Неуспело прављење диска из %s"
+#, c-format
+msgid "failed to create channel dir '%s'"
+msgstr ""
 
 msgid "failed to create connection to CH socket"
 msgstr ""
@@ -25395,9 +25196,9 @@ msgstr "неуспело чување садржаја"
 msgid "failed to create directory '%s'"
 msgstr "неуспело добављање мреже „%s“"
 
-#, fuzzy, c-format
-msgid "failed to create dump dir '%s': %s"
-msgstr "Неуспео избачај сржи домена %s у %s"
+#, c-format
+msgid "failed to create dump dir '%s'"
+msgstr ""
 
 #, c-format
 msgid "failed to create glfs object for '%s'"
@@ -25418,17 +25219,17 @@ msgstr "неуспело уписивање датотеке дневника"
 msgid "failed to create json"
 msgstr "Неуспело прављење XML-а"
 
-#, fuzzy, c-format
-msgid "failed to create lib dir '%s': %s"
-msgstr "Неуспело прављење диска из %s"
+#, c-format
+msgid "failed to create lib dir '%s'"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "failed to create libssh channel: %s"
 msgstr "Неуспело прављење диска %s"
 
-#, fuzzy, c-format
-msgid "failed to create log dir '%s': %s"
-msgstr "Неуспело прављење диска из %s"
+#, c-format
+msgid "failed to create log dir '%s'"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "failed to create logfile %s"
@@ -25441,9 +25242,9 @@ msgstr ""
 msgid "failed to create profile"
 msgstr "Неуспело прављење складишта %s"
 
-#, fuzzy, c-format
-msgid "failed to create save dir '%s': %s"
-msgstr "Неуспело прављење диска из %s"
+#, c-format
+msgid "failed to create save dir '%s'"
+msgstr ""
 
 #, fuzzy
 msgid "failed to create socket"
@@ -25457,9 +25258,9 @@ msgstr "Неуспело прављење диска из %s"
 msgid "failed to create socketpair"
 msgstr "Неуспело прављење домена из %s"
 
-#, fuzzy, c-format
-msgid "failed to create state dir '%s': %s"
-msgstr "Неуспело аутоматско покретање VM-а „%s“: %s"
+#, c-format
+msgid "failed to create state dir '%s'"
+msgstr ""
 
 #, fuzzy
 msgid "failed to create the RADOS cluster"
@@ -25503,6 +25304,14 @@ msgstr ""
 #, fuzzy, c-format
 msgid "failed to determine loop exit status: %s"
 msgstr "Неуспело добављање статистике блока %s %s"
+
+#, c-format
+msgid "failed to duplicate file descriptor for fd group '%s'"
+msgstr ""
+
+#, c-format
+msgid "failed to duplicate passed fd with index '%zu'"
+msgstr ""
 
 #, fuzzy
 msgid "failed to enable IP forwarding"
@@ -25555,9 +25364,16 @@ msgstr ""
 msgid "failed to find disk '%s'"
 msgstr "неуспело добављање домена „%s“"
 
+#, c-format
+msgid "failed to find disk '%s' in snapshot VM XML"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "failed to find iothread id for '%s'"
 msgstr "Неуспело проналажење мреже: %s"
+
+msgid "failed to find parent disk source in backing chain"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "failed to find the VID for the VLAN device '%s'"
@@ -25955,6 +25771,9 @@ msgstr "неуспело преузимање могућности"
 msgid "failed to parse SCSI host '%s'"
 msgstr "Неуспело рашчлањивање режима „%s“"
 
+msgid "failed to parse SGX sections in QEMU capabilities cache"
+msgstr ""
+
 #, fuzzy
 msgid "failed to parse agent timeout"
 msgstr "Неуспешно рашчлањавање vzlist излаза"
@@ -25998,9 +25817,15 @@ msgstr "Неуспело рашчлањивање режима „%s“"
 msgid "failed to parse node name index"
 msgstr "неуспело добављање података о чвору"
 
+msgid "failed to parse original memlock size"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "failed to parse port number '%s'"
 msgstr "Неуспело рашчлањивање режима „%s“"
+
+msgid "failed to parse pre-migration memlock limit"
+msgstr ""
 
 #, fuzzy
 msgid "failed to parse qemu capabilities cpus"
@@ -26060,10 +25885,6 @@ msgstr "неуспело тумачење %s датотеке подешавањ
 
 #, fuzzy, c-format
 msgid "failed to parse the index of the VMX key '%s'"
-msgstr "Неуспело рашчлањивање режима „%s“"
-
-#, fuzzy, c-format
-msgid "failed to parse value of %s"
 msgstr "Неуспело рашчлањивање режима „%s“"
 
 #, fuzzy, c-format
@@ -26226,10 +26047,10 @@ msgstr "Неуспело креирање уверења ауторизациј�
 msgid "failed to retrieve decision to accept host key"
 msgstr ""
 
-msgid "failed to retrieve keyboard interactive result: callback has failed"
+msgid "failed to retrieve private key passphrase: callback has failed"
 msgstr ""
 
-msgid "failed to retrieve private key passphrase: callback has failed"
+msgid "failed to retrieve user response for authentication callback"
 msgstr ""
 
 #, fuzzy, c-format
@@ -26289,10 +26110,6 @@ msgstr "неуспело добављање диска „%s“"
 msgid "failed to set guest cid"
 msgstr "неуспело добављање УРИ-а"
 
-#, fuzzy, c-format
-msgid "failed to set snapshot '%s' as current"
-msgstr "неуспело добављање диска „%s“"
-
 #, fuzzy
 msgid "failed to setup stderr file handle"
 msgstr "неуспело отварање датотеке"
@@ -26342,6 +26159,9 @@ msgstr "неуспело чување садржаја"
 #, fuzzy, c-format
 msgid "failed to truncate %s"
 msgstr "Неуспело прављење диска %s"
+
+msgid "failed to umount devfs on /dev"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "failed to undefine interface %s: %s%s%s"
@@ -26485,10 +26305,14 @@ msgstr ""
 msgid "fd must be valid"
 msgstr ""
 
+msgid "fd passed image source not initialized"
+msgstr ""
+
 msgid "fd passing is not supported by this connection"
 msgstr ""
 
-msgid "fdset must be valid"
+#, c-format
+msgid "fdset '%u' is already in use by qemu"
 msgstr ""
 
 msgid "fetch or set the currently defined set of logging filters on daemon"
@@ -26556,7 +26380,10 @@ msgid "file containing secret attributes in XML"
 msgstr ""
 
 #, c-format
-msgid "file descriptor %d has not been transferred"
+msgid "file descriptor group '%s' was not associated with the domain"
+msgstr ""
+
+msgid "file descriptors N,M,... to associate"
 msgstr ""
 
 msgid "file format type raw,bochs,qcow,qcow2,qed,vmdk"
@@ -26685,7 +26512,8 @@ msgstr "неисправан показивач складишта у %s"
 msgid "finish step ignored that migration was cancelled"
 msgstr ""
 
-msgid "firewalld backend requested, but service is not running"
+#, c-format
+msgid "finishing block job failed while deleting disk '%s' snapshot: '%s'"
 msgstr ""
 
 msgid ""
@@ -26697,6 +26525,15 @@ msgid ""
 msgstr ""
 
 msgid "firmware auto selection not implemented for this driver"
+msgstr ""
+
+msgid ""
+"firmware feature 'enrolled-keys' cannot be enabled when firmware feature "
+"'secure-boot' is disabled"
+msgstr ""
+
+#, c-format
+msgid "firmware type '%s' does not support nvram"
 msgstr ""
 
 msgid "fixed audio settings requires mixing engine"
@@ -26716,6 +26553,9 @@ msgid ""
 msgstr ""
 
 msgid "floor attribute is not supported for this config"
+msgstr ""
+
+msgid "floppy device hotplug isn't supported"
 msgstr ""
 
 msgid "fmode and dmode must be used with accessmode=mapped"
@@ -26758,6 +26598,11 @@ msgid "force disconnect a client from the given server"
 msgstr ""
 
 msgid "force fresh boot by discarding any managed save"
+msgstr ""
+
+msgid ""
+"force guest disk writes to be synchronously written to the destination to "
+"improve storage migration convergence"
 msgstr ""
 
 msgid "force media changing"
@@ -26829,9 +26674,6 @@ msgstr "Врста мреже %d није подржана"
 #, fuzzy, c-format
 msgid "fs format %s is not supported"
 msgstr "Врста мреже %d није подржана"
-
-msgid "fseek failed"
-msgstr ""
 
 msgid "fully-qualified path of disk"
 msgstr ""
@@ -27043,6 +26885,13 @@ msgstr ""
 msgid "guest failed to start: %s"
 msgstr "Неуспело покретање складишта %s"
 
+msgid "guest failed to start: terminated abnormally"
+msgstr ""
+
+#, c-format
+msgid "guest failed to start: unexpected exit status %d"
+msgstr ""
+
 #, fuzzy
 msgid "guest interface"
 msgstr "врста мрежне спреге"
@@ -27058,7 +26907,7 @@ msgstr "неочекивана врста складишта"
 msgid "guest unexpectedly quit during hotplug"
 msgstr ""
 
-msgid "guest-get-fsinfo reply was missing return data"
+msgid "guest-get-fsinfo reply was missing or not an array"
 msgstr ""
 
 msgid "guest-get-osinfo reply was missing return data"
@@ -27071,6 +26920,9 @@ msgid "guest-get-users reply was missing return data"
 msgstr ""
 
 msgid "guest-get-vcpus reply was missing return data"
+msgstr ""
+
+msgid "guestReset is not supported with this version of QEMU"
 msgstr ""
 
 msgid "guestfwd channel does not define a target address"
@@ -27157,6 +27009,10 @@ msgstr ""
 #, fuzzy
 msgid "host pci device "
 msgstr "блок уређај"
+
+#, c-format
+msgid "host pci device %s not found"
+msgstr ""
 
 #, c-format
 msgid "host reports map buffer length exceeds maximum: %d > %d"
@@ -27257,6 +27113,10 @@ msgid "hotplug is not supported for hostdev subsys type '%s'"
 msgstr ""
 
 #, c-format
+msgid "hotplug is not supported for the %s device"
+msgstr ""
+
+#, c-format
 msgid "hotplug of interface type of %s is not implemented yet"
 msgstr ""
 
@@ -27268,18 +27128,12 @@ msgstr "Врста мреже %d није подржана"
 msgid "hpet timer is not supported"
 msgstr "Врста мреже %d није подржана"
 
-msgid "http cookies are not supported by this QEMU binary"
-msgstr ""
-
 msgid "http cookies are supported only with HTTP(S) protocol"
 msgstr ""
 
 #, fuzzy, c-format
 msgid "hub type %s not supported"
 msgstr "Врста мреже %d није подржана"
-
-msgid "huge pages per NUMA node are not supported with this QEMU"
-msgstr ""
 
 msgid "hugepage size can't be zero"
 msgstr ""
@@ -27344,6 +27198,11 @@ msgid "ids of vcpus to manipulate"
 msgstr ""
 
 msgid "if IOMMU is enabled by kernel"
+msgstr ""
+
+#, c-format
+msgid ""
+"if using CPU maximum physical address mode='%s', bits= must be specified too"
 msgstr ""
 
 #, c-format
@@ -27577,9 +27436,9 @@ msgstr ""
 msgid "interface '%s' failing; reopening"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "interface (%s: %s) not found"
-msgstr "Складиште није пронађено"
+#, c-format
+msgid "interface '%s' not found"
+msgstr ""
 
 #, fuzzy
 msgid "interface device (MAC Address)"
@@ -27614,18 +27473,11 @@ msgid "interface mac"
 msgstr ""
 
 #, fuzzy
-msgid "interface misses the type attribute"
-msgstr "недостаје особина типа домена"
-
-msgid "interface mtu value is improper"
-msgstr ""
-
-#, fuzzy
 msgid "interface name"
 msgstr "име мреже"
 
 #, c-format
-msgid "interface name %s does not fit into buffer "
+msgid "interface name %s does not fit into buffer"
 msgstr ""
 
 #, fuzzy
@@ -27641,6 +27493,10 @@ msgid "interface state driver is not active"
 msgstr "складиште није активно"
 
 msgid "interface stats not implemented on this platform"
+msgstr ""
+
+#, c-format
+msgid "interface type='%s' requires a 'source' element"
 msgstr ""
 
 #, fuzzy
@@ -27696,6 +27552,9 @@ msgstr ""
 msgid "internal use only"
 msgstr "унутрашња грешка"
 
+msgid "interrupt post-copy migration"
+msgstr ""
+
 msgid "intr:"
 msgstr ""
 
@@ -27720,10 +27579,6 @@ msgstr "неисправна путања: %s"
 #, fuzzy, c-format
 msgid "invalid '=' after option --%s"
 msgstr "неисправан показивач домена у %s"
-
-#, c-format
-msgid "invalid 'managed' value '%s'"
-msgstr ""
 
 msgid "invalid 'type' attribute for vhostuser disk source"
 msgstr ""
@@ -27904,10 +27759,6 @@ msgid "invalid XML length: %d"
 msgstr "неисправна путања: %s"
 
 #, c-format
-msgid "invalid allowReboot value '%s'"
-msgstr ""
-
-#, c-format
 msgid "invalid ap-adapter value '%s' for '%s'"
 msgstr ""
 
@@ -27934,24 +27785,9 @@ msgstr "неисправан показивач домена у %s"
 msgid "invalid backing protocol string '%s'"
 msgstr "неисправан показивач складишта у %s"
 
-msgid "invalid cache size in query-migrate-cache-size reply"
-msgstr ""
-
 #, c-format
 msgid "invalid capability_filters capability '%s'"
 msgstr ""
-
-#, fuzzy
-msgid "invalid catchup limit"
-msgstr "неисправна путања: %s"
-
-#, fuzzy
-msgid "invalid catchup slew"
-msgstr "неисправна путања: %s"
-
-#, fuzzy
-msgid "invalid catchup threshold"
-msgstr "неисправна путања: %s"
 
 #, fuzzy, c-format
 msgid "invalid char in %s: %c"
@@ -28008,7 +27844,7 @@ msgid "invalid disk target '%s', partitions can't appear in disk targets"
 msgstr ""
 
 #, c-format
-msgid "invalid dmode: '%s'"
+msgid "invalid dmode: '0%o'"
 msgstr ""
 
 msgid "invalid domain pointer in"
@@ -28042,14 +27878,6 @@ msgstr "неисправна путања: %s"
 msgid "invalid fd %d for %s"
 msgstr "неисправна MAC адреса: %s"
 
-#, c-format
-msgid "invalid firmware feature enabled value '%s'"
-msgstr ""
-
-#, c-format
-msgid "invalid firmware feature name '%s'"
-msgstr ""
-
 #, fuzzy
 msgid "invalid flag"
 msgstr "неисправна путања: %s"
@@ -28059,7 +27887,7 @@ msgid "invalid flag combination: (0x%x)"
 msgstr "неисправан показивач домена у %s"
 
 #, c-format
-msgid "invalid fmode: '%s'"
+msgid "invalid fmode: '0%o'"
 msgstr ""
 
 msgid "invalid hasmanagedsave"
@@ -28147,8 +27975,8 @@ msgstr "неисправна путања: %s"
 
 #, c-format
 msgid ""
-"invalid loadparm char '%c', expecting chars in set of [a-zA-Z0-9.] and blank "
-"spaces"
+"invalid loadparm value '%s', expecting chars in set of [a-zA-Z0-9.] and "
+"blank spaces"
 msgstr ""
 
 #, c-format
@@ -28163,25 +27991,12 @@ msgid ""
 msgstr ""
 
 #, c-format
-msgid "invalid mac address check value: '%s'"
-msgstr ""
-
-#, c-format
-msgid ""
-"invalid mac address type value: '%s'. Valid values are \"generated\" and "
-"\"static\"."
-msgstr ""
-
-#, c-format
 msgid "invalid master key read, size=%zd"
 msgstr ""
 
 #, fuzzy
 msgid "invalid microcode version"
 msgstr "неисправан показивач везе у"
-
-msgid "invalid migratability value for host CPU model"
-msgstr ""
 
 #, fuzzy
 msgid "invalid mode"
@@ -28261,14 +28076,6 @@ msgid ""
 msgstr ""
 
 #, c-format
-msgid "invalid or missing decode/guest attribute in CPU model %s"
-msgstr ""
-
-#, c-format
-msgid "invalid or missing decode/host attribute in CPU model %s"
-msgstr ""
-
-#, c-format
 msgid "invalid parent device '%s'"
 msgstr ""
 
@@ -28289,10 +28096,6 @@ msgstr "неисправна путања, „%s“ није позната сп
 
 #, c-format
 msgid "invalid path: %s"
-msgstr "неисправна путања: %s"
-
-#, fuzzy
-msgid "invalid pid"
 msgstr "неисправна путања: %s"
 
 msgid "invalid prefix, must be in range of 4-27"
@@ -28342,14 +28145,6 @@ msgstr "неисправан показивач везе у %s"
 msgid "invalid secret uuid '%s'"
 msgstr "неисправан показивач везе у %s"
 
-#, fuzzy, c-format
-msgid "invalid security relabel value %s"
-msgstr "неисправан показивач диска складиштења везе у %s"
-
-#, c-format
-msgid "invalid security relabel value '%s'"
-msgstr ""
-
 #, fuzzy
 msgid "invalid server address"
 msgstr "неисправна MAC адреса"
@@ -28369,10 +28164,6 @@ msgstr ""
 #, fuzzy, c-format
 msgid "invalid ssid value '%s' for '%s'"
 msgstr "Неисправна „%s“ врста магистрале за дискетну јединицу"
-
-#, c-format
-msgid "invalid storage pool cow feature state '%s'"
-msgstr ""
 
 msgid "invalid storage pool pointer in"
 msgstr "неисправан показивач складишта у"
@@ -28406,9 +28197,6 @@ msgid ""
 "cache"
 msgstr ""
 
-msgid "invalid timer frequency"
-msgstr ""
-
 #, fuzzy, c-format
 msgid "invalid tlsPort number: %s"
 msgstr "неисправан показивач везе у %s"
@@ -28426,6 +28214,9 @@ msgid "invalid unique_id supplied for '%s'"
 msgstr ""
 
 msgid "invalid use of command API"
+msgstr ""
+
+msgid "invalid use of conf API"
 msgstr ""
 
 msgid "invalid use with no flags"
@@ -28448,16 +28239,10 @@ msgid "invalid value '%s' for parameter '%s' of device '%s'"
 msgstr ""
 
 #, c-format
-msgid "invalid value for 'managed': %s"
-msgstr ""
-
-msgid "invalid value for boot menu timeout"
+msgid "invalid value '%s' of 'value' attribute of 'qemu:property'"
 msgstr ""
 
 msgid "invalid value for boot menu timeout, must be in range [0,65535]"
-msgstr ""
-
-msgid "invalid value for rebootTimeout"
 msgstr ""
 
 msgid "invalid value for rebootTimeout, must be in range [-1,65535]"
@@ -28498,10 +28283,21 @@ msgstr "извор уређаја диска"
 msgid "io uring is not supported by this QEMU binary"
 msgstr ""
 
+msgid "io='native' needs either no disk cache or directsync cache mode"
+msgstr ""
+
 msgid "ioeventfd is not supported with vhostuser disk"
 msgstr ""
 
 msgid "iommu driver option is only supported for virtio devices"
+msgstr ""
+
+#, c-format
+msgid "iommu model '%s' can't have address"
+msgstr ""
+
+#, c-format
+msgid "iommu model '%s' doesn't support additional attributes"
 msgstr ""
 
 msgid "iommu: aw_bits is not supported with this QEMU binary"
@@ -28552,9 +28348,8 @@ msgstr "Назив модела садржи неисправне знаке"
 msgid "ipset name is too long"
 msgstr ""
 
-#, fuzzy
-msgid "is not active"
-msgstr "неактивно"
+msgid "isa-debug serial type only valid on x86 architecture"
+msgstr ""
 
 msgid "iscsi pool only supports 'chap' auth type"
 msgstr ""
@@ -28568,7 +28363,28 @@ msgstr ""
 msgid "ivshmem device is not supported with this QEMU binary"
 msgstr ""
 
-msgid "job"
+#, c-format
+msgid "job '%s' canceled by client"
+msgstr ""
+
+#, c-format
+msgid "job '%s' failed due to I/O error"
+msgstr ""
+
+#, c-format
+msgid "job '%s' failed in post-copy phase"
+msgstr ""
+
+#, c-format
+msgid "job '%s' failed: %s"
+msgstr ""
+
+#, c-format
+msgid "job '%s' is not active"
+msgstr ""
+
+#, c-format
+msgid "job '%s' unexpectedly failed"
 msgstr ""
 
 #, fuzzy, c-format
@@ -28579,6 +28395,9 @@ msgid "kdump-compressed format is not supported here"
 msgstr ""
 
 msgid "kdump-compressed format is only supported with memory-only dump"
+msgstr ""
+
+msgid "keep TPM state"
 msgstr ""
 
 msgid "keep nvram file"
@@ -28649,10 +28468,10 @@ msgstr ""
 msgid "library call failed: %s"
 msgstr "неуспела радња: %s"
 
-msgid "librbd encryption engine only supports luks/luks2 formats"
+msgid "librbd encryption is not supported by this QEMU binary"
 msgstr ""
 
-msgid "librbd encryption is not supported by this QEMU binary"
+msgid "librbd encryption is supported only with RBD backed disks"
 msgstr ""
 
 msgid "libssh transport error"
@@ -29134,11 +28953,26 @@ msgstr ""
 msgid "live update of device '%s' is not supported"
 msgstr "Врста мреже %d није подржана"
 
-#, c-format
-msgid "loadparm '%s' exceeds 8 characters"
+msgid ""
+"loader attribute 'readonly' cannot be specified when firmware autoselection "
+"is enabled"
 msgstr ""
 
-msgid "loadparm cannot be an empty string"
+msgid ""
+"loader attribute 'secure' cannot be specified when firmware autoselection is "
+"enabled"
+msgstr ""
+
+msgid ""
+"loader attribute 'type' cannot be specified when firmware autoselection is "
+"enabled"
+msgstr ""
+
+msgid "loader path cannot be specified when firmware autoselection is enabled"
+msgstr ""
+
+#, c-format
+msgid "loadparm value '%s' must be between 1 and 8 characters"
 msgstr ""
 
 msgid "lock manager connection has been restricted"
@@ -29147,14 +28981,14 @@ msgstr ""
 msgid "lock owner details have not been registered"
 msgstr ""
 
-msgid "logfile not supported in this QEMU binary"
-msgstr ""
-
 #, c-format
 msgid "logical volume '%s' is sparse, volume wipe not supported"
 msgstr ""
 
 msgid "loop until timeout or interrupt, rather than one-shot"
+msgstr ""
+
+msgid "lower boundary for worker thread pool"
 msgstr ""
 
 msgid "luks2 is currently not supported by the qemu encryption engine"
@@ -29418,6 +29252,12 @@ msgstr ""
 msgid "malformed/missing hotplugged in dimm memory info"
 msgstr ""
 
+msgid "malformed/missing memaddr in sgx-epc memory info"
+msgstr ""
+
+msgid "malformed/missing size in sgx-epc memory info"
+msgstr ""
+
 msgid "malformed/missing size in virtio memory info"
 msgstr ""
 
@@ -29584,6 +29424,10 @@ msgstr ""
 msgid "memory attributes: [file=]name[,snapshot=type]"
 msgstr ""
 
+#, c-format
+msgid "memory device address is not supported for model '%s'"
+msgstr ""
+
 msgid "memory device alias"
 msgstr ""
 
@@ -29665,9 +29509,6 @@ msgstr "неуспела радња: %s"
 msgid "message"
 msgstr ""
 
-msgid "metadata cache max size control is not supported with this QEMU binary"
-msgstr ""
-
 msgid "metadata cache max size control is supported only with qcow2 images"
 msgstr ""
 
@@ -29741,9 +29582,8 @@ msgstr ""
 msgid "migration canceled"
 msgstr "неуспела радња"
 
-#, fuzzy
-msgid "migration in job"
-msgstr "пресељење уживо"
+msgid "migration in"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "migration of disk %s failed"
@@ -29753,12 +29593,23 @@ msgstr "неуспела радња"
 msgid "migration of disk %s failed: %s"
 msgstr "неуспела радња: %s"
 
+#, c-format
+msgid "migration of domain %s is being actively monitored by another thread"
+msgstr ""
+
+#, c-format
+msgid "migration of domain %s is not in post-copy phase"
+msgstr ""
+
+msgid "migration of non-shared disks requested but NBD is not set up"
+msgstr ""
+
 msgid ""
 "migration of non-shared storage is not supported with tunnelled migration "
 "and this QEMU"
 msgstr ""
 
-msgid "migration out job"
+msgid "migration out"
 msgstr ""
 
 #, c-format
@@ -29791,9 +29642,6 @@ msgid "migration was active, but RAM 'total' data was missing"
 msgstr ""
 
 msgid "migration was active, but RAM 'transferred' data was missing"
-msgstr ""
-
-msgid "migration was active, but no RAM info was set"
 msgstr ""
 
 msgid "migration with legacy shmem device is not supported"
@@ -29876,6 +29724,9 @@ msgstr ""
 msgid "missing 'DateTime' element"
 msgstr "недостаје root елемент"
 
+msgid "missing 'alias' attribute for qemu:device"
+msgstr ""
+
 #, c-format
 msgid "missing 'architecture' in '%s'"
 msgstr ""
@@ -29932,6 +29783,9 @@ msgid ""
 "cache"
 msgstr ""
 
+msgid "missing 'name' attribute for qemu:property"
+msgstr ""
+
 #, fuzzy
 msgid "missing 'namespace' attribute to disk source"
 msgstr "Недостаје особина изворног сервиса за знаковни уређај"
@@ -29954,6 +29808,9 @@ msgid "missing 'process' value in selinux lxc contexts file '%s'"
 msgstr ""
 
 msgid "missing 'server' attribute in JSON backing definition for NFS volume"
+msgstr ""
+
+msgid "missing 'start' attribute for clock with offset='absolute'"
 msgstr ""
 
 #, c-format
@@ -29990,6 +29847,9 @@ msgid ""
 "missing 'user' or 'group' attribute in JSON backing definition for NFS volume"
 msgstr ""
 
+msgid "missing 'value' attribute for 'qemu:property'"
+msgstr ""
+
 msgid "missing 'value' attribute for HyperV feature 'vendor_id'"
 msgstr ""
 
@@ -30008,9 +29868,6 @@ msgid "missing <target> element for <memory> device"
 msgstr "недостају циљни подаци за уређај"
 
 msgid "missing <type> element in <capability> element"
-msgstr ""
-
-msgid "missing @managed attribute for <reservations/>"
 msgstr ""
 
 msgid "missing CPU data architecture"
@@ -30055,12 +29912,11 @@ msgstr ""
 msgid "missing SEV platform data in QEMU capabilities cache"
 msgstr ""
 
-#, fuzzy
-msgid "missing TPM device backend"
-msgstr "недостаје врста уређаја за унос"
+msgid "missing SGX platform data in QEMU capabilities cache"
+msgstr ""
 
 #, fuzzy
-msgid "missing TPM device backend type"
+msgid "missing TPM device backend"
 msgstr "недостаје врста уређаја за унос"
 
 #, fuzzy
@@ -30122,10 +29978,6 @@ msgid "missing blocker name in QEMU capabilities cache"
 msgstr ""
 
 #, fuzzy
-msgid "missing boot device"
-msgstr "недостаје уређај извора"
-
-#, fuzzy
 msgid "missing capability name"
 msgstr "недостаје елемент капацитета"
 
@@ -30176,6 +30028,10 @@ msgstr ""
 msgid "missing cssid value for '%s'"
 msgstr "недостају подаци о уређајима за %s"
 
+#, c-format
+msgid "missing decode element in CPU model %s"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "missing destination file for disk %s: %s"
 msgstr "недостају подаци о уређајима за %s"
@@ -30212,9 +30068,6 @@ msgstr ""
 #, fuzzy, c-format
 msgid "missing disk device alias name for %s"
 msgstr "недостају подаци о уређајима за %s"
-
-msgid "missing disk source for 'sheepdog' protocol"
-msgstr ""
 
 #, fuzzy
 msgid "missing domain in checkpoint"
@@ -30262,6 +30115,9 @@ msgstr "недостају подаци о оперативном систему
 #, fuzzy, c-format
 msgid "missing existing file for disk %s: %s"
 msgstr "недостају циљни подаци за уређај %s"
+
+msgid "missing external TPM backend source type"
+msgstr ""
 
 #, fuzzy
 msgid "missing feature name"
@@ -30423,6 +30279,9 @@ msgstr "недостају подаци о коренском уређају %s"
 msgid "missing network device feature name"
 msgstr "недостаје врста уређаја за унос"
 
+msgid "missing node name in QEMU capabilities cache"
+msgstr ""
+
 #, c-format
 msgid "missing number of available instances for mediated device type '%s'"
 msgstr ""
@@ -30442,10 +30301,16 @@ msgstr "недостају подаци о оперативном систему
 msgid "missing or broken bitmap '%s' for disk '%s'"
 msgstr ""
 
-msgid "missing or invalid CPU cache mode"
+msgid "missing or invalid CPU model property type in QEMU capabilities cache"
 msgstr ""
 
-msgid "missing or invalid CPU model property type in QEMU capabilities cache"
+msgid "missing or invalid SGX platform flc in QEMU capabilities cache"
+msgstr ""
+
+msgid "missing or invalid SGX platform sgx1 in QEMU capabilities cache"
+msgstr ""
+
+msgid "missing or invalid SGX platform sgx2 in QEMU capabilities cache"
 msgstr ""
 
 msgid "missing or invalid cpuid-input-eax in CPU data"
@@ -30453,10 +30318,6 @@ msgstr ""
 
 msgid "missing or invalid features in CPU data"
 msgstr ""
-
-#, fuzzy
-msgid "missing or invalid vlan tag id attribute"
-msgstr "недостаје особина типа домена"
 
 msgid "missing or malformed 'device' field of 'nvme' storage"
 msgstr ""
@@ -30470,6 +30331,10 @@ msgstr ""
 msgid ""
 "missing or malformed SEV reducedPhysBits information in QEMU capabilities "
 "cache"
+msgstr ""
+
+msgid ""
+"missing or malformed SGX platform section_size in QEMU capabilities cache"
 msgstr ""
 
 msgid "missing or malformed session-uuid element in migration data"
@@ -30491,6 +30356,9 @@ msgid "missing parser implementation for JSON backing volume driver '%s'"
 msgstr ""
 
 msgid "missing path for <reservations/>"
+msgstr ""
+
+msgid "missing path to restore from"
 msgstr ""
 
 #, fuzzy
@@ -30560,6 +30428,9 @@ msgstr "недостаје root елемент"
 msgid "missing rport name for '%s'"
 msgstr "недостају подаци о коренском уређају %s"
 
+msgid "missing scheme for URI"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "missing scheme in migration URI: %s"
 msgstr "недостају подаци о уређајима за %s"
@@ -30589,12 +30460,18 @@ msgstr ""
 msgid "missing sheepdog vdi name"
 msgstr "недостаје уређај извора"
 
+msgid "missing size name in QEMU capabilities cache"
+msgstr ""
+
 msgid "missing socket address type in JSON backing volume definition"
 msgstr ""
 
 #, fuzzy
 msgid "missing socket for unix transport"
 msgstr "недостаје домаћин извора"
+
+msgid "missing socket path for external TPM device"
+msgstr ""
 
 msgid ""
 "missing socket path for udp backing server in JSON backing volume definition"
@@ -30696,10 +30573,6 @@ msgstr "недостају циљни подаци за уређај %s"
 
 msgid "missing the host address for the iSCSI hostdev"
 msgstr ""
-
-#, fuzzy
-msgid "missing timer name"
-msgstr "недостаје root елемент"
 
 #, fuzzy
 msgid "missing tlsPort attribute in migration data"
@@ -30818,10 +30691,6 @@ msgstr ""
 msgid "model '%s' shmem device not present in domain configuration"
 msgstr ""
 
-#, c-format
-msgid "model '%s' watchdog device not present in domain configuration"
-msgstr ""
-
 #, fuzzy
 msgid "model resolution is not supported"
 msgstr "верзија отиска није подржана (%d > %d)"
@@ -30853,9 +30722,6 @@ msgid "monitor failure"
 msgstr ""
 
 msgid "monitor must not be NULL"
-msgstr ""
-
-msgid "monitor socket did not show up"
 msgstr ""
 
 #, c-format
@@ -30979,6 +30845,9 @@ msgstr ""
 msgid "name of snapshot"
 msgstr "име складишта"
 
+msgid "name of the FD group"
+msgstr ""
+
 msgid "name of the inactive domain"
 msgstr "име неактивног домена"
 
@@ -30990,15 +30859,6 @@ msgstr "име диска"
 
 msgid "namespace key is required when modifying metadata"
 msgstr ""
-
-msgid ""
-"native I/O needs either no disk cache or directsync cache mode, QEMU will "
-"fallback to aio=threads"
-msgstr ""
-
-#, fuzzy, c-format
-msgid "nbd does not support transport '%s'"
-msgstr "xen магистрала не подржава %s уређај за унос"
 
 msgid "nbd port must be in range 0-65535"
 msgstr ""
@@ -31643,6 +31503,9 @@ msgstr "није пронађено корисничко име клијента
 msgid "no matching redirdev was not found"
 msgstr "није пронађено корисничко име клијента"
 
+msgid "no matching watchdog was found"
+msgstr ""
+
 msgid "no medium attachments"
 msgstr ""
 
@@ -31809,13 +31672,10 @@ msgstr ""
 msgid "no such screen ID"
 msgstr ""
 
+msgid "no suitable callback authentication callback was found"
+msgstr ""
+
 msgid "no suitable callback for host key verification"
-msgstr ""
-
-msgid "no suitable callback for input of key passphrase"
-msgstr ""
-
-msgid "no suitable callback for input of keyboard response"
 msgstr ""
 
 msgid "no suitable info found"
@@ -31884,6 +31744,9 @@ msgstr ""
 msgid "node CPU stats not implemented on this platform"
 msgstr ""
 
+msgid "node SEV information"
+msgstr ""
+
 msgid "node cpu info not implemented on this platform"
 msgstr ""
 
@@ -31944,9 +31807,6 @@ msgstr ""
 msgid "non unique alias detected: %s"
 msgstr ""
 
-msgid "non-file destination not supported yet"
-msgstr ""
-
 msgid "none"
 msgstr ""
 
@@ -31992,9 +31852,6 @@ msgstr ""
 msgid "nparams too large"
 msgstr "nparams превелики"
 
-msgid "num-queues property isn't supported by this QEMU binary"
-msgstr ""
-
 #, fuzzy
 msgid "numa parameters are not supported by vz driver"
 msgstr "SASL механизам %s није подржан од стране сервера"
@@ -32033,6 +31890,9 @@ msgstr ""
 msgid "number of read operations:"
 msgstr ""
 
+msgid "number of seconds the daemon will run without any active connection"
+msgstr ""
+
 msgid "number of seconds to squelch traffic on newly connected ports"
 msgstr ""
 
@@ -32055,9 +31915,6 @@ msgstr ""
 msgid "nvcpus is zero"
 msgstr ""
 
-msgid "nvdimm align property is not available with this QEMU binary"
-msgstr ""
-
 msgid "nvdimm isn't supported by this QEMU binary"
 msgstr ""
 
@@ -32071,6 +31928,11 @@ msgid "nvdimm readonly property is not available with this QEMU binary"
 msgstr ""
 
 msgid "nvram address type must be spaprvio"
+msgstr ""
+
+msgid ""
+"nvram attribute 'template' cannot be specified when firmware autoselection "
+"is enabled"
 msgstr ""
 
 msgid "nvram device is not supported by this QEMU binary"
@@ -32138,6 +32000,9 @@ msgid ""
 "online non-hotpluggable vcpus need to be ordered prior to hotplugable vcpus"
 msgstr ""
 
+msgid "only 'connect' mode is supported for external TPM device"
+msgstr ""
+
 msgid "only 'dimm' addresses are supported for the pc-dimm device"
 msgstr ""
 
@@ -32152,7 +32017,8 @@ msgid "only 'pci' addresses are supported for the virtio-pmem device"
 msgstr ""
 
 msgid ""
-"only 1 graphics device of each type (sdl, vnc, spice, headless) is supported"
+"only 1 graphics device of each type (sdl, vnc, spice, headless, dbus) is "
+"supported"
 msgstr ""
 
 msgid "only JSON objects can be top level"
@@ -32191,12 +32057,13 @@ msgstr ""
 msgid "only a single vsock device is supported"
 msgstr ""
 
-msgid "only a single watchdog device is supported"
-msgstr ""
-
 #, fuzzy
 msgid "only bus 'virtio' is supported for 'passthrough' input devices"
 msgstr "xen магистрала не подржава %s уређај за унос"
+
+#, c-format
+msgid "only bus 'virtio' is supported for input model '%s'"
+msgstr ""
 
 msgid "only can reboot running/paused domain"
 msgstr ""
@@ -32235,10 +32102,10 @@ msgstr ""
 msgid "only one TPM backend is supported"
 msgstr ""
 
-msgid "only one audio backend is supported with this QEMU binary"
+msgid "only one backup job is supported"
 msgstr ""
 
-msgid "only one backup job is supported"
+msgid "only one crypto backend is supported"
 msgstr ""
 
 msgid "only one emulatorpin is supported"
@@ -32297,6 +32164,9 @@ msgstr "недостаје врста уређаја за унос"
 msgid "only snapshot=no is supported with vhostuser disk"
 msgstr ""
 
+msgid "only source type 'unix' is supported for external TPM device"
+msgstr ""
+
 msgid "only supports mount filesystem type"
 msgstr ""
 
@@ -32319,9 +32189,6 @@ msgid "only virtiofs filesystems can be hotplugged"
 msgstr ""
 
 msgid "open an editor to modify the description"
-msgstr ""
-
-msgid "open disk image file failed"
 msgstr ""
 
 #, c-format
@@ -32586,6 +32453,9 @@ msgstr "грешка у рашчлањивању"
 msgid "partial string to autocomplete"
 msgstr ""
 
+msgid "pass file descriptors N,M,... along with the command"
+msgstr ""
+
 msgid "pass file descriptors N,M,... to the guest"
 msgstr ""
 
@@ -32628,6 +32498,12 @@ msgstr ""
 msgid "path to emulator binary (/domain/devices/emulator)"
 msgstr ""
 
+msgid "path to file containing the secret"
+msgstr ""
+
+msgid "path to file containing the secret header"
+msgstr ""
+
 msgid "path to inputvol secret data file is required"
 msgstr ""
 
@@ -32665,7 +32541,7 @@ msgstr "верзија отиска није подржана (%d > %d)"
 msgid "pci device %s is not a PCI-Express device"
 msgstr ""
 
-msgid "pci device assignment backend driver (e.g. 'vfio' or 'kvm')"
+msgid "pci device assignment backend driver (e.g. 'vfio' or 'xen')"
 msgstr ""
 
 msgid ""
@@ -32679,6 +32555,9 @@ msgid "pci-root and pcie-root controllers should not have an address"
 msgstr ""
 
 msgid "pcie-expander-bus controllers are not supported with this machine type"
+msgstr ""
+
+msgid "peeking is not supported for FD passed images"
 msgstr ""
 
 msgid "peeking is not supported for vhostuser disk"
@@ -32756,6 +32635,9 @@ msgstr ""
 msgid "persistent detach of device is not supported"
 msgstr "Врста мреже %d није подржана"
 
+msgid "persistent reservations are not supported with NVRAM"
+msgstr ""
+
 #, c-format
 msgid "persistent update of device '%s' is not supported"
 msgstr ""
@@ -32763,6 +32645,9 @@ msgstr ""
 #, fuzzy
 msgid "persistent update of device is not supported"
 msgstr "Врста мреже %d није подржана"
+
+msgid "physical address within the guest domain's memory to set the secret"
+msgstr ""
 
 msgid "pid"
 msgstr ""
@@ -32898,6 +32783,10 @@ msgstr ""
 msgid "post-copy migration is not supported with non-live or paused migration"
 msgstr ""
 
+#, c-format
+msgid "post-copy migration of domain %s has not failed"
+msgstr ""
+
 msgid "potentially unsafe disk format probing"
 msgstr ""
 
@@ -32952,6 +32841,9 @@ msgstr ""
 msgid "preallocate metadata (for qcow2 instead of full allocation)"
 msgstr ""
 
+msgid "preallocation threads are unsupported with this QEMU"
+msgstr ""
+
 msgid "prefix too long"
 msgstr ""
 
@@ -32979,10 +32871,19 @@ msgstr ""
 msgid "print XML document rather than change media"
 msgstr ""
 
+msgid "print XML document rather than clone the volume"
+msgstr ""
+
 msgid "print XML document rather than create"
 msgstr ""
 
 msgid "print XML document rather than detach the disk"
+msgstr ""
+
+msgid "print XML document rather than detach the interface"
+msgstr ""
+
+msgid "print XML document rather than set the interface link state"
 msgstr ""
 
 msgid "print XML document, but don't define/create"
@@ -33004,6 +32905,9 @@ msgid "print lease info for a given network"
 msgstr ""
 
 msgid "print statistics for any kind of job (even failed ones)"
+msgstr ""
+
+msgid "print the XML used to start the copy job instead of starting the job"
 msgstr ""
 
 #, fuzzy
@@ -33069,11 +32973,11 @@ msgstr "неусаглашеност верзије (добијено %x, оче
 msgid "prohibited character in DNS TXT record name '%s' of network %s"
 msgstr ""
 
-#, c-format
-msgid "protocol '%s' accepts only one host"
+msgid "property with name 'id' can't be overridden"
 msgstr ""
 
-msgid "protocol 'sheepdog' accepts up to one host"
+#, c-format
+msgid "protocol '%s' accepts only one host"
 msgstr ""
 
 msgid "protocol misses the family attribute"
@@ -33091,6 +32995,9 @@ msgstr "ps2 магистрала не подржава %s уређај за ун
 
 #, c-format
 msgid "pull mode backup for disk '%s' requires qcow2 driver"
+msgstr ""
+
+msgid "pvpanic is supported only with PCI address type"
 msgstr ""
 
 #, c-format
@@ -33112,11 +33019,6 @@ msgstr ""
 
 msgid "qemu agent didn't return an array of keys"
 msgstr ""
-
-#, fuzzy, c-format
-msgid "qemu block name '%s' doesn't match expected '%s'"
-msgstr ""
-"Назив датотеке мрежног подешавања „%s“ се не поклапа са називом мреже „%s“"
 
 #, c-format
 msgid "qemu didn't report thread id for vcpu '%zu'"
@@ -33220,10 +33122,16 @@ msgstr ""
 msgid "query-cpu-model-comparison reply data was missing 'result'"
 msgstr ""
 
+msgid "query-dirty-rate parsing 'vcpu-dirty-rate' in failure"
+msgstr ""
+
 msgid "query-dirty-rate reply was missing 'calc-time' data"
 msgstr ""
 
 msgid "query-dirty-rate reply was missing 'dirty-rate' data"
+msgstr ""
+
+msgid "query-dirty-rate reply was missing 'id' data"
 msgstr ""
 
 msgid "query-dirty-rate reply was missing 'return' data"
@@ -33236,9 +33144,6 @@ msgid "query-dirty-rate reply was missing 'status' data"
 msgstr ""
 
 msgid "query-fdsets reply was missing 'fdset-id'"
-msgstr ""
-
-msgid "query-fdsets return data missing 'fd'"
 msgstr ""
 
 msgid "query-fdsets return data missing fd array element"
@@ -33310,6 +33215,24 @@ msgstr ""
 msgid "query-sev-capabilities reply was missing 'reduced-phys-bits' field"
 msgstr ""
 
+msgid "query-sgx-capabilities reply was missing 'flc' field"
+msgstr ""
+
+msgid "query-sgx-capabilities reply was missing 'node' field"
+msgstr ""
+
+msgid "query-sgx-capabilities reply was missing 'section-size' field"
+msgstr ""
+
+msgid "query-sgx-capabilities reply was missing 'sgx1' field"
+msgstr ""
+
+msgid "query-sgx-capabilities reply was missing 'sgx2' field"
+msgstr ""
+
+msgid "query-sgx-capabilities reply was missing 'size' field"
+msgstr ""
+
 msgid "query-status reply was missing running state"
 msgstr ""
 
@@ -33372,6 +33295,9 @@ msgstr ""
 msgid "rawio is only supported for scsi host device"
 msgstr ""
 
+msgid "re-initialize NVRAM from its pristine template"
+msgstr ""
+
 msgid "read I/O operations limit per second"
 msgstr ""
 
@@ -33406,9 +33332,6 @@ msgid "read-only connection"
 msgstr "веза само за читање"
 
 msgid "readahead is supported only with HTTP(S)/FTP(s) protocols"
-msgstr ""
-
-msgid "readahead setting is not supported with this QEMU binary"
 msgstr ""
 
 #, fuzzy
@@ -33516,6 +33439,9 @@ msgstr ""
 msgid "removable is only valid for usb disks"
 msgstr ""
 
+msgid "remove TPM state"
+msgstr ""
+
 msgid "remove all associated storage volumes (use with caution)"
 msgstr ""
 
@@ -33528,6 +33454,9 @@ msgstr ""
 msgid ""
 "remove associated storage volumes (comma separated list of targets or source "
 "paths) (see domblklist)"
+msgstr ""
+
+msgid "remove domain logs"
 msgstr ""
 
 #, fuzzy
@@ -33628,6 +33557,9 @@ msgstr "недостају подаци о оперативном систему
 msgid "report hostname"
 msgstr "неуспело добављање имена домаћина"
 
+msgid "report hypervisor-specific statistics"
+msgstr ""
+
 msgid "report interface information"
 msgstr ""
 
@@ -33661,7 +33593,8 @@ msgstr "vCPU бројач је прешао свој максимум: %d > %d"
 msgid "requested size must be an integer multiple of block size"
 msgstr ""
 
-msgid "requested size must be smaller than or equal to @size"
+#, c-format
+msgid "requested size must be smaller than or equal to @size (%lluKiB)"
 msgstr ""
 
 msgid "requested size of the cache (in bytes) used for compression"
@@ -33726,6 +33659,9 @@ msgstr "циљ уређаја диска"
 msgid "reset the domain after core dump"
 msgstr ""
 
+msgid "resetting of nvram is not supported with network backed nvram"
+msgstr ""
+
 #, fuzzy
 msgid "resize a vol"
 msgstr "Прављење диска."
@@ -33765,6 +33701,9 @@ msgstr "nparams превелики"
 msgid "resume a domain"
 msgstr "настави домен"
 
+msgid "resume failed post-copy migration"
+msgstr ""
+
 msgid "resume operation failed"
 msgstr "неуспео наставак операције"
 
@@ -33775,6 +33714,16 @@ msgstr "неуспео наставак операције"
 #, fuzzy
 msgid "resuming after snapshot failed"
 msgstr "неуспео наставак операције"
+
+#, c-format
+msgid "resuming failed post-copy migration of domain %s already in progress"
+msgstr ""
+
+msgid "resuming failed post-copy migration requires change protection"
+msgstr ""
+
+msgid "resuming failed post-copy migration requires post-copy to be enabled"
+msgstr ""
 
 msgid "retrieve client's identity info from server"
 msgstr ""
@@ -34055,7 +34004,9 @@ msgstr "vCPU бројач је прешао свој максимум: %d > %d"
 msgid "security model string exceeds max %d bytes"
 msgstr ""
 
-msgid "select particular graphical display (e.g. \"vnc\", \"spice\", \"rdp\")"
+msgid ""
+"select particular graphical display (e.g. \"vnc\", \"spice\", \"rdp\", \"dbus"
+"\")"
 msgstr ""
 
 msgid "send handler failed"
@@ -34141,6 +34092,9 @@ msgstr "прикажи/подеси параметре планера"
 msgid "set server's client-related configuration limits"
 msgstr ""
 
+msgid "set the auto shutdown timeout of the daemon"
+msgstr ""
+
 msgid "set the bandwidth limit in MiB/s"
 msgstr ""
 
@@ -34155,7 +34109,7 @@ msgstr ""
 msgid "set the user password inside the domain"
 msgstr ""
 
-msgid "set the value for reduction of the IOThread polling time "
+msgid "set the value for reduction of the IOThread polling time"
 msgstr ""
 
 msgid "set the value to increase the IOThread polling time"
@@ -34167,6 +34121,11 @@ msgstr ""
 msgid "set to the time of the host running virsh"
 msgstr ""
 
+msgid ""
+"setting 'value' attribute of 'qemu:property' doesn't make sense with "
+"'remove' type"
+msgstr ""
+
 #, fuzzy
 msgid "setting ACPI S3 not supported"
 msgstr "Врста мреже %d није подржана"
@@ -34175,23 +34134,11 @@ msgstr "Врста мреже %d није подржана"
 msgid "setting ACPI S4 not supported"
 msgstr "Врста мреже %d није подржана"
 
-msgid "setting MTU is not supported with this QEMU binary"
-msgstr ""
-
 #, fuzzy, c-format
 msgid "setting MTU on interface type %s is not supported yet"
 msgstr "Врста мреже %d није подржана"
 
-msgid "setting audio buffer count is not supported with this QEMU"
-msgstr ""
-
-msgid "setting audio buffer length is not supported with this QEMU"
-msgstr ""
-
-msgid "setting audio latency is not supported with this QEMU"
-msgstr ""
-
-msgid "setting audio stream name is not supported with this QEMU"
+msgid "setting a launch secret is only supported in SEV-enabled domains"
 msgstr ""
 
 #, c-format
@@ -34241,13 +34188,18 @@ msgstr ""
 msgid "sgio is only supported for scsi host device"
 msgstr "ps2 магистрала не подржава %s уређај за унос"
 
-#, c-format
-msgid "sgio of shared disk '%s' conflicts with other active domains"
+msgid "sgx epc isn't supported by this QEMU binary"
 msgstr ""
 
 #, c-format
-msgid ""
-"sgio of shared disk 'pool=%s' 'volume=%s' conflicts with other active domains"
+msgid "sgx epc size %lld on host node %d is less than requested size %lld"
+msgstr ""
+
+#, c-format
+msgid "sgx epc size %lld on host node %zd is less than requested size %lld"
+msgstr ""
+
+msgid "sgx-epc memory info data is missing 'memdev'"
 msgstr ""
 
 #, c-format
@@ -34407,6 +34359,12 @@ msgstr ""
 msgid "skipped restricted file"
 msgstr ""
 
+msgid "slices are not supported with NVRAM"
+msgstr ""
+
+msgid "snapshot"
+msgstr ""
+
 #, c-format
 msgid "snapshot %s disappeared from list"
 msgstr ""
@@ -34423,12 +34381,16 @@ msgstr ""
 msgid "snapshot '%s' lacks domain '%s' rollback info"
 msgstr ""
 
+msgid "snapshot VM disk source and parent disk source are not the same"
+msgstr ""
+
+#, c-format
+msgid "snapshot disk '%s' was target of not completed snapshot delete"
+msgstr ""
+
 #, fuzzy
 msgid "snapshot information"
 msgstr "подаци о чвору"
-
-msgid "snapshot job"
-msgstr ""
 
 #, fuzzy
 msgid "snapshot name"
@@ -34446,9 +34408,6 @@ msgid "snapshots have inconsistent relations"
 msgstr ""
 
 msgid "sndbuf must be a positive integer"
-msgstr ""
-
-msgid "socket attribute required for unix transport"
 msgstr ""
 
 #, fuzzy
@@ -34575,7 +34534,7 @@ msgstr ""
 msgid "ssl verification is supported only with HTTPS/FTPS protocol"
 msgstr ""
 
-msgid "ssl verification setting is not supported by this QEMU binary"
+msgid "start"
 msgstr ""
 
 msgid "start a (previously defined) inactive domain"
@@ -34595,9 +34554,6 @@ msgstr ""
 
 #, c-format
 msgid "start cell %d out of range (0-%d)"
-msgstr ""
-
-msgid "start job"
 msgstr ""
 
 #, c-format
@@ -34732,16 +34688,12 @@ msgid "storage pool only supports LUKS encrypted volumes"
 msgstr "складиште не подржава прављење диска"
 
 #, c-format
-msgid "storage pool protocol ver '%s' is malformed"
+msgid "storage pool protocol ver '%s' must not contain ','"
 msgstr ""
 
 #, c-format
 msgid "storage pool protocol ver unsupported for pool type '%s'"
 msgstr ""
-
-#, fuzzy
-msgid "storage slice is not supported by this QEMU binary"
-msgstr "складиште не подржава брисање диска"
 
 #, c-format
 msgid "storage source pool '%s' volume '%s' is not translated"
@@ -34849,9 +34801,18 @@ msgid ""
 "VIR_MIGRATE_POSTCOPY flag"
 msgstr ""
 
-#, fuzzy
-msgid "swtpm failed to start"
-msgstr "Неуспело покретање складишта %s"
+msgid "swtpm didn't show up"
+msgstr ""
+
+#, c-format
+msgid "swtpm died and reported: %s"
+msgstr ""
+
+msgid "swtpm died unexpectedly"
+msgstr ""
+
+msgid "swtpm socket did not show up"
+msgstr ""
 
 #, c-format
 msgid "syntax: %s DEVICE [-g]|[-p]\n"
@@ -34863,10 +34824,6 @@ msgstr ""
 #, fuzzy, c-format
 msgid "sysctl failed for '%s'"
 msgstr "не постоји датотека подешавања за %s"
-
-#, fuzzy
-msgid "sysinfo must contain a type attribute"
-msgstr "недостаје особина типа домена"
 
 msgid "system call error"
 msgstr "грешка у системском позиву"
@@ -34959,10 +34916,17 @@ msgid "target pci device "
 msgstr "врста циљног уређаја"
 
 #, c-format
+msgid "target port '%d' already allocated"
+msgstr ""
+
+#, c-format
 msgid "target type must be specified for %s device"
 msgstr ""
 
 msgid "target vm vcpu granularity does not allow the desired vcpu count"
+msgstr ""
+
+msgid "tb-cache size must be an integer multiple of MiB"
 msgstr ""
 
 msgid "tcp"
@@ -34995,10 +34959,6 @@ msgstr ""
 msgid "terminate gracefully"
 msgstr ""
 
-#, fuzzy
-msgid "terminated abnormally"
-msgstr "недовршен број"
-
 msgid "testOpen: supply a path or use test:///default"
 msgstr "testOpen: наведите путању или користите test:///default"
 
@@ -35023,6 +34983,13 @@ msgstr ""
 msgid "the QEMU binary does not support the ISA panic device"
 msgstr "xen магистрала не подржава %s уређај за унос"
 
+msgid "the QEMU binary does not support the PCI pvpanic device"
+msgstr ""
+
+#, c-format
+msgid "the accel '%s' is not supported by '%s' on this host"
+msgstr ""
+
 msgid ""
 "the address family of a dhcp range must match the address family of the dhcp "
 "element's parent"
@@ -35045,6 +35012,11 @@ msgid ""
 msgstr ""
 
 msgid "the codeset of keycodes, default:linux"
+msgstr ""
+
+msgid ""
+"the copy job forces guest writes to be synchronously written to the "
+"destination"
 msgstr ""
 
 msgid "the copy job is not persisted if VM is turned off"
@@ -35077,7 +35049,7 @@ msgstr ""
 msgid "the new password"
 msgstr ""
 
-msgid "the packed setting is not supported with this QEMU binary"
+msgid "the passt network backend is not supported with this QEMU binary"
 msgstr ""
 
 #, fuzzy
@@ -35088,6 +35060,9 @@ msgid "the process ID"
 msgstr ""
 
 msgid "the result won't fit into REMOTE_NODE_MAX_CELLS"
+msgstr ""
+
+msgid "the running swtpm does not support migration with shared storage"
 msgstr ""
 
 msgid "the signal number or name"
@@ -35157,9 +35132,6 @@ msgstr ""
 msgid "there is no hub at port %u in USB address bus: %u port: %s"
 msgstr ""
 
-msgid "this QEMU binary doesn't support relative block pull/rebase"
-msgstr ""
-
 msgid "this QEMU binary lacks multiple smartcard support"
 msgstr ""
 
@@ -35176,7 +35148,7 @@ msgstr "ps2 магистрала не подржава %s уређај за ун
 msgid "this QEMU does not support the 'genid' capability"
 msgstr ""
 
-msgid "this QEMU doesn't support memory discard"
+msgid "this QEMU version didn't provide SGX EPC NUMA info"
 msgstr ""
 
 #, fuzzy
@@ -35215,20 +35187,7 @@ msgstr ""
 msgid "this qemu does not support TLS transport for NBD"
 msgstr ""
 
-#, fuzzy
-msgid "this qemu does not support setting device threshold"
-msgstr "ps2 магистрала не подржава %s уређај за унос"
-
-msgid "this qemu doesn't support relative block commit"
-msgstr ""
-
-msgid "this qemu doesn't support the memory-backend-file object"
-msgstr ""
-
 msgid "this qemu doesn't support the memory-backend-memfd object"
-msgstr ""
-
-msgid "this qemu doesn't support the memory-backend-ram object"
 msgstr ""
 
 msgid "this qemu doesn't support the rng-builtin backend"
@@ -35247,14 +35206,37 @@ msgstr ""
 msgid "this storage volume exists already"
 msgstr "ова мрежа већ постоји"
 
-msgid "this version of libxenlight does not support backend domain name"
-msgstr ""
-
-msgid "threshold as a scaled number (by default bytes)"
+#, c-format
+msgid "thread_pool_max (%d) must be a positive number or -1"
 msgstr ""
 
 #, c-format
-msgid "threshold currently can't be set for block device '%s'"
+msgid "thread_pool_max (%d) must be equal to or greater than 0 for live change"
+msgstr ""
+
+msgid "thread_pool_max must be a positive integer"
+msgstr ""
+
+#, c-format
+msgid "thread_pool_min (%d) can't be greater than thread_pool_max (%d)"
+msgstr ""
+
+#, c-format
+msgid "thread_pool_min (%d) must be equal to or greater than -1"
+msgstr ""
+
+#, c-format
+msgid "thread_pool_min (%d) must be equal to or greater than 0 for live change"
+msgstr ""
+
+msgid ""
+"thread_pool_min and thread_pool_max is not supported by this QEMU binary"
+msgstr ""
+
+msgid "thread_pool_min must be smaller or equal to thread_pool_max"
+msgstr ""
+
+msgid "threshold as a scaled number (by default bytes)"
 msgstr ""
 
 msgid "time to set"
@@ -35277,9 +35259,6 @@ msgid "timeout seconds."
 msgstr ""
 
 msgid "timeout seconds. must be positive."
-msgstr ""
-
-msgid "timeout setting is not supported with this QEMU binary"
 msgstr ""
 
 msgid "timeout, async and block options are exclusive"
@@ -35604,10 +35583,6 @@ msgid ""
 msgstr ""
 
 #, c-format
-msgid "transient disk not supported by this QEMU binary (%s)"
-msgstr ""
-
-#, c-format
 msgid "transient disk supported only with 'disk' device (%s)"
 msgstr ""
 
@@ -35650,12 +35625,6 @@ msgstr "SASL механизам %s није подржан од стране с�
 msgid "tray is only valid for cdrom and floppy"
 msgstr ""
 
-msgid "tray status 'open' is invalid for block type disk"
-msgstr ""
-
-msgid "tray status 'open' is invalid for block type volume"
-msgstr ""
-
 msgid "treat event as a regex rather than literal filter"
 msgstr ""
 
@@ -35668,8 +35637,14 @@ msgstr ""
 msgid "try harder on risky reverts"
 msgstr ""
 
+msgid "try to restore security label after use if possible"
+msgstr ""
+
 msgid "tty console"
 msgstr "tty конзола"
+
+msgid "tunnelFD argument is required for tunnelled migration"
+msgstr ""
 
 #, fuzzy
 msgid "tunnelled migration"
@@ -35792,6 +35767,10 @@ msgstr "не могу да се повежем са Xen складиштем %s"
 msgid "unable to control COW flag on '%s', not btrfs"
 msgstr ""
 
+#, c-format
+msgid "unable to create %s <-> %s veth pair"
+msgstr ""
+
 msgid "unable to create blockdev props for vhostuser disk type"
 msgstr ""
 
@@ -35819,6 +35798,10 @@ msgstr "Неуспело прављење XML-а"
 msgid ""
 "unable to delete interface '%s' in network '%s'. It is currently being used  "
 "by %d domains."
+msgstr ""
+
+#, c-format
+msgid "unable to determine access mode of %s"
 msgstr ""
 
 msgid "unable to determine if checkpoint has parent"
@@ -35865,10 +35848,6 @@ msgstr "Неуспело проналажење управљачког прог�
 
 msgid "unable to find audio backend for sound device"
 msgstr ""
-
-#, fuzzy, c-format
-msgid "unable to find backing name for device %s"
-msgstr "Неуспело проналажење управљачког програма складишта: %s"
 
 #, fuzzy, c-format
 msgid "unable to find disk by target: %s"
@@ -35959,9 +35938,6 @@ msgstr ""
 
 #, c-format
 msgid "unable to handle agent type: %s"
-msgstr ""
-
-msgid "unable to handle disk requests in snapshot"
 msgstr ""
 
 #, fuzzy, c-format
@@ -36091,6 +36067,9 @@ msgstr "не могу да генеришем uuid"
 msgid "unable to read domain master key file"
 msgstr "сачувај стање домена у датотеку"
 
+msgid "unable to read from pipe"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "unable to read server cert %s"
 msgstr "Неуспело откачињање уређаја из %s"
@@ -36161,6 +36140,9 @@ msgstr ""
 msgid "unable to set ownership of '%s' to user %d:%d"
 msgstr ""
 
+msgid "unable to set pipe size"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "unable to set security context '%s'"
 msgstr "Неуспело прављење контекст SASL клијента: %d (%s)"
@@ -36193,12 +36175,24 @@ msgid "unable to set vnet or multiqueue flags on macvtap"
 msgstr ""
 
 #, c-format
+msgid "unable to share scheduling cookie from %lld"
+msgstr ""
+
+#, c-format
+msgid "unable to share scheduling cookie to %lld"
+msgstr ""
+
+#, c-format
 msgid "unable to stat %s"
 msgstr ""
 
 #, fuzzy, c-format
 msgid "unable to stat block copy target '%s'"
 msgstr "Неуспело добављање статистике блока %s %s"
+
+#, c-format
+msgid "unable to stat file descriptor %d path %s"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "unable to stat for disk %s: %s"
@@ -36449,10 +36443,6 @@ msgid "unexpected encryption format"
 msgstr "неочекивана врста складишта"
 
 #, fuzzy, c-format
-msgid "unexpected exit status %d"
-msgstr "неочекивана врста домена %d"
-
-#, fuzzy, c-format
 msgid "unexpected feature '%s'"
 msgstr "неочекивани подаци „%s“"
 
@@ -36511,6 +36501,10 @@ msgstr "неочекивана врста домена %d"
 #, fuzzy
 msgid "unexpected message type"
 msgstr "неочекивана врста домена %d"
+
+#, c-format
+msgid "unexpected migration schema: %d"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "unexpected migration status in %s"
@@ -36572,49 +36566,6 @@ msgstr ""
 msgid "unexpected protocol type"
 msgstr "неочекивана врста складишта"
 
-#, c-format
-msgid "unexpected root element <%s> expecting <device>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <domain>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <domstatus>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <interface>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <network>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <pool>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <qemuCaps>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <secret>"
-msgstr ""
-
-#, c-format
-msgid "unexpected root element <%s>, expecting <volume>"
-msgstr ""
-
-msgid "unexpected root element, expecting <domain>"
-msgstr ""
-
-#, fuzzy, c-format
-msgid "unexpected root element: '%s'"
-msgstr "неочекивани подаци „%s“"
-
 #, fuzzy, c-format
 msgid "unexpected secret usage type %d"
 msgstr "неочекивана врста домена %d"
@@ -36657,22 +36608,6 @@ msgstr "неочекивани подаци „%s“"
 
 #, fuzzy, c-format
 msgid "unexpected sysinfo type model %d"
-msgstr "неочекивана врста домена %d"
-
-#, fuzzy, c-format
-msgid "unexpected timer mode %d"
-msgstr "неочекивана врста домена %d"
-
-#, fuzzy, c-format
-msgid "unexpected timer name %d"
-msgstr "неочекивана врста домена %d"
-
-#, fuzzy, c-format
-msgid "unexpected timer tickpolicy %d"
-msgstr "неочекивана врста домена %d"
-
-#, fuzzy, c-format
-msgid "unexpected timer track %d"
 msgstr "неочекивана врста домена %d"
 
 msgid "unexpected transport in <domainbackup>"
@@ -36722,9 +36657,8 @@ msgstr "неочекивана врста домена %d"
 msgid "unexpected zero/negative length request %lld"
 msgstr ""
 
-#, fuzzy
-msgid "unexpectedly failed"
-msgstr "неочекивана врста домена %d"
+msgid "unfiltered sgio is no longer supported"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "unimplemented parameter type %d"
@@ -36768,10 +36702,6 @@ msgstr "непозната врста ОС-а %s"
 msgid "unknown OS type '%s'"
 msgstr "непозната врста ОС-а %s"
 
-#, fuzzy, c-format
-msgid "unknown PM state value %s"
-msgstr "непозната врста %d диска за складиштење"
-
 #, c-format
 msgid "unknown QEMU_AUDIO_DRV setting %s"
 msgstr ""
@@ -36795,18 +36725,6 @@ msgstr ""
 #, c-format
 msgid "unknown SDL_AUDIODRIVER setting %s"
 msgstr ""
-
-#, fuzzy, c-format
-msgid "unknown accel2d value '%s'"
-msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
-msgid "unknown accel3d value '%s'"
-msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
-msgid "unknown accessmode '%s'"
-msgstr "неочекивана наредба: „%s“"
 
 #, fuzzy, c-format
 msgid "unknown address type '%s'"
@@ -36840,6 +36758,10 @@ msgstr "непозната врста ауторизације %s"
 msgid "unknown authentication type %s"
 msgstr "непозната врста аутентификације %s"
 
+#, c-format
+msgid "unknown backend source type '%s' for external TPM"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "unknown backend type '%s' for egd"
 msgstr "непозната врста ауторизације %s"
@@ -36857,10 +36779,6 @@ msgstr "непознат домаћин %s"
 
 #, fuzzy, c-format
 msgid "unknown bonding mode %s"
-msgstr "непознат „%s“ уређај за покретање"
-
-#, c-format
-msgid "unknown boot device '%s'"
 msgstr "непознат „%s“ уређај за покретање"
 
 #, fuzzy, c-format
@@ -36916,24 +36834,8 @@ msgid "unknown device type in '%s'"
 msgstr "непозната врста „%s“"
 
 #, fuzzy, c-format
-msgid "unknown dhcp peerdns value %s"
-msgstr "непозната процедура: %d"
-
-#, fuzzy, c-format
 msgid "unknown disk snapshot driver '%s'"
 msgstr "непознат „%s“ уређај за покретање"
-
-#, fuzzy, c-format
-msgid "unknown disk snapshot setting '%s'"
-msgstr "непознат „%s“ уређај за покретање"
-
-#, fuzzy, c-format
-msgid "unknown disk snapshot type '%s'"
-msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
-msgid "unknown disk type '%s'"
-msgstr "непозната врста „%s“"
 
 #, fuzzy, c-format
 msgid "unknown driver format value '%s'"
@@ -36960,16 +36862,8 @@ msgid "unknown event type %s"
 msgstr "непозната врста ОС-а %s"
 
 #, fuzzy, c-format
-msgid "unknown filesystem type '%s'"
-msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
 msgid "unknown firmware value %s"
 msgstr "непозната врста %d диска за складиштење"
-
-#, fuzzy, c-format
-msgid "unknown flock value '%s'"
-msgstr "непознат „%s“ уређај за покретање"
 
 #, fuzzy, c-format
 msgid "unknown forwarding type '%s'"
@@ -37003,14 +36897,6 @@ msgid "unknown hostdev mode '%s'"
 msgstr "непознат „%s“ уређај за покретање"
 
 #, fuzzy, c-format
-msgid "unknown hostdev model '%s'"
-msgstr "непознат „%s“ уређај за покретање"
-
-#, fuzzy, c-format
-msgid "unknown hostdev rawio setting '%s'"
-msgstr "непознат „%s“ уређај за покретање"
-
-#, fuzzy, c-format
 msgid "unknown hub device type '%s'"
 msgstr "непознат „%s“ уређај за покретање"
 
@@ -37035,14 +36921,6 @@ msgid "unknown inputvol storage vol type %d"
 msgstr "непозната врста %d диска за складиштење"
 
 #, fuzzy, c-format
-msgid "unknown interface event_idx mode '%s'"
-msgstr "непознат „%s“ уређај за покретање"
-
-#, c-format
-msgid "unknown interface ioeventfd mode '%s'"
-msgstr ""
-
-#, fuzzy, c-format
 msgid "unknown interface link state '%s'"
 msgstr "непозната врста %d диска за складиштење"
 
@@ -37051,20 +36929,12 @@ msgid "unknown interface startmode %s"
 msgstr "непозната врста аутентификације %s"
 
 #, fuzzy, c-format
-msgid "unknown interface type %s"
-msgstr "непозната врста ОС-а %s"
-
-#, fuzzy, c-format
 msgid "unknown interface type: '%s'"
 msgstr "непозната врста ауторизације %s"
 
 #, fuzzy, c-format
 msgid "unknown ip address type '%s'"
 msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
-msgid "unknown memory snapshot setting '%s'"
-msgstr "непознат „%s“ уређај за покретање"
 
 #, fuzzy, c-format
 msgid "unknown memoryBacking/access/mode '%s'"
@@ -37081,10 +36951,6 @@ msgstr "непозната врста ауторизације %s"
 #, fuzzy, c-format
 msgid "unknown metadata type '%d'"
 msgstr "непозната врста ауторизације %s"
-
-#, c-format
-msgid "unknown migratable value for '%s' host CPU model property"
-msgstr ""
 
 #, fuzzy, c-format
 msgid "unknown migration parameter '%s'"
@@ -37104,14 +36970,6 @@ msgstr "непозната врста „%s“"
 #, fuzzy, c-format
 msgid "unknown mirror ready state %s"
 msgstr "непознат домаћин %s"
-
-#, fuzzy, c-format
-msgid "unknown model '%s'"
-msgstr "непозната врста „%s“"
-
-#, fuzzy, c-format
-msgid "unknown multidevs '%s'"
-msgstr "непозната врста „%s“"
 
 #, fuzzy, c-format
 msgid "unknown network device feature '%s'"
@@ -37141,10 +36999,6 @@ msgstr "непозната процедура: %d"
 msgid "unknown partition type"
 msgstr "непозната врста аутентификације %s"
 
-#, c-format
-msgid "unknown pci writeFiltering setting '%s'"
-msgstr ""
-
 #, fuzzy, c-format
 msgid "unknown pool format number %d"
 msgstr "непозната врста %d диска за складиштење"
@@ -37152,14 +37006,6 @@ msgstr "непозната врста %d диска за складиштење"
 #, fuzzy, c-format
 msgid "unknown pool format type %s"
 msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
-msgid "unknown port isolated value '%s'"
-msgstr "непознат „%s“ уређај за покретање"
-
-#, fuzzy, c-format
-msgid "unknown posix lock value '%s'"
-msgstr "непознат „%s“ уређај за покретање"
 
 #, c-format
 msgid "unknown procedure: %d"
@@ -37180,19 +37026,6 @@ msgstr "непознат „%s“ уређај за покретање"
 msgid "unknown rng-random backend"
 msgstr ""
 
-#, c-format
-msgid "unknown root element '%s' for filter binding"
-msgstr ""
-
-msgid "unknown root element for network port"
-msgstr ""
-
-msgid "unknown root element for nw filter"
-msgstr ""
-
-msgid "unknown root element for nwfilter binding"
-msgstr ""
-
 msgid "unknown rule action attribute value"
 msgstr ""
 
@@ -37210,10 +37043,6 @@ msgstr "непозната врста %d диска за складиштење"
 #, fuzzy, c-format
 msgid "unknown secret usage type %s"
 msgstr "непозната врста %d диска за складиштење"
-
-#, fuzzy, c-format
-msgid "unknown sgio mode '%s'"
-msgstr "неочекивана наредба: „%s“"
 
 #, fuzzy, c-format
 msgid "unknown smbios mode '%s'"
@@ -37259,10 +37088,6 @@ msgstr "непозната врста %d диска за складиштење"
 msgid "unknown suffix '%s'"
 msgstr "непозната врста „%s“"
 
-#, fuzzy, c-format
-msgid "unknown sysinfo type '%s'"
-msgstr "непозната врста „%s“"
-
 #, c-format
 msgid "unknown target model '%s' specified for character device"
 msgstr ""
@@ -37275,40 +37100,12 @@ msgstr ""
 msgid "unknown teaming type '%s'"
 msgstr "непозната врста „%s“"
 
-#, fuzzy, c-format
-msgid "unknown timer mode '%s'"
-msgstr "непозната врста „%s“"
-
-#, fuzzy, c-format
-msgid "unknown timer name '%s'"
-msgstr "непозната врста „%s“"
-
-#, fuzzy, c-format
-msgid "unknown timer present value '%s'"
-msgstr "непозната врста „%s“"
-
-#, fuzzy, c-format
-msgid "unknown timer tickpolicy '%s'"
-msgstr "непозната врста ауторизације %s"
-
-#, fuzzy, c-format
-msgid "unknown timer track '%s'"
-msgstr "непозната врста „%s“"
-
 #, c-format
 msgid "unknown type '%s'"
 msgstr "непозната врста „%s“"
 
 #, c-format
 msgid "unknown type presented to host for character device: %s"
-msgstr ""
-
-#, c-format
-msgid "unknown value '%s' for <hostdev> attribute 'display'"
-msgstr ""
-
-#, c-format
-msgid "unknown value '%s' for <hostdev> attribute 'ramfb'"
 msgstr ""
 
 #, c-format
@@ -37374,10 +37171,6 @@ msgstr "непозната врста ауторизације %s"
 msgid "unknown write_policy value '%u'"
 msgstr ""
 
-#, fuzzy, c-format
-msgid "unknown xattr value '%s'"
-msgstr "непозната врста ауторизације %s"
-
 #, fuzzy
 msgid "unlimited"
 msgstr "без ограничења"
@@ -37396,10 +37189,6 @@ msgstr "паузирано"
 
 msgid "unplug of device was rejected by the guest"
 msgstr ""
-
-#, fuzzy
-msgid "unpriv_sgio is not supported by this kernel"
-msgstr "SASL механизам %s није подржан од стране сервера"
 
 #, c-format
 msgid "unprocessed hole of size %lld already in the queue"
@@ -37446,6 +37235,10 @@ msgstr "магистрала за унос %s није подржана"
 msgid "unsupported HyperV Enlightenment feature: %s"
 msgstr ""
 
+#, c-format
+msgid "unsupported IPv6 address prefix='%u' - must be 64"
+msgstr ""
+
 #, fuzzy, c-format
 msgid "unsupported KVM feature: %s"
 msgstr "магистрала за унос %s није подржана"
@@ -37487,6 +37280,10 @@ msgstr "магистрала за унос %s није подржана"
 
 #, c-format
 msgid "unsupported audio backend '%s'"
+msgstr ""
+
+#, c-format
+msgid "unsupported audio model %s"
 msgstr ""
 
 #, c-format
@@ -37572,6 +37369,10 @@ msgstr "извор уређаја диска"
 msgid "unsupported disk driver %s"
 msgstr "магистрала за унос %s није подржана"
 
+#, c-format
+msgid "unsupported disk snapshot type '%s'"
+msgstr ""
+
 #, fuzzy
 msgid "unsupported disk type"
 msgstr "магистрала за унос %s није подржана"
@@ -37620,13 +37421,13 @@ msgstr ""
 msgid "unsupported filesystem type '%s'"
 msgstr ""
 
-#, c-format
-msgid "unsupported flags (0x%lx) in function %s"
-msgstr ""
-
 #, fuzzy, c-format
 msgid "unsupported flags (0x%x)"
 msgstr "магистрала за унос %s није подржана"
+
+#, c-format
+msgid "unsupported flags (0x%x) in function %s"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "unsupported flags: (0x%x)"
@@ -37687,6 +37488,10 @@ msgstr "магистрала за унос %s није подржана"
 #, fuzzy, c-format
 msgid "unsupported numatune mode: '%d'"
 msgstr "магистрала за унос %s није подржана"
+
+#, c-format
+msgid "unsupported nvram disk type '%s'"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "unsupported nvram template format '%s'"
@@ -37763,6 +37568,10 @@ msgstr ""
 msgid "unsupported usb model"
 msgstr "магистрала за унос %s није подржана"
 
+#, c-format
+msgid "unsupported use of long flags in function %s"
+msgstr ""
+
 #, fuzzy
 msgid "unsupported value"
 msgstr "магистрала за унос %s није подржана"
@@ -37795,6 +37604,9 @@ msgid "updating device type '%s' is unsupported"
 msgstr "Врста мреже %d није подржана"
 
 msgid "upload file contents to a volume"
+msgstr ""
+
+msgid "upper boundary for worker thread pool"
 msgstr ""
 
 #, fuzzy, c-format
@@ -37855,7 +37667,13 @@ msgstr ""
 msgid "use of host cdrom passthrough"
 msgstr ""
 
+msgid "use seclabels allowing writes"
+msgstr ""
+
 msgid "use virDomainMigrateToURI3 for peer-to-peer migration"
+msgstr ""
+
+msgid "use zero-copy mechanism for migrating memory pages"
 msgstr ""
 
 msgid "user"
@@ -38001,6 +37819,9 @@ msgstr "Назив модела садржи неисправне знаке"
 #, fuzzy
 msgid "value of managerid out of range"
 msgstr "дужина мета податка је ван опсега"
+
+msgid "value of the 'size' attribute of 'mtu' element must be at most 100000"
+msgstr ""
 
 #, fuzzy
 msgid "value of typeidversion out of range"
@@ -38184,6 +38005,10 @@ msgid "video type %s is not supported by libxl"
 msgstr "Врста мреже %d није подржана"
 
 #, c-format
+msgid "video type '%s' doesn't support multiple 'heads'"
+msgstr ""
+
+#, c-format
 msgid "video type '%s' is only valid as primary video device"
 msgstr ""
 
@@ -38218,6 +38043,9 @@ msgid "virDomainManagedSaveGetXMLDesc with secure flag"
 msgstr ""
 
 msgid "virDomainSnapshotGetXMLDesc with secure flag"
+msgstr ""
+
+msgid "virFileDiskCopy unsupported on this platform"
 msgstr ""
 
 msgid "virFileOpenAs is not implemented for WIN32"
@@ -38305,11 +38133,14 @@ msgstr ""
 msgid "virtio non-transitional model not supported for this qemu"
 msgstr ""
 
-#, c-format
-msgid "virtio rx_queue_size option %d is not same with tx_queue_size %d"
+msgid "virtio rss hash report is not supported with this QEMU binary"
 msgstr ""
 
-msgid "virtio rx_queue_size option is not supported with this QEMU binary"
+msgid "virtio rss is not supported with this QEMU binary"
+msgstr ""
+
+#, c-format
+msgid "virtio rx_queue_size option %d is not same with tx_queue_size %d"
 msgstr ""
 
 #, c-format
@@ -38332,16 +38163,10 @@ msgstr ""
 msgid "virtio serial port %u on controller %u is already occupied"
 msgstr ""
 
-msgid "virtio tx_queue_size option is not supported with this QEMU binary"
-msgstr ""
-
 msgid "virtio-mem device is missing <requested/>"
 msgstr ""
 
 msgid "virtio-mem isn't supported by this QEMU binary"
-msgstr ""
-
-msgid "virtio-net failover (teaming) is not supported with this QEMU binary"
 msgstr ""
 
 #, c-format
@@ -38352,9 +38177,6 @@ msgstr ""
 
 #, c-format
 msgid "virtio-net teaming transient interface must be type='hostdev', not '%s'"
-msgstr ""
-
-msgid "virtio-net-pci 'tx' option not supported in this QEMU binary"
 msgstr ""
 
 msgid "virtio-pmem does not support NUMA nodes"
@@ -38406,6 +38228,10 @@ msgstr ""
 msgid "virtiofs only supports passthrough accessmode"
 msgstr ""
 
+#, c-format
+msgid "virtiofsd binary '%s' is not executable"
+msgstr ""
+
 msgid "virtiofsd died unexpectedly"
 msgstr ""
 
@@ -38437,7 +38263,7 @@ msgid "vlan misses the tag name"
 msgstr ""
 
 #, c-format
-msgid "vlan tag id %lu too large (maximum 4095)"
+msgid "vlan tag id %u too large (maximum 4095)"
 msgstr ""
 
 #, c-format
@@ -38445,6 +38271,10 @@ msgid "vlan tag set for interface %s but caller requested it not be set"
 msgstr ""
 
 msgid "vlan trunking is not supported by SR-IOV network devices"
+msgstr ""
+
+#, c-format
+msgid "vlanid out of range: %d"
 msgstr ""
 
 msgid "vmcoreinfo is not available with this QEMU binary"
@@ -38491,22 +38321,6 @@ msgid "vnuma vnode %zu contains invalid pnode value '%s'"
 msgstr ""
 
 #, c-format
-msgid "vnuma vnode %zu pnode '%s' too long for destination"
-msgstr ""
-
-#, c-format
-msgid "vnuma vnode %zu size '%s' too long for destination"
-msgstr ""
-
-#, c-format
-msgid "vnuma vnode %zu vcpus '%s' too long for destination"
-msgstr ""
-
-#, c-format
-msgid "vnuma vnode %zu vdistances '%s' too long for destination"
-msgstr ""
-
-#, c-format
 msgid "vnuma vnode invalid format '%s'"
 msgstr ""
 
@@ -38522,9 +38336,6 @@ msgstr ""
 
 #, c-format
 msgid "volume '%s' is still in use."
-msgstr ""
-
-msgid "volume capacity required for this pool"
 msgstr ""
 
 msgid "volume capacity required for this storage pool"
@@ -38649,10 +38460,11 @@ msgstr "упозорење"
 msgid "watchdog"
 msgstr ""
 
-msgid "watchdog device not present in domain configuration"
+msgid "watchdog must contain model name"
 msgstr ""
 
-msgid "watchdog must contain model name"
+msgid ""
+"watchdogs with different actions are not supported with this QEMU binary"
 msgstr ""
 
 msgid "webSocket"
@@ -38725,6 +38537,9 @@ msgstr ""
 msgid "with redefine, set current snapshot"
 msgstr ""
 
+msgid "wrap xpath results in an common root element"
+msgstr ""
+
 msgid "write I/O operations limit per second"
 msgstr ""
 
@@ -38773,6 +38588,9 @@ msgstr ""
 msgid "xml modification unsupported"
 msgstr ""
 
+msgid "xpath expression to filter the XML document"
+msgstr ""
+
 #, c-format
 msgid "xsd:dateTime value '%s' has unexpected format"
 msgstr ""
@@ -38787,6 +38605,9 @@ msgstr ""
 msgid "zPCI %s %o is already reserved"
 msgstr ""
 
+msgid "zero-copy is only available for parallel migration"
+msgstr ""
+
 #, c-format
 msgid "zone %s requested for network %s but firewalld is not active"
 msgstr ""
@@ -38794,6 +38615,548 @@ msgstr ""
 #, fuzzy, c-format
 msgid "{[--%s] <string>}..."
 msgstr "--%s <ниска>"
+
+#, fuzzy
+#~ msgid "Could not get device type, rc=%08x"
+#~ msgstr "врста циљног уређаја"
+
+#, fuzzy
+#~ msgid "Failed to get storage controller name, rc=%08x"
+#~ msgstr "Неуспело враћање домена из %s"
+
+#, fuzzy
+#~ msgid "Failed to save VM settings, rc=%08x"
+#~ msgstr "Неуспело чување домена %s у %s"
+
+#, fuzzy
+#~ msgid "Unable to get medium uuid, rc=%08x"
+#~ msgstr "не могу да генеришем uuid"
+
+#, fuzzy
+#~ msgid "could not define a domain, rc=%08x"
+#~ msgstr "Неуспело дефинисање домена из %s"
+
+#, fuzzy
+#~ msgid "could not delete the domain, rc=%08x"
+#~ msgstr "не могу да одредим максималне vcpus за домен"
+
+#, fuzzy
+#~ msgid "could not set the number of cpus of the domain to: %u, rc=%08x"
+#~ msgstr "не могу да одредим максималне vcpus за домен"
+
+#, fuzzy
+#~ msgid "could not set the number of virtual CPUs to: %u, rc=%08x"
+#~ msgstr "Мења број виртуелних CPU-а активних у домену госта."
+
+#, fuzzy
+#~ msgid "domain already has a watchdog"
+#~ msgstr "Домен је већ активан"
+
+#, fuzzy
+#~ msgid "domain has no watchdog"
+#~ msgstr "домен се не извршава"
+
+#, fuzzy
+#~ msgid "failed to set snapshot '%s' as current"
+#~ msgstr "неуспело добављање диска „%s“"
+
+#, fuzzy
+#~ msgid "interface (%s: %s) not found"
+#~ msgstr "Складиште није пронађено"
+
+#, fuzzy
+#~ msgid "Invalid parameter to virXPathLong()"
+#~ msgstr "Неважећи параметар за virXPathString()"
+
+#, fuzzy
+#~ msgid "Invalid parameter to virXPathLongLong()"
+#~ msgstr "Неважећи параметар за virXPathBoolean()"
+
+#~ msgid "Invalid parameter to virXPathNumber()"
+#~ msgstr "Неважећи параметар за virXPathNumber()"
+
+#~ msgid "Invalid parameter to virXPathString()"
+#~ msgstr "Неважећи параметар за virXPathString()"
+
+#, fuzzy
+#~ msgid "Invalid parameter to virXPathULong()"
+#~ msgstr "Неважећи параметар за virXPathString()"
+
+#, fuzzy
+#~ msgid "invalid catchup limit"
+#~ msgstr "неисправна путања: %s"
+
+#, fuzzy
+#~ msgid "invalid catchup slew"
+#~ msgstr "неисправна путања: %s"
+
+#, fuzzy
+#~ msgid "invalid catchup threshold"
+#~ msgstr "неисправна путања: %s"
+
+#, fuzzy
+#~ msgid "invalid pid"
+#~ msgstr "неисправна путања: %s"
+
+#, fuzzy
+#~ msgid "missing or invalid vlan tag id attribute"
+#~ msgstr "недостаје особина типа домена"
+
+#, fuzzy
+#~ msgid "missing timer name"
+#~ msgstr "недостаје root елемент"
+
+#, fuzzy
+#~ msgid "sysinfo must contain a type attribute"
+#~ msgstr "недостаје особина типа домена"
+
+#, fuzzy
+#~ msgid "unknown sysinfo type '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "unknown timer mode '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "unknown timer name '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "unknown timer tickpolicy '%s'"
+#~ msgstr "непозната врста ауторизације %s"
+
+#, fuzzy
+#~ msgid "unknown timer track '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "%s 3d acceleration is not supported"
+#~ msgstr "верзија отиска није подржана (%d > %d)"
+
+#, fuzzy
+#~ msgid "(network status)"
+#~ msgstr "име мреже"
+
+#, fuzzy
+#~ msgid "(pool state)"
+#~ msgstr "нема стања"
+
+#, fuzzy
+#~ msgid "Cannot parse <local> 'port' attribute with socket interface"
+#~ msgstr "Није могуће рашчланити <source> „port“ особину уз спрегу прикључка"
+
+#~ msgid "Cannot parse <source> 'port' attribute with socket interface"
+#~ msgstr "Није могуће рашчланити <source> „port“ особину уз спрегу прикључка"
+
+#, fuzzy
+#~ msgid "No <local> 'address' attribute specified with socket interface"
+#~ msgstr ""
+#~ "Ниједна <source> „address“ особина није одређена уз спрегу прикључка"
+
+#, fuzzy
+#~ msgid "No <local> 'port' attribute specified with socket interface"
+#~ msgstr "Ниједна <source> „port“ особина није одређена уз спрегу прикључка"
+
+#~ msgid "No <source> 'address' attribute specified with socket interface"
+#~ msgstr ""
+#~ "Ниједна <source> „address“ особина није одређена уз спрегу прикључка"
+
+#, fuzzy
+#~ msgid ""
+#~ "No <source> 'bridge' attribute specified with <interface type='bridge'/>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#, fuzzy
+#~ msgid ""
+#~ "No <source> 'dev' attribute specified with <interface type='direct'/>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#, fuzzy
+#~ msgid ""
+#~ "No <source> 'mode' attribute specified with <interface type='vhostuser'/>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#, fuzzy
+#~ msgid ""
+#~ "No <source> 'name' attribute specified with <interface type='internal'/>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#~ msgid ""
+#~ "No <source> 'network' attribute specified with <interface type='network'/>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#, fuzzy
+#~ msgid ""
+#~ "No <source> 'path' attribute specified with <interface type='vhostuser'/>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#~ msgid "No <source> 'port' attribute specified with socket interface"
+#~ msgstr "Ниједна <source> „port“ особина није одређена уз спрегу прикључка"
+
+#, fuzzy
+#~ msgid ""
+#~ "No <source> 'type' attribute specified for <interface type='vhostuser'>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#, fuzzy
+#~ msgid "Unable to parse port id '%s'"
+#~ msgstr "Неуспело рашчлањивање режима „%s“"
+
+#, fuzzy
+#~ msgid "Unknown mode has been specified"
+#~ msgstr "Домену %s је укинута дефиниција\n"
+
+#, fuzzy
+#~ msgid ""
+#~ "Wrong <source> 'mode' attribute specified with <interface "
+#~ "type='vhostuser'/>"
+#~ msgstr ""
+#~ "Ниједна <source> „network“ особина није одређена преко <interface "
+#~ "type='network'/>"
+
+#, fuzzy
+#~ msgid "domainsnapshot"
+#~ msgstr "стање домена"
+
+#, fuzzy
+#~ msgid "unexpected root element: '%s'"
+#~ msgstr "неочекивани подаци „%s“"
+
+#, fuzzy
+#~ msgid "terminated abnormally"
+#~ msgstr "недовршен број"
+
+#, fuzzy
+#~ msgid "unexpected exit status %d"
+#~ msgstr "неочекивана врста домена %d"
+
+#, fuzzy
+#~ msgid "NBD migration with TLS is not supported"
+#~ msgstr "Врста мреже %d није подржана"
+
+#, fuzzy
+#~ msgid "Unexpected network protocol '%s'"
+#~ msgstr "неочекивани подаци „%s“"
+
+#, fuzzy
+#~ msgid "Unknown TPM backend type '%s'"
+#~ msgstr "непозната врста ауторизације %s"
+
+#, fuzzy
+#~ msgid "Unknown TPM frontend model '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "Unsupported TPM version '%s'"
+#~ msgstr "магистрала за унос %s није подржана"
+
+#, fuzzy
+#~ msgid "VxHS protocol does not support URI syntax"
+#~ msgstr "складиште не подржава брисање диска"
+
+#, fuzzy
+#~ msgid "deleting %s drive failed: %s"
+#~ msgstr "неуспела радња: %s"
+
+#, fuzzy
+#~ msgid "drive hotplug is not supported"
+#~ msgstr "Врста мреже %d није подржана"
+
+#, fuzzy
+#~ msgid "dump-guest-memory is not supported"
+#~ msgstr "Врста мреже %d није подржана"
+
+#, fuzzy
+#~ msgid "missing TPM device backend type"
+#~ msgstr "недостаје врста уређаја за унос"
+
+#, fuzzy
+#~ msgid "nbd does not support transport '%s'"
+#~ msgstr "xen магистрала не подржава %s уређај за унос"
+
+#, fuzzy
+#~ msgid "qemu block name '%s' doesn't match expected '%s'"
+#~ msgstr ""
+#~ "Назив датотеке мрежног подешавања „%s“ се не поклапа са називом мреже „%s“"
+
+#, fuzzy
+#~ msgid "storage slice is not supported by this QEMU binary"
+#~ msgstr "складиште не подржава брисање диска"
+
+#, fuzzy
+#~ msgid "this qemu does not support setting device threshold"
+#~ msgstr "ps2 магистрала не подржава %s уређај за унос"
+
+#, fuzzy
+#~ msgid "unable to find backing name for device %s"
+#~ msgstr "Неуспело проналажење управљачког програма складишта: %s"
+
+#, fuzzy
+#~ msgid "unknown disk type '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "domain save job"
+#~ msgstr "стање домена"
+
+#, fuzzy
+#~ msgid "is not active"
+#~ msgstr "неактивно"
+
+#, fuzzy
+#~ msgid "migration in job"
+#~ msgstr "пресељење уживо"
+
+#, fuzzy
+#~ msgid "unexpectedly failed"
+#~ msgstr "неочекивана врста домена %d"
+
+#, fuzzy
+#~ msgid "Failed to release port %d"
+#~ msgstr "Неуспело прављење складишта %s"
+
+#, fuzzy
+#~ msgid "%s: failed to communicate with bridge helper: %s%s"
+#~ msgstr "%s: неуспело уписивање датотеке дневника: %s"
+
+#, fuzzy
+#~ msgid "failed to create channel dir '%s': %s"
+#~ msgstr "Неуспело прављење диска из %s"
+
+#, fuzzy
+#~ msgid "failed to create dump dir '%s': %s"
+#~ msgstr "Неуспео избачај сржи домена %s у %s"
+
+#, fuzzy
+#~ msgid "failed to create lib dir '%s': %s"
+#~ msgstr "Неуспело прављење диска из %s"
+
+#, fuzzy
+#~ msgid "failed to create log dir '%s': %s"
+#~ msgstr "Неуспело прављење диска из %s"
+
+#, fuzzy
+#~ msgid "failed to create save dir '%s': %s"
+#~ msgstr "Неуспело прављење диска из %s"
+
+#, fuzzy
+#~ msgid "failed to create state dir '%s': %s"
+#~ msgstr "Неуспело аутоматско покретање VM-а „%s“: %s"
+
+#, fuzzy
+#~ msgid "Call to utsname failed: %d"
+#~ msgstr "неуспела радња: %s"
+
+#, fuzzy
+#~ msgid "Cannot parse version string '%s'"
+#~ msgstr "не могу да рашчланим место почетка уређаја"
+
+#, fuzzy
+#~ msgid "Could not determine kernel version from string %s"
+#~ msgstr "не могу да одредим максималне vcpus за домен"
+
+#, fuzzy
+#~ msgid "Failed to kill process %lld: %s"
+#~ msgstr "неуспела изградња складишта %s"
+
+#, fuzzy
+#~ msgid "unknown disk snapshot setting '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown disk snapshot type '%s'"
+#~ msgstr "непозната врста ауторизације %s"
+
+#, fuzzy
+#~ msgid "unknown memory snapshot setting '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "Invalid TSC frequency"
+#~ msgstr "CPU учестаност:"
+
+#, fuzzy
+#~ msgid "Invalid ip address prefix value"
+#~ msgstr "неисправна MAC адреса"
+
+#, fuzzy
+#~ msgid "Invalid network prt plug type '%s'"
+#~ msgstr "неисправан показивач везе у %s"
+
+#, fuzzy
+#~ msgid "Unable to close file '%s'"
+#~ msgstr "Неуспело рашчлањивање режима „%s“"
+
+#, fuzzy
+#~ msgid "Unable to get device ID '%s'"
+#~ msgstr "неуспело добављање диска „%s“"
+
+#, fuzzy
+#~ msgid "Unexpected socket family %d"
+#~ msgstr "неочекивана врста домена %d"
+
+#, fuzzy
+#~ msgid "cannot parse cache mode '%s' for virtiofs"
+#~ msgstr "не могу да рашчланим место завршетка уређаја"
+
+#, fuzzy
+#~ msgid "failed to parse value of %s"
+#~ msgstr "Неуспело рашчлањивање режима „%s“"
+
+#, fuzzy
+#~ msgid "interface misses the type attribute"
+#~ msgstr "недостаје особина типа домена"
+
+#, fuzzy
+#~ msgid "missing boot device"
+#~ msgstr "недостаје уређај извора"
+
+#, fuzzy
+#~ msgid "swtpm failed to start"
+#~ msgstr "Неуспело покретање складишта %s"
+
+#, fuzzy
+#~ msgid "unexpected timer mode %d"
+#~ msgstr "неочекивана врста домена %d"
+
+#, fuzzy
+#~ msgid "unexpected timer name %d"
+#~ msgstr "неочекивана врста домена %d"
+
+#, fuzzy
+#~ msgid "unexpected timer tickpolicy %d"
+#~ msgstr "неочекивана врста домена %d"
+
+#, fuzzy
+#~ msgid "unexpected timer track %d"
+#~ msgstr "неочекивана врста домена %d"
+
+#, fuzzy
+#~ msgid "unknown PM state value %s"
+#~ msgstr "непозната врста %d диска за складиштење"
+
+#, fuzzy
+#~ msgid "unknown accel2d value '%s'"
+#~ msgstr "непозната врста ауторизације %s"
+
+#, fuzzy
+#~ msgid "unknown accel3d value '%s'"
+#~ msgstr "непозната врста ауторизације %s"
+
+#, fuzzy
+#~ msgid "unknown accessmode '%s'"
+#~ msgstr "неочекивана наредба: „%s“"
+
+#~ msgid "unknown boot device '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown dhcp peerdns value %s"
+#~ msgstr "непозната процедура: %d"
+
+#, fuzzy
+#~ msgid "unknown filesystem type '%s'"
+#~ msgstr "непозната врста ауторизације %s"
+
+#, fuzzy
+#~ msgid "unknown flock value '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown hostdev model '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown hostdev rawio setting '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown interface event_idx mode '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown interface type %s"
+#~ msgstr "непозната врста ОС-а %s"
+
+#, fuzzy
+#~ msgid "unknown model '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "unknown multidevs '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "unknown port isolated value '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown posix lock value '%s'"
+#~ msgstr "непознат „%s“ уређај за покретање"
+
+#, fuzzy
+#~ msgid "unknown sgio mode '%s'"
+#~ msgstr "неочекивана наредба: „%s“"
+
+#, fuzzy
+#~ msgid "unknown timer present value '%s'"
+#~ msgstr "непозната врста „%s“"
+
+#, fuzzy
+#~ msgid "unknown xattr value '%s'"
+#~ msgstr "непозната врста ауторизације %s"
+
+#, fuzzy
+#~ msgid "unpriv_sgio is not supported by this kernel"
+#~ msgstr "SASL механизам %s није подржан од стране сервера"
+
+#, fuzzy
+#~ msgid "Failed to connect to remote libvirt URI %s: %s"
+#~ msgstr "неуспело повезивање са хипервизором"
+
+#, fuzzy
+#~ msgid "Failed to initialize a valid firewall backend"
+#~ msgstr "неуспело покретање SASL библиотеке: %d (%s)"
+
+#, fuzzy
+#~ msgid "Invalid destination '%s' for output '%s'"
+#~ msgstr "Неисправна „%s“ врста магистрале за дискетну јединицу"
+
+#, fuzzy
+#~ msgid "Invalid priority '%s' for output '%s'"
+#~ msgstr "Неисправна „%s“ врста магистрале за дискетну јединицу"
+
+#, fuzzy
+#~ msgid "Unable to pre-create chardev file '%s'"
+#~ msgstr "Неуспело прављење диска %s"
+
+#, fuzzy
+#~ msgid "Unable to wait on monitor condition"
+#~ msgstr ""
+#~ "Није могуће поставити заставицу за надгледање затварања-при-извршавању"
+
+#, fuzzy
+#~ msgid "couldn't write radvd config file '%s'"
+#~ msgstr "неуспело уписивање датотеке подешавања: %s"
+
+#, fuzzy
+#~ msgid "invalid security relabel value %s"
+#~ msgstr "неисправан показивач диска складиштења везе у %s"
 
 #, fuzzy
 #~ msgid "Cannot find start time in %s"

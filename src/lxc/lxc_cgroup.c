@@ -27,9 +27,6 @@
 #include "virfile.h"
 #include "virerror.h"
 #include "virlog.h"
-#include "virstring.h"
-#include "virsystemd.h"
-#include "virutil.h"
 
 #define VIR_FROM_THIS VIR_FROM_LXC
 
@@ -332,7 +329,7 @@ static int virLXCCgroupSetupDeviceACL(virDomainDef *def,
         const char *dev = NULL;
 
         /* Check if "present" is set to "no" otherwise enable it. */
-        if (!timer->present)
+        if (timer->present == VIR_TRISTATE_BOOL_NO)
             continue;
 
         switch ((virDomainTimerNameType)timer->name) {

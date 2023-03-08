@@ -31,7 +31,6 @@
 #include <unistd.h>
 
 #include "virlog.h"
-#include "vircommand.h"
 #include "virerror.h"
 #include "virfile.h"
 #include "virkmod.h"
@@ -46,7 +45,7 @@ VIR_LOG_INIT("util.pci");
 
 VIR_ENUM_IMPL(virPCIELinkSpeed,
               VIR_PCIE_LINK_SPEED_LAST,
-              "", "2.5", "5", "8", "16",
+              "", "2.5", "5", "8", "16", "32", "64"
 );
 
 VIR_ENUM_IMPL(virPCIStubDriver,
@@ -1666,8 +1665,7 @@ virPCIDeviceListDispose(void *obj)
     size_t i;
 
     for (i = 0; i < list->count; i++) {
-        virPCIDeviceFree(list->devs[i]);
-        list->devs[i] = NULL;
+        g_clear_pointer(&list->devs[i], virPCIDeviceFree);
     }
 
     list->count = 0;
@@ -1866,7 +1864,7 @@ virPCIDeviceAddressIOMMUGroupIterate(virPCIDeviceAddress *orig,
     }
 
     while ((direrr = virDirRead(groupDir, &ent, groupPath)) > 0) {
-        virPCIDeviceAddress newDev;
+        virPCIDeviceAddress newDev = { 0 };
 
         if (virPCIDeviceAddressParse(ent->d_name, &newDev) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR,

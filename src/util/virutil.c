@@ -48,11 +48,9 @@
 
 #include "virerror.h"
 #include "virlog.h"
-#include "virbuffer.h"
 #include "viralloc.h"
 #include "virfile.h"
 #include "vircommand.h"
-#include "virprocess.h"
 #include "virstring.h"
 #include "virutil.h"
 #include "virsocket.h"
@@ -230,52 +228,6 @@ virScaleInteger(unsigned long long *value, const char *suffix,
     return 0;
 }
 
-
-/**
- * virParseVersionString:
- * @str: const char pointer to the version string
- * @version: unsigned long pointer to output the version number
- * @allowMissing: true to treat 3 like 3.0.0, false to error out on
- * missing minor or micro
- *
- * Parse an unsigned version number from a version string. Expecting
- * 'major.minor.micro' format, ignoring an optional suffix.
- *
- * The major, minor and micro numbers are encoded into a single version number:
- *
- *   1000000 * major + 1000 * minor + micro
- *
- * Returns the 0 for success, -1 for error.
- */
-int
-virParseVersionString(const char *str, unsigned long *version,
-                      bool allowMissing)
-{
-    unsigned int major, minor = 0, micro = 0;
-    char *tmp;
-
-    if (virStrToLong_ui(str, &tmp, 10, &major) < 0)
-        return -1;
-
-    if (!allowMissing && *tmp != '.')
-        return -1;
-
-    if ((*tmp == '.') && virStrToLong_ui(tmp + 1, &tmp, 10, &minor) < 0)
-        return -1;
-
-    if (!allowMissing && *tmp != '.')
-        return -1;
-
-    if ((*tmp == '.') && virStrToLong_ui(tmp + 1, &tmp, 10, &micro) < 0)
-        return -1;
-
-    if (major > UINT_MAX / 1000000 || minor > 999 || micro > 999)
-        return -1;
-
-    *version = 1000000 * major + 1000 * minor + micro;
-
-    return 0;
-}
 
 /**
  * Format @val as a base-10 decimal number, in the
@@ -915,9 +867,11 @@ virDoesGroupExist(const char *name)
 
 
 
-/* Work around an incompatibility of OS X 10.11: getgrouplist
+/* Work around an incompatibility of macOS: getgrouplist
    accepts int *, not gid_t *, and int and gid_t differ in sign.  */
+# ifdef __APPLE__
 VIR_WARNINGS_NO_POINTER_SIGN
+# endif
 
 /* Compute the list of primary and supplementary groups associated
  * with @uid, and including @gid in the list (unless it is -1),
@@ -980,7 +934,9 @@ virGetGroupList(uid_t uid, gid_t gid, gid_t **list)
     return ret;
 }
 
+# ifdef __APPLE__
 VIR_WARNINGS_RESET
+# endif
 
 
 /* Set the real and effective uid and gid to the given values, as well
@@ -1324,128 +1280,6 @@ virValidateWWN(const char *wwn)
     return true;
 }
 
-#if defined(major) && defined(minor)
-int
-virGetDeviceID(const char *path, int *maj, int *min)
-{
-    struct stat sb;
-
-    if (stat(path, &sb) < 0)
-        return -errno;
-
-    if (!S_ISBLK(sb.st_mode))
-        return -EINVAL;
-
-    if (maj)
-        *maj = major(sb.st_rdev);
-    if (min)
-        *min = minor(sb.st_rdev);
-
-    return 0;
-}
-#else
-int
-virGetDeviceID(const char *path G_GNUC_UNUSED,
-               int *maj,
-               int *min)
-{
-    *maj = *min = 0;
-    return -ENOSYS;
-}
-#endif
-
-#define SYSFS_DEV_BLOCK_PATH "/sys/dev/block"
-
-char *
-virGetUnprivSGIOSysfsPath(const char *path,
-                          const char *sysfs_dir)
-{
-    int maj, min;
-    int rc;
-
-    if ((rc = virGetDeviceID(path, &maj, &min)) < 0) {
-        virReportSystemError(-rc,
-                             _("Unable to get device ID '%s'"),
-                             path);
-        return NULL;
-    }
-
-    return g_strdup_printf("%s/%d:%d/queue/unpriv_sgio",
-                           sysfs_dir ? sysfs_dir : SYSFS_DEV_BLOCK_PATH, maj,
-                           min);
-}
-
-int
-virSetDeviceUnprivSGIO(const char *path,
-                       const char *sysfs_dir,
-                       int unpriv_sgio)
-{
-    char *sysfs_path = NULL;
-    char *val = NULL;
-    int ret = -1;
-    int rc;
-
-    if (!(sysfs_path = virGetUnprivSGIOSysfsPath(path, sysfs_dir)))
-        return -1;
-
-    if (!virFileExists(sysfs_path)) {
-        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("unpriv_sgio is not supported by this kernel"));
-        goto cleanup;
-    }
-
-    val = g_strdup_printf("%d", unpriv_sgio);
-
-    if ((rc = virFileWriteStr(sysfs_path, val, 0)) < 0) {
-        virReportSystemError(-rc, _("failed to set %s"), sysfs_path);
-        goto cleanup;
-    }
-
-    ret = 0;
- cleanup:
-    VIR_FREE(sysfs_path);
-    VIR_FREE(val);
-    return ret;
-}
-
-int
-virGetDeviceUnprivSGIO(const char *path,
-                       const char *sysfs_dir,
-                       int *unpriv_sgio)
-{
-    char *sysfs_path = NULL;
-    char *buf = NULL;
-    char *tmp = NULL;
-    int ret = -1;
-
-    if (!(sysfs_path = virGetUnprivSGIOSysfsPath(path, sysfs_dir)))
-        return -1;
-
-    if (!virFileExists(sysfs_path)) {
-        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("unpriv_sgio is not supported by this kernel"));
-        goto cleanup;
-    }
-
-    if (virFileReadAll(sysfs_path, 1024, &buf) < 0)
-        goto cleanup;
-
-    if ((tmp = strchr(buf, '\n')))
-        *tmp = '\0';
-
-    if (virStrToLong_i(buf, NULL, 10, unpriv_sgio) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to parse value of %s"), sysfs_path);
-        goto cleanup;
-    }
-
-    ret = 0;
- cleanup:
-    VIR_FREE(sysfs_path);
-    VIR_FREE(buf);
-    return ret;
-}
-
 
 /**
  * virParseOwnershipIds:
@@ -1598,15 +1432,11 @@ virHostHasIOMMU(void)
 {
     g_autoptr(DIR) iommuDir = NULL;
     struct dirent *iommuGroup = NULL;
-    int direrr;
 
     if (virDirOpenQuiet(&iommuDir, "/sys/kernel/iommu_groups/") < 0)
         return false;
 
-    while ((direrr = virDirRead(iommuDir, &iommuGroup, NULL)) > 0)
-        break;
-
-    if (direrr < 0 || !iommuGroup)
+    if (virDirRead(iommuDir, &iommuGroup, NULL) < 0 || !iommuGroup)
         return false;
 
     return true;

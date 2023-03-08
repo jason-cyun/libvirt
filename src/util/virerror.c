@@ -27,7 +27,6 @@
 #include "viralloc.h"
 #include "virlog.h"
 #include "virthread.h"
-#include "virstring.h"
 #include "virbuffer.h"
 
 #define LIBVIRT_VIRERRORPRIV_H_ALLOW
@@ -254,6 +253,8 @@ virLastErrorObject(void)
  * threads can safely access this concurrently.
  *
  * Returns a pointer to the last error or NULL if none occurred.
+ *
+ * Since: 0.1.0
  */
 virErrorPtr
 virGetLastError(void)
@@ -271,6 +272,8 @@ virGetLastError(void)
  * Get the most recent error code (enum virErrorNumber).
  *
  * Returns the most recent error code, or VIR_ERR_OK if none is set.
+ *
+ * Since: 4.5.0
  */
 int
 virGetLastErrorCode(void)
@@ -289,6 +292,8 @@ virGetLastErrorCode(void)
  *
  * Returns a numerical value of the most recent error's origin, or VIR_FROM_NONE
  * if none is set.
+ *
+ * Since: 4.5.0
  */
 int
 virGetLastErrorDomain(void)
@@ -307,6 +312,8 @@ virGetLastErrorDomain(void)
  *
  * Returns the most recent error message string in this
  * thread, or a generic message if none is set
+ *
+ * Since: 1.0.6
  */
 const char *
 virGetLastErrorMessage(void)
@@ -361,6 +368,8 @@ virSetError(virErrorPtr newerr)
  * One will need to free the result with virResetError()
  *
  * Returns error code or -1 in case of parameter error.
+ *
+ * Since: 0.1.0
  */
 int
 virCopyLastError(virErrorPtr to)
@@ -392,6 +401,8 @@ virCopyLastError(virErrorPtr to)
  * Returns a pointer to the copied error or NULL if allocation failed.
  * It is the caller's responsibility to free the error with
  * virFreeError().
+ *
+ * Since: 0.6.1
  */
 virErrorPtr
 virSaveLastError(void)
@@ -445,8 +456,7 @@ virErrorRestore(virErrorPtr *savederr)
         return;
 
     virSetError(*savederr);
-    virFreeError(*savederr);
-    *savederr = NULL;
+    g_clear_pointer(savederr, virFreeError);
     errno = saved_errno;
 }
 
@@ -456,6 +466,8 @@ virErrorRestore(virErrorPtr *savederr)
  * @err: pointer to the virError to clean up
  *
  * Reset the error being pointed to
+ *
+ * Since: 0.1.0
  */
 void
 virResetError(virErrorPtr err)
@@ -474,6 +486,8 @@ virResetError(virErrorPtr err)
  * @err: error to free
  *
  * Resets and frees the given error.
+ *
+ * Since: 0.6.1
  */
 void
 virFreeError(virErrorPtr err)
@@ -490,6 +504,8 @@ virFreeError(virErrorPtr err)
  * The error object is kept in thread local storage, so separate
  * threads can safely access this concurrently, only resetting
  * their own error object.
+ *
+ * Since: 0.1.0
  */
 void
 virResetLastError(void)
@@ -520,6 +536,8 @@ virResetLastError(void)
  * remains for backwards compatibility.
  *
  * Returns a pointer to the last error or NULL if none occurred.
+ *
+ * Since: 0.1.0
  */
 virErrorPtr
 virConnGetLastError(virConnectPtr conn)
@@ -554,6 +572,8 @@ virConnGetLastError(virConnectPtr conn)
  *
  * Returns 0 if no error was found and the error code otherwise and -1 in case
  *         of parameter error.
+ *
+ * Since: 0.1.0
  */
 int
 virConnCopyLastError(virConnectPtr conn, virErrorPtr to)
@@ -580,6 +600,8 @@ virConnCopyLastError(virConnectPtr conn, virErrorPtr to)
  * threads can safely access this concurrently.
  *
  * Reset the last error caught on that connection
+ *
+ * Since: 0.1.0
  */
 void
 virConnResetLastError(virConnectPtr conn)
@@ -599,6 +621,8 @@ virConnResetLastError(virConnectPtr conn)
  * Set a library global error handling function, if @handler is NULL,
  * it will reset to default printing on stderr. The error raised there
  * are those for which no handler at the connection level could caught.
+ *
+ * Since: 0.1.0
  */
 void
 virSetErrorFunc(void *userData, virErrorFunc handler)
@@ -616,6 +640,8 @@ virSetErrorFunc(void *userData, virErrorFunc handler)
  * Set a connection error handling function, if @handler is NULL
  * it will reset to default which is to pass error back to the global
  * library handler.
+ *
+ * Since: 0.1.0
  */
 void
 virConnSetErrorFunc(virConnectPtr conn, void *userData,
@@ -634,6 +660,8 @@ virConnSetErrorFunc(virConnectPtr conn, void *userData,
  * @err: pointer to the error.
  *
  * Default routine reporting an error to stderr.
+ *
+ * Since: 0.1.0
  */
 void
 virDefaultErrorFunc(virErrorPtr err)

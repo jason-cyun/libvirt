@@ -28,12 +28,10 @@
 #include "viruuid.h"
 #include "network_conf.h"
 #include "esx_private.h"
-#include "esx_network_driver.h"
 #include "esx_vi.h"
 #include "esx_vi_methods.h"
 #include "esx_util.h"
 #include "vircrypto.h"
-#include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_ESX
 
@@ -279,7 +277,7 @@ esxNetworkDefineXMLFlags(virConnectPtr conn, const char *xml,
 {
     virNetworkPtr network = NULL;
     esxPrivate *priv = conn->privateData;
-    virNetworkDef *def = NULL;
+    g_autoptr(virNetworkDef) def = NULL;
     esxVI_HostVirtualSwitch *hostVirtualSwitch = NULL;
     esxVI_HostPortGroup *hostPortGroupList = NULL;
     esxVI_HostPortGroup *hostPortGroup = NULL;
@@ -298,7 +296,7 @@ esxNetworkDefineXMLFlags(virConnectPtr conn, const char *xml,
         return NULL;
 
     /* Parse network XML */
-    def = virNetworkDefParseString(xml, NULL, !!(flags & VIR_NETWORK_DEFINE_VALIDATE));
+    def = virNetworkDefParse(xml, NULL, NULL, !!(flags & VIR_NETWORK_DEFINE_VALIDATE));
 
     if (!def)
         return NULL;
@@ -485,7 +483,6 @@ esxNetworkDefineXMLFlags(virConnectPtr conn, const char *xml,
     network = virGetNetwork(conn, hostVirtualSwitch->name, md5);
 
  cleanup:
-    virNetworkDefFree(def);
     esxVI_HostVirtualSwitch_Free(&hostVirtualSwitch);
     esxVI_HostPortGroup_Free(&hostPortGroupList);
     esxVI_HostVirtualSwitchSpec_Free(&hostVirtualSwitchSpec);
@@ -660,7 +657,7 @@ esxNetworkGetXMLDesc(virNetworkPtr network_, unsigned int flags)
     esxVI_String *networkNameList = NULL;
     esxVI_String *hostPortGroupKey = NULL;
     esxVI_String *networkName = NULL;
-    virNetworkDef *def;
+    g_autoptr(virNetworkDef) def = NULL;
 
     if (esxVI_EnsureSession(priv->primary) < 0)
         return NULL;
@@ -814,7 +811,6 @@ esxNetworkGetXMLDesc(virNetworkPtr network_, unsigned int flags)
     esxVI_String_Free(&propertyNameList);
     esxVI_ObjectContent_Free(&networkList);
     esxVI_String_Free(&networkNameList);
-    virNetworkDefFree(def);
 
     return xml;
 }

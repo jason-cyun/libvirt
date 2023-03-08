@@ -86,9 +86,9 @@ int virTypedParamsReplaceString(virTypedParameterPtr *params,
                                 const char *name,
                                 const char *value);
 
-int virTypedParamsCopy(virTypedParameterPtr *dst,
-                       virTypedParameterPtr src,
-                       int nparams);
+void virTypedParamsCopy(virTypedParameterPtr *dst,
+                        virTypedParameterPtr src,
+                        int nparams);
 
 char *virTypedParameterToString(virTypedParameterPtr param);
 
@@ -137,6 +137,10 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(virTypedParamList, virTypedParamListFree);
 
 size_t virTypedParamListStealParams(virTypedParamList *list,
                                     virTypedParameterPtr *params);
+
+virTypedParamList *
+virTypedParamListFromParams(virTypedParameterPtr *params,
+                            size_t nparams);
 
 int virTypedParamListAddInt(virTypedParamList *list,
                             int value,

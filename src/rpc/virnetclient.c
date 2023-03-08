@@ -34,7 +34,6 @@
 #include "virutil.h"
 #include "virerror.h"
 #include "virprobe.h"
-#include "virstring.h"
 #include "vireventglibwatch.h"
 
 #define VIR_FROM_THIS VIR_FROM_RPC
@@ -659,7 +658,7 @@ int virNetClientRegisterAsyncIO(virNetClient *client)
                                   VIR_EVENT_HANDLE_READABLE,
                                   virNetClientIncomingEvent,
                                   client,
-                                  virObjectFreeCallback) < 0) {
+                                  virObjectUnref) < 0) {
         virObjectUnref(client);
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Unable to register async IO callback"));
@@ -689,7 +688,7 @@ int virNetClientRegisterKeepAlive(virNetClient *client)
     if (!(ka = virKeepAliveNew(-1, 0, client,
                                virNetClientKeepAliveSendCB,
                                virNetClientKeepAliveDeadCB,
-                               virObjectFreeCallback)))
+                               virObjectUnref)))
         return -1;
 
     /* keepalive object has a reference to client */
@@ -791,19 +790,15 @@ virNetClientCloseLocked(virNetClient *client)
     if (!client->sock)
         return;
 
-    virObjectUnref(client->sock);
-    client->sock = NULL;
-    virObjectUnref(client->tls);
-    client->tls = NULL;
+    g_clear_pointer(&client->sock, virObjectUnref);
+    g_clear_pointer(&client->tls, virObjectUnref);
 #if WITH_SASL
-    virObjectUnref(client->sasl);
-    client->sasl = NULL;
+    g_clear_pointer(&client->sasl, virObjectUnref);
 #endif
     ka = g_steal_pointer(&client->keepalive);
     client->wantClose = false;
 
-    virFreeError(client->error);
-    client->error = NULL;
+    g_clear_pointer(&client->error, virFreeError);
 
     if (ka || client->closeCb) {
         virNetClientCloseFunc closeCb = client->closeCb;
@@ -1025,8 +1020,7 @@ int virNetClientSetTLSSession(virNetClient *client,
     return 0;
 
  error:
-    virObjectUnref(client->tls);
-    client->tls = NULL;
+    g_clear_pointer(&client->tls, virObjectUnref);
     virObjectUnlock(client);
     return -1;
 }

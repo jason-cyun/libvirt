@@ -1,4 +1,3 @@
-html_xslt_gen_xslt = subsite_xsl
 html_xslt_gen_install_dir = docs_html_dir / 'manpages'
 html_xslt_gen = []
 
@@ -19,10 +18,14 @@ docs_man_files = [
   { 'name': 'virt-pki-query-dn', 'section': '1', 'install': true },
   { 'name': 'virt-pki-validate', 'section': '1', 'install': true },
   { 'name': 'virt-qemu-run', 'section': '1', 'install': conf.has('WITH_QEMU') },
+  { 'name': 'virt-qemu-qmp-proxy', 'section': '1', 'install': conf.has('WITH_QEMU') },
   { 'name': 'virt-xml-validate', 'section': '1', 'install': true },
+  { 'name': 'virt-qemu-sev-validate', 'section': '1', 'install': conf.has('WITH_QEMU') },
 
+  { 'name': 'libvirt-guests', 'section': '8', 'install': conf.has('WITH_LIBVIRTD') },
   { 'name': 'libvirtd', 'section': '8', 'install': conf.has('WITH_LIBVIRTD') },
   { 'name': 'virt-sanlock-cleanup', 'section': '8', 'install': conf.has('WITH_SANLOCK') },
+  { 'name': 'virt-ssh-helper', 'section': '8', 'install': conf.has('WITH_LIBVIRTD') },
   { 'name': 'virtbhyved', 'section': '8', 'install': conf.has('WITH_BHYVE') },
   { 'name': 'virtinterfaced', 'section': '8', 'install': conf.has('WITH_INTERFACE') },
   { 'name': 'virtlockd', 'section': '8', 'install': conf.has('WITH_LIBVIRTD') },
@@ -82,10 +85,11 @@ foreach name : keyname_list
   }
 endforeach
 
-docs_man_conf = configuration_data()
-docs_man_conf.set('SYSCONFDIR', sysconfdir)
-docs_man_conf.set('RUNSTATEDIR', runstatedir)
-docs_man_conf.set('VERSION', meson.project_version())
+docs_man_conf = configuration_data({
+  'SYSCONFDIR': sysconfdir,
+  'RUNSTATEDIR': runstatedir,
+  'VERSION': meson.project_version(),
+})
 
 foreach data : docs_man_files
   rst_in_file = '@0@.rst'.format(data['name'])
@@ -127,6 +131,7 @@ foreach data : docs_man_files
     'name': data['name'],
     'file': html_in,
     'source': 'docs' / 'manpages' / rst_in_file,
+    'href_base': '../',
   }
 endforeach
 
@@ -144,10 +149,11 @@ foreach data : html_xslt_gen
     command: [
       xsltproc_prog,
       '--stringparam', 'pagesrc', data.get('source', ''),
-      '--stringparam', 'builddir', meson.build_root(),
+      '--stringparam', 'builddir', meson.project_build_root(),
       '--stringparam', 'timestamp', docs_timestamp,
+      '--stringparam', 'href_base', data.get('href_base', ''),
       '--nonet',
-      html_xslt_gen_xslt,
+      site_xsl,
       '@INPUT@',
     ],
     depends: data.get('depends', []),

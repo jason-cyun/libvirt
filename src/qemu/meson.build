@@ -15,6 +15,7 @@ qemu_driver_sources = [
   'qemu_domainjob.c',
   'qemu_driver.c',
   'qemu_extdevice.c',
+  'qemu_fd.c',
   'qemu_firmware.c',
   'qemu_hostdev.c',
   'qemu_hotplug.c',
@@ -27,6 +28,7 @@ qemu_driver_sources = [
   'qemu_monitor_json.c',
   'qemu_monitor_text.c',
   'qemu_namespace.c',
+  'qemu_passt.c',
   'qemu_process.c',
   'qemu_qapi.c',
   'qemu_saveimage.c',
@@ -129,12 +131,36 @@ if conf.has('WITH_QEMU')
     ],
   }
 
-  virt_conf_files += files('qemu.conf')
+  qemu_user_group_conf = configuration_data({
+    'QEMU_USER': qemu_user,
+    'QEMU_GROUP': qemu_group,
+  })
+  qemu_conf = configure_file(
+    input: 'qemu.conf.in',
+    output: 'qemu.conf',
+    configuration: qemu_user_group_conf,
+  )
+
+  qemu_user_group_hack_conf = configuration_data({
+    'QEMU_USER': qemu_user,
+    'QEMU_GROUP': qemu_group,
+    # This hack is necessary because the output file is going to be
+    # used as input for another configure_file() call later, which
+    # will take care of substituting @CONFIG@ with useful data
+    'CONFIG': '@CONFIG@',
+  })
+  test_libvirtd_qemu_aug_tmp = configure_file(
+    input: 'test_libvirtd_qemu.aug.in',
+    output: 'test_libvirtd_qemu.aug.tmp',
+    configuration: qemu_user_group_hack_conf,
+  )
+
+  virt_conf_files += qemu_conf
   virt_aug_files += files('libvirtd_qemu.aug')
   virt_test_aug_files += {
     'name': 'test_libvirtd_qemu.aug',
-    'aug': files('test_libvirtd_qemu.aug.in'),
-    'conf': files('qemu.conf'),
+    'aug': test_libvirtd_qemu_aug_tmp,
+    'conf': qemu_conf,
     'test_name': 'libvirtd_qemu',
     'test_srcdir': meson.current_source_dir(),
     'test_builddir': meson.current_build_dir(),
@@ -165,11 +191,6 @@ if conf.has('WITH_QEMU')
     'in_file': files('virtqemud.init.in'),
   }
 
-  sysconf_files += {
-    'name': 'virtqemud',
-    'file': files('virtqemud.sysconf'),
-  }
-
   if conf.has('WITH_SYSCTL')
     install_data(
       'postcopy-migration.sysctl',
@@ -179,12 +200,25 @@ if conf.has('WITH_QEMU')
   endif
 
   virt_install_dirs += [
-    localstatedir / 'lib' / 'libvirt' / 'qemu',
-    runstatedir / 'libvirt' / 'qemu',
+    confdir / 'qemu',
+    confdir / 'qemu' / 'autostart',
     localstatedir / 'cache' / 'libvirt' / 'qemu',
-    localstatedir / 'log' / 'libvirt' / 'qemu',
+    localstatedir / 'lib' / 'libvirt' / 'qemu',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'channel',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'channel' / 'target',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'checkpoint',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'dump',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'nvram',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'ram',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'save',
+    localstatedir / 'lib' / 'libvirt' / 'qemu' / 'snapshot',
     localstatedir / 'lib' / 'libvirt' / 'swtpm',
-    runstatedir / 'libvirt' / 'qemu' / 'swtpm',
+    localstatedir / 'log' / 'libvirt' / 'qemu',
     localstatedir / 'log' / 'swtpm' / 'libvirt' / 'qemu',
+    runstatedir / 'libvirt' / 'qemu',
+    runstatedir / 'libvirt' / 'qemu' / 'dbus',
+    runstatedir / 'libvirt' / 'qemu' / 'passt',
+    runstatedir / 'libvirt' / 'qemu' / 'slirp',
+    runstatedir / 'libvirt' / 'qemu' / 'swtpm',
   ]
 endif

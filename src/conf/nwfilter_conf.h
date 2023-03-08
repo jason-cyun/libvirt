@@ -26,7 +26,6 @@
 
 #include "internal.h"
 
-#include "virhash.h"
 #include "virxml.h"
 #include "virbuffer.h"
 #include "virsocketaddr.h"
@@ -523,9 +522,11 @@ struct _virNWFilterDef {
 
 void
 virNWFilterRuleDefFree(virNWFilterRuleDef *def);
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(virNWFilterRuleDef, virNWFilterRuleDefFree);
 
 void
 virNWFilterDefFree(virNWFilterDef *def);
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(virNWFilterDef, virNWFilterDefFree);
 
 int
 virNWFilterTriggerRebuild(void);
@@ -533,10 +534,6 @@ virNWFilterTriggerRebuild(void);
 int
 virNWFilterDeleteDef(const char *configDir,
                      virNWFilterDef *def);
-
-virNWFilterDef *
-virNWFilterDefParseNode(xmlDocPtr xml,
-                        xmlNodePtr root);
 
 char *
 virNWFilterDefFormat(const virNWFilterDef *def);
@@ -546,20 +543,9 @@ virNWFilterSaveConfig(const char *configDir,
                       virNWFilterDef *def);
 
 virNWFilterDef *
-virNWFilterDefParseString(const char *xml,
-                          unsigned int flags);
-
-virNWFilterDef *
-virNWFilterDefParseFile(const char *filename);
-
-void
-virNWFilterWriteLockFilterUpdates(void);
-
-void
-virNWFilterReadLockFilterUpdates(void);
-
-void
-virNWFilterUnlockFilterUpdates(void);
+virNWFilterDefParse(const char *xmlStr,
+                    const char *filename,
+                    unsigned int flags);
 
 typedef int (*virNWFilterTriggerRebuildCallback)(void *opaque);
 

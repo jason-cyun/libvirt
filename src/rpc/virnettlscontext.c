@@ -38,8 +38,6 @@
 #include "virthread.h"
 #include "configmake.h"
 
-#define DH_BITS 2048
-
 #define LIBVIRT_PKI_DIR SYSCONFDIR "/pki"
 #define LIBVIRT_CACERT LIBVIRT_PKI_DIR "/CA/cacert.pem"
 #define LIBVIRT_CACRL LIBVIRT_PKI_DIR "/CA/cacrl.pem"
@@ -56,7 +54,6 @@ struct _virNetTLSContext {
     virObjectLockable parent;
 
     gnutls_certificate_credentials_t x509cred;
-    gnutls_dh_params_t dhParams;
 
     bool isServer;
     bool requireValidCert;
@@ -477,7 +474,7 @@ static gnutls_x509_crt_t virNetTLSContextLoadCertFromFile(const char *certFile,
 {
     gnutls_datum_t data;
     gnutls_x509_crt_t cert = NULL;
-    char *buf = NULL;
+    g_autofree char *buf = NULL;
     int ret = -1;
 
     VIR_DEBUG("isServer %d certFile %s",
@@ -507,10 +504,8 @@ static gnutls_x509_crt_t virNetTLSContextLoadCertFromFile(const char *certFile,
 
  cleanup:
     if (ret != 0) {
-        gnutls_x509_crt_deinit(cert);
-        cert = NULL;
+        g_clear_pointer(&cert, gnutls_x509_crt_deinit);
     }
-    VIR_FREE(buf);
     return cert;
 }
 
@@ -521,14 +516,13 @@ static int virNetTLSContextLoadCACertListFromFile(const char *certFile,
                                                   size_t *ncerts)
 {
     gnutls_datum_t data;
-    char *buf = NULL;
-    int ret = -1;
+    g_autofree char *buf = NULL;
 
     *ncerts = 0;
     VIR_DEBUG("certFile %s", certFile);
 
     if (virFileReadAll(certFile, (1<<16), &buf) < 0)
-        goto cleanup;
+        return -1;
 
     data.data = (unsigned char *)buf;
     data.size = strlen(buf);
@@ -537,15 +531,11 @@ static int virNetTLSContextLoadCACertListFromFile(const char *certFile,
         virReportError(VIR_ERR_SYSTEM_ERROR,
                        _("Unable to import CA certificate list %s"),
                        certFile);
-        goto cleanup;
+        return -1;
     }
     *ncerts = certMax;
 
-    ret = 0;
-
- cleanup:
-    VIR_FREE(buf);
-    return ret;
+    return 0;
 }
 
 
@@ -712,31 +702,6 @@ static virNetTLSContext *virNetTLSContextNew(const char *cacert,
     if (virNetTLSContextLoadCredentials(ctxt, isServer, cacert, cacrl, cert, key) < 0)
         goto error;
 
-    /* Generate Diffie Hellman parameters - for use with DHE
-     * kx algorithms. These should be discarded and regenerated
-     * once a day, once a week or once a month. Depending on the
-     * security requirements.
-     */
-    if (isServer) {
-        err = gnutls_dh_params_init(&ctxt->dhParams);
-        if (err < 0) {
-            virReportError(VIR_ERR_SYSTEM_ERROR,
-                           _("Unable to initialize diffie-hellman parameters: %s"),
-                           gnutls_strerror(err));
-            goto error;
-        }
-        err = gnutls_dh_params_generate2(ctxt->dhParams, DH_BITS);
-        if (err < 0) {
-            virReportError(VIR_ERR_SYSTEM_ERROR,
-                           _("Unable to generate diffie-hellman parameters: %s"),
-                           gnutls_strerror(err));
-            goto error;
-        }
-
-        gnutls_certificate_set_dh_params(ctxt->x509cred,
-                                         ctxt->dhParams);
-    }
-
     ctxt->requireValidCert = requireValidCert;
     ctxt->x509dnACL = x509dnACL;
     ctxt->isServer = isServer;
@@ -748,8 +713,6 @@ static virNetTLSContext *virNetTLSContextNew(const char *cacert,
     return ctxt;
 
  error:
-    if (isServer)
-        gnutls_dh_params_deinit(ctxt->dhParams);
     virObjectUnref(ctxt);
     return NULL;
 }
@@ -943,9 +906,6 @@ int virNetTLSContextReloadForServer(virNetTLSContext *ctxt,
 
     if (virNetTLSContextLoadCredentials(ctxt, true, cacert, cacrl, cert, key))
         goto error;
-
-    gnutls_certificate_set_dh_params(ctxt->x509cred,
-                                     ctxt->dhParams);
 
     gnutls_certificate_free_credentials(x509credBak);
 
@@ -1150,7 +1110,6 @@ void virNetTLSContextDispose(void *obj)
           "ctxt=%p", ctxt);
 
     g_free(ctxt->priority);
-    gnutls_dh_params_deinit(ctxt->dhParams);
     gnutls_certificate_free_credentials(ctxt->x509cred);
 }
 
@@ -1233,8 +1192,6 @@ virNetTLSSession *virNetTLSSessionNew(virNetTLSContext *ctxt,
      */
     if (ctxt->isServer) {
         gnutls_certificate_server_set_request(sess->session, GNUTLS_CERT_REQUEST);
-
-        gnutls_dh_set_prime_bits(sess->session, DH_BITS);
     }
 
     gnutls_transport_set_ptr(sess->session, sess);

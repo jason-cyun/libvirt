@@ -27,7 +27,6 @@
 #ifndef WIN32
 # include <sys/wait.h>
 #endif
-#include <unistd.h>
 #if WITH_SYS_MOUNT_H
 # include <sys/mount.h>
 #endif
@@ -57,6 +56,10 @@
 # include <windows.h>
 #endif
 
+#ifdef __linux__
+# include <sys/prctl.h>
+#endif
+
 #include "virprocess.h"
 #include "virerror.h"
 #include "viralloc.h"
@@ -69,49 +72,6 @@
 #define VIR_FROM_THIS VIR_FROM_NONE
 
 VIR_LOG_INIT("util.process");
-
-#ifdef __linux__
-/*
- * Workaround older glibc. While kernel may support the setns
- * syscall, the glibc wrapper might not exist. If that's the
- * case, use our own.
- */
-# ifndef __NR_setns
-#  if defined(__x86_64__)
-#   define __NR_setns 308
-#  elif defined(__i386__)
-#   define __NR_setns 346
-#  elif defined(__arm__)
-#   define __NR_setns 375
-#  elif defined(__aarch64__)
-#   define __NR_setns 375
-#  elif defined(__powerpc__)
-#   define __NR_setns 350
-#  elif defined(__s390__)
-#   define __NR_setns 339
-#  endif
-# endif
-
-# ifndef WITH_SETNS
-#  if defined(__NR_setns)
-#   include <sys/syscall.h>
-
-static inline int setns(int fd, int nstype)
-{
-    return syscall(__NR_setns, fd, nstype);
-}
-#  else /* !__NR_setns */
-#   error Please determine the syscall number for setns on your architecture
-#  endif
-# endif
-#else /* !__linux__ */
-static inline int setns(int fd G_GNUC_UNUSED, int nstype G_GNUC_UNUSED)
-{
-    virReportSystemError(ENOSYS, "%s",
-                         _("Namespaces are not supported on this platform."));
-    return -1;
-}
-#endif
 
 VIR_ENUM_IMPL(virProcessSchedPolicy,
               VIR_PROC_POLICY_LAST,
@@ -714,6 +674,7 @@ int virProcessGetNamespaces(pid_t pid,
 }
 
 
+#ifdef __linux__
 int virProcessSetNamespaces(size_t nfdlist,
                             int *fdlist)
 {
@@ -742,6 +703,16 @@ int virProcessSetNamespaces(size_t nfdlist,
     }
     return 0;
 }
+#else
+int virProcessSetNamespaces(size_t nfdlist G_GNUC_UNUSED,
+                            int *fdlist G_GNUC_UNUSED)
+{
+    virReportSystemError(ENOSYS, "%s",
+                         _("Namespaces are not supported on this platform."));
+    return -1;
+}
+#endif
+
 
 #if WITH_PRLIMIT
 static int
@@ -959,6 +930,7 @@ virProcessSetMaxMemLock(pid_t pid, unsigned long long bytes)
                              _("cannot limit locked memory "
                                "of process %lld to %llu"),
                              (long long int)pid, bytes);
+        return -1;
     }
 
     VIR_DEBUG("Locked memory for process %lld limited to %llu bytes",
@@ -1764,3 +1736,276 @@ virProcessGetStat(pid_t pid,
 
     return ret;
 }
+
+
+#ifdef __linux__
+int
+virProcessGetStatInfo(unsigned long long *cpuTime,
+                      unsigned long long *userTime,
+                      unsigned long long *sysTime,
+                      int *lastCpu,
+                      long *vm_rss,
+                      pid_t pid,
+                      pid_t tid)
+{
+    g_auto(GStrv) proc_stat = virProcessGetStat(pid, tid);
+    unsigned long long utime = 0;
+    unsigned long long stime = 0;
+    const unsigned long long jiff2nsec = 1000ull * 1000ull * 1000ull /
+                                         (unsigned long long) sysconf(_SC_CLK_TCK);
+    long rss = 0;
+    int cpu = 0;
+
+    if (!proc_stat ||
+        virStrToLong_ullp(proc_stat[VIR_PROCESS_STAT_UTIME], NULL, 10, &utime) < 0 ||
+        virStrToLong_ullp(proc_stat[VIR_PROCESS_STAT_STIME], NULL, 10, &stime) < 0 ||
+        virStrToLong_l(proc_stat[VIR_PROCESS_STAT_RSS], NULL, 10, &rss) < 0 ||
+        virStrToLong_i(proc_stat[VIR_PROCESS_STAT_PROCESSOR], NULL, 10, &cpu) < 0) {
+        VIR_WARN("cannot parse process status data");
+    }
+
+    utime *= jiff2nsec;
+    stime *= jiff2nsec;
+    if (cpuTime)
+        *cpuTime = utime + stime;
+    if (userTime)
+        *userTime = utime;
+    if (sysTime)
+        *sysTime = stime;
+    if (lastCpu)
+        *lastCpu = cpu;
+
+    if (vm_rss)
+        *vm_rss = rss * virGetSystemPageSizeKB();
+
+
+    VIR_DEBUG("Got status for %d/%d user=%llu sys=%llu cpu=%d rss=%ld",
+              (int) pid, tid, utime, stime, cpu, rss);
+
+    return 0;
+}
+
+int
+virProcessGetSchedInfo(unsigned long long *cpuWait,
+                       pid_t pid,
+                       pid_t tid)
+{
+    g_autofree char *proc = NULL;
+    g_autofree char *data = NULL;
+    g_auto(GStrv) lines = NULL;
+    size_t i;
+    double val;
+
+    *cpuWait = 0;
+
+    /* In general, we cannot assume pid_t fits in int; but /proc parsing
+     * is specific to Linux where int works fine.  */
+    if (tid)
+        proc = g_strdup_printf("/proc/%d/task/%d/sched", (int) pid, (int) tid);
+    else
+        proc = g_strdup_printf("/proc/%d/sched", (int) pid);
+
+    /* The file is not guaranteed to exist (needs CONFIG_SCHED_DEBUG) */
+    if (access(proc, R_OK) < 0) {
+        return 0;
+    }
+
+    if (virFileReadAll(proc, (1 << 16), &data) < 0)
+        return -1;
+
+    lines = g_strsplit(data, "\n", 0);
+    if (!lines)
+        return -1;
+
+    for (i = 0; lines[i] != NULL; i++) {
+        const char *line = lines[i];
+
+        /* Needs CONFIG_SCHEDSTATS. The second check
+         * is the old name the kernel used in past */
+        if (STRPREFIX(line, "se.statistics.wait_sum") ||
+            STRPREFIX(line, "se.wait_sum")) {
+            line = strchr(line, ':');
+            if (!line) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                               _("Missing separator in sched info '%s'"),
+                               lines[i]);
+                return -1;
+            }
+            line++;
+            while (*line == ' ')
+                line++;
+
+            if (virStrToDouble(line, NULL, &val) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                               _("Unable to parse sched info value '%s'"),
+                               line);
+                return -1;
+            }
+
+            *cpuWait = (unsigned long long) (val * 1000000);
+            break;
+        }
+    }
+
+    return 0;
+}
+
+#else
+int
+virProcessGetStatInfo(unsigned long long *cpuTime,
+                      unsigned long long *userTime,
+                      unsigned long long *sysTime,
+                      int *lastCpu,
+                      long *vm_rss,
+                      pid_t pid G_GNUC_UNUSED,
+                      pid_t tid G_GNUC_UNUSED)
+{
+    /* We don't have a way to collect this information on non-Linux
+     * platforms, so just report neutral values */
+    if (cpuTime)
+        *cpuTime = 0;
+    if (userTime)
+        *userTime = 0;
+    if (sysTime)
+        *sysTime = 0;
+    if (lastCpu)
+        *lastCpu = 0;
+    if (vm_rss)
+        *vm_rss = 0;
+
+    return 0;
+}
+
+int
+virProcessGetSchedInfo(unsigned long long *cpuWait,
+                       pid_t pid G_GNUC_UNUSED,
+                       pid_t tid G_GNUC_UNUSED)
+{
+    /* We don't have a way to collect this information on non-Linux
+     * platforms, so just report neutral values */
+    if (cpuWait)
+        *cpuWait = 0;
+
+    return 0;
+}
+#endif /* __linux__ */
+
+#ifdef __linux__
+# ifndef PR_SCHED_CORE
+/* Copied from linux/prctl.h */
+#  define PR_SCHED_CORE             62
+#  define PR_SCHED_CORE_GET         0
+#  define PR_SCHED_CORE_CREATE      1 /* create unique core_sched cookie */
+#  define PR_SCHED_CORE_SHARE_TO    2 /* push core_sched cookie to pid */
+#  define PR_SCHED_CORE_SHARE_FROM  3 /* pull core_sched cookie to pid */
+# endif
+
+/* Unfortunately, kernel-headers forgot to export these. */
+# ifndef PR_SCHED_CORE_SCOPE_THREAD
+#  define PR_SCHED_CORE_SCOPE_THREAD 0
+#  define PR_SCHED_CORE_SCOPE_THREAD_GROUP 1
+#  define PR_SCHED_CORE_SCOPE_PROCESS_GROUP 2
+# endif
+
+/**
+ * virProcessSchedCoreAvailable:
+ *
+ * Check whether kernel supports Core Scheduling (CONFIG_SCHED_CORE), i.e. only
+ * a defined set of PIDs/TIDs can run on sibling Hyper Threads at the same
+ * time.
+ *
+ * Returns: 1 if Core Scheduling is available,
+ *          0 if Core Scheduling is NOT available,
+ *         -1 otherwise.
+ */
+int
+virProcessSchedCoreAvailable(void)
+{
+    unsigned long cookie = 0;
+    int rc;
+
+    /* Let's just see if we can get our own sched cookie, and if yes we can
+     * safely assume CONFIG_SCHED_CORE kernel is available. */
+    rc = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, 0,
+               PR_SCHED_CORE_SCOPE_THREAD, &cookie);
+
+    return rc == 0 ? 1 : errno == EINVAL ? 0 : -1;
+}
+
+/**
+ * virProcessSchedCoreCreate:
+ *
+ * Creates a new trusted group for the caller process.
+ *
+ * Returns: 0 on success,
+ *         -1 otherwise, with errno set.
+ */
+int
+virProcessSchedCoreCreate(void)
+{
+    /* pid = 0 (3rd argument) means the calling process. */
+    return prctl(PR_SCHED_CORE, PR_SCHED_CORE_CREATE, 0,
+                 PR_SCHED_CORE_SCOPE_THREAD_GROUP, 0);
+}
+
+/**
+ * virProcessSchedCoreShareFrom:
+ * @pid: PID to share group with
+ *
+ * Places the current caller process into the trusted group of @pid.
+ *
+ * Returns: 0 on success,
+ *         -1 otherwise, with errno set.
+ */
+int
+virProcessSchedCoreShareFrom(pid_t pid)
+{
+    return prctl(PR_SCHED_CORE, PR_SCHED_CORE_SHARE_FROM, pid,
+                 PR_SCHED_CORE_SCOPE_THREAD, 0);
+}
+
+/**
+ * virProcessSchedCoreShareTo:
+ * @pid: PID to share group with
+ *
+ * Places foreign @pid into the trusted group of the current caller process.
+ *
+ * Returns: 0 on success,
+ *         -1 otherwise, with errno set.
+ */
+int
+virProcessSchedCoreShareTo(pid_t pid)
+{
+    return prctl(PR_SCHED_CORE, PR_SCHED_CORE_SHARE_TO, pid,
+                 PR_SCHED_CORE_SCOPE_THREAD, 0);
+}
+
+#else /* !__linux__ */
+
+int
+virProcessSchedCoreAvailable(void)
+{
+    return 0;
+}
+
+int
+virProcessSchedCoreCreate(void)
+{
+    errno = ENOSYS;
+    return -1;
+}
+
+int
+virProcessSchedCoreShareFrom(pid_t pid G_GNUC_UNUSED)
+{
+    errno = ENOSYS;
+    return -1;
+}
+
+int
+virProcessSchedCoreShareTo(pid_t pid G_GNUC_UNUSED)
+{
+    errno = ENOSYS;
+    return -1;
+}
+#endif /* !__linux__ */

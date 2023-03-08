@@ -24,7 +24,7 @@
 #include <config.h>
 
 #include <sys/types.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -169,11 +169,12 @@ vzGetDriverConnection(void)
                        "%s", _("vz state driver is not active"));
         return NULL;
     }
-    virMutexLock(&vz_driver_lock);
-    if (!vz_driver)
-        vz_driver = vzDriverObjNew();
-    virObjectRef(vz_driver);
-    virMutexUnlock(&vz_driver_lock);
+
+    VIR_WITH_MUTEX_LOCK_GUARD(&vz_driver_lock) {
+        if (!vz_driver)
+            vz_driver = vzDriverObjNew();
+        virObjectRef(vz_driver);
+    }
 
     return vz_driver;
 }
@@ -181,13 +182,13 @@ vzGetDriverConnection(void)
 void
 vzDestroyDriverConnection(void)
 {
-    struct _vzDriver *driver;
-    struct _vzConn *privconn_list;
+    struct _vzDriver *driver = NULL;
+    struct _vzConn *privconn_list = NULL;
 
-    virMutexLock(&vz_driver_lock);
-    driver = g_steal_pointer(&vz_driver);
-    privconn_list = g_steal_pointer(&vz_conn_list);
-    virMutexUnlock(&vz_driver_lock);
+    VIR_WITH_MUTEX_LOCK_GUARD(&vz_driver_lock) {
+        driver = g_steal_pointer(&vz_driver);
+        privconn_list = g_steal_pointer(&vz_conn_list);
+    }
 
     while (privconn_list) {
         struct _vzConn *privconn = privconn_list;
@@ -330,7 +331,7 @@ vzDriverObjNew(void)
     if (!(driver->caps = vzBuildCapabilities()) ||
         !(driver->xmlopt = virDomainXMLOptionNew(&vzDomainDefParserConfig,
                                                  &vzDomainXMLPrivateDataCallbacksPtr,
-                                                 NULL, NULL, NULL)) ||
+                                                 NULL, NULL, NULL, NULL)) ||
         !(driver->domains = virDomainObjListNew()) ||
         !(driver->domainEventState = virObjectEventStateNew()) ||
         (vzInitVersion(driver) < 0) ||
@@ -382,10 +383,10 @@ vzConnectOpen(virConnectPtr conn,
     if (!(privconn->closeCallback = virNewConnectCloseCallbackData()))
         goto error;
 
-    virMutexLock(&vz_driver_lock);
-    privconn->next = vz_conn_list;
-    vz_conn_list = privconn;
-    virMutexUnlock(&vz_driver_lock);
+    VIR_WITH_MUTEX_LOCK_GUARD(&vz_driver_lock) {
+        privconn->next = vz_conn_list;
+        vz_conn_list = privconn;
+    }
 
     return VIR_DRV_OPEN_SUCCESS;
 
@@ -407,15 +408,14 @@ vzConnectClose(virConnectPtr conn)
     if (!privconn)
         return 0;
 
-    virMutexLock(&vz_driver_lock);
-    for (curr = vz_conn_list; curr; prev = &curr->next, curr = curr->next) {
-        if (curr == privconn) {
-            *prev = curr->next;
-            break;
+    VIR_WITH_MUTEX_LOCK_GUARD(&vz_driver_lock) {
+        for (curr = vz_conn_list; curr; prev = &curr->next, curr = curr->next) {
+            if (curr == privconn) {
+                *prev = curr->next;
+                break;
+            }
         }
     }
-
-    virMutexUnlock(&vz_driver_lock);
 
     virObjectUnref(privconn->closeCallback);
     virObjectUnref(privconn->driver);
@@ -2018,53 +2018,43 @@ vzConnectRegisterCloseCallback(virConnectPtr conn,
                                virFreeCallback freecb)
 {
     struct _vzConn *privconn = conn->privateData;
-    int ret = -1;
 
     if (virConnectRegisterCloseCallbackEnsureACL(conn) < 0)
         return -1;
 
-    virObjectLock(privconn->driver);
+    VIR_WITH_OBJECT_LOCK_GUARD(privconn->driver) {
+        if (virConnectCloseCallbackDataGetCallback(privconn->closeCallback) != NULL) {
+            virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                           _("A close callback is already registered"));
+            return -1;
+        }
 
-    if (virConnectCloseCallbackDataGetCallback(privconn->closeCallback) != NULL) {
-        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("A close callback is already registered"));
-        goto cleanup;
+        virConnectCloseCallbackDataRegister(privconn->closeCallback, conn, cb,
+                                            opaque, freecb);
     }
 
-    virConnectCloseCallbackDataRegister(privconn->closeCallback, conn, cb,
-                                        opaque, freecb);
-    ret = 0;
-
- cleanup:
-    virObjectUnlock(privconn->driver);
-
-    return ret;
+    return 0;
 }
 
 static int
 vzConnectUnregisterCloseCallback(virConnectPtr conn, virConnectCloseFunc cb)
 {
     struct _vzConn *privconn = conn->privateData;
-    int ret = -1;
 
     if (virConnectUnregisterCloseCallbackEnsureACL(conn) < 0)
         return -1;
 
-    virObjectLock(privconn->driver);
+    VIR_WITH_OBJECT_LOCK_GUARD(privconn->driver) {
+        if (virConnectCloseCallbackDataGetCallback(privconn->closeCallback) != cb) {
+            virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                           _("A different callback was requested"));
+            return -1;
+        }
 
-    if (virConnectCloseCallbackDataGetCallback(privconn->closeCallback) != cb) {
-        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("A different callback was requested"));
-        goto cleanup;
+        virConnectCloseCallbackDataUnregister(privconn->closeCallback, cb);
     }
 
-    virConnectCloseCallbackDataUnregister(privconn->closeCallback, cb);
-    ret = 0;
-
- cleanup:
-    virObjectUnlock(privconn->driver);
-
-    return ret;
+    return 0;
 }
 
 static int vzDomainSetMemoryFlags(virDomainPtr domain, unsigned long memory,
@@ -2580,7 +2570,7 @@ vzDomainSnapshotCreateXML(virDomainPtr domain,
     virDomainObj *dom;
     struct _vzConn *privconn = domain->conn->privateData;
     struct _vzDriver *driver = privconn->driver;
-    unsigned int parse_flags = VIR_DOMAIN_SNAPSHOT_PARSE_DISKS;
+    unsigned int parse_flags = 0;
     virDomainSnapshotObjList *snapshots = NULL;
     virDomainMomentObj *current;
     bool job = false;
@@ -3006,8 +2996,13 @@ vzDomainMigratePrepare3Params(virConnectPtr conn,
 static int
 vzConnectSupportsFeature(virConnectPtr conn G_GNUC_UNUSED, int feature)
 {
+    int supported;
+
     if (virConnectSupportsFeatureEnsureACL(conn) < 0)
         return -1;
+
+    if (virDriverFeatureIsGlobal(feature, &supported))
+        return supported;
 
     switch ((virDrvFeature) feature) {
     case VIR_DRV_FEATURE_MIGRATION_PARAMS:
@@ -3079,7 +3074,7 @@ vzDomainMigratePerformStep(virDomainObj *dom,
 {
     int ret = -1;
     struct vzDomObj *privdom = dom->privateData;
-    virURI *vzuri = NULL;
+    g_autoptr(virURI) vzuri = NULL;
     const char *miguri = NULL;
     const char *dname = NULL;
     vzMigrationCookie *mig = NULL;
@@ -3122,7 +3117,6 @@ vzDomainMigratePerformStep(virDomainObj *dom,
  cleanup:
     if (job)
         vzDomainObjEndJob(dom);
-    virURIFree(vzuri);
     vzMigrationCookieFree(mig);
 
     return ret;
@@ -3150,8 +3144,7 @@ vzDomainMigratePerformP2P(virDomainObj *dom,
     int ret = -1;
     int maxparams = nparams;
 
-    if (virTypedParamsCopy(&params, orig_params, nparams) < 0)
-        return -1;
+    virTypedParamsCopy(&params, orig_params, nparams);
 
     if (!(dconn = virConnectOpen(dconnuri)))
         goto done;
@@ -3778,10 +3771,9 @@ vzConnectGetAllDomainStats(virConnectPtr conn,
                                     lflags, true) < 0)
             return -1;
     } else {
-        if (virDomainObjListCollect(driver->domains, conn, &doms, &ndoms,
-                                    virConnectGetAllDomainStatsCheckACL,
-                                    lflags) < 0)
-            return -1;
+        virDomainObjListCollect(driver->domains, conn, &doms, &ndoms,
+                                virConnectGetAllDomainStatsCheckACL,
+                                lflags);
     }
 
     tmpstats = g_new0(virDomainStatsRecordPtr, ndoms + 1);
@@ -3790,9 +3782,9 @@ vzConnectGetAllDomainStats(virConnectPtr conn,
         virDomainStatsRecordPtr tmp;
         virDomainObj *dom = doms[i];
 
-        virObjectLock(dom);
-        tmp = vzDomainGetAllStats(conn, dom);
-        virObjectUnlock(dom);
+        VIR_WITH_OBJECT_LOCK_GUARD(dom) {
+            tmp = vzDomainGetAllStats(conn, dom);
+        }
 
         if (!tmp)
             goto cleanup;
@@ -4071,8 +4063,7 @@ static int
 vzStateCleanup(void)
 {
     if (vz_driver_privileged) {
-        virObjectUnref(vz_driver);
-        vz_driver = NULL;
+        g_clear_pointer(&vz_driver, virObjectUnref);
         if (vz_driver_lock_fd != -1)
             virPidFileRelease(VZ_STATEDIR, "driver", vz_driver_lock_fd);
         virMutexDestroy(&vz_driver_lock);
@@ -4084,6 +4075,7 @@ vzStateCleanup(void)
 static int
 vzStateInitialize(bool privileged,
                   const char *root,
+                  bool monolithic G_GNUC_UNUSED,
                   virStateInhibitCallback callback G_GNUC_UNUSED,
                   void *opaque G_GNUC_UNUSED)
 {

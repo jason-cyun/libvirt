@@ -21,7 +21,6 @@
 
 #include <getopt.h>
 #include <signal.h>
-#include <stdarg.h>
 #include <unistd.h>
 
 #include "internal.h"
@@ -180,9 +179,9 @@ main(int argc, char **argv)
     bool autoshell = false;
 
     struct option opt[] = {
-        {"help", no_argument, NULL, 'h'},
-        {"version", optional_argument, NULL, 'V'},
-        {NULL, 0, NULL, 0}
+        { "help", no_argument, NULL, 'h' },
+        { "version", optional_argument, NULL, 'V' },
+        { NULL, 0, NULL, 0 },
     };
     if (virInitialize() < 0) {
         fprintf(stderr, _("Failed to initialize libvirt error handling"));

@@ -22,7 +22,10 @@
 
 #include "domain_conf.h"
 #include "vircommand.h"
-#include "virstoragefile.h"
+
+#define DEV_SEV "/dev/sev"
+#define DEV_SGX_VEPC "/dev/sgx_vepc"
+#define DEV_SGX_PROVISION "/dev/sgx_provision"
 
 typedef struct _virSecurityManager virSecurityManager;
 
@@ -215,10 +218,12 @@ int virSecurityManagerRestoreChardevLabel(virSecurityManager *mgr,
                                           bool chardevStdioLogd);
 
 int virSecurityManagerSetTPMLabels(virSecurityManager *mgr,
-                                   virDomainDef *vm);
+                                   virDomainDef *vm,
+                                   bool setTPMStateLabel);
 
 int virSecurityManagerRestoreTPMLabels(virSecurityManager *mgr,
-                                       virDomainDef *vm);
+                                       virDomainDef *vm,
+                                       bool restoreTPMStateLabel);
 
 int virSecurityManagerSetNetdevLabel(virSecurityManager *mgr,
                                      virDomainDef *vm,

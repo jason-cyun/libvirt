@@ -34,19 +34,14 @@
 #include "qemu_namespace.h"
 #include "qemu_security.h"
 #include "viruuid.h"
-#include "virbuffer.h"
 #include "virconf.h"
 #include "viralloc.h"
-#include "datatypes.h"
 #include "virxml.h"
 #include "virlog.h"
 #include "cpu/cpu.h"
 #include "domain_driver.h"
-#include "domain_nwfilter.h"
 #include "virfile.h"
-#include "virsocket.h"
 #include "virstring.h"
-#include "storage_conf.h"
 #include "virutil.h"
 #include "configmake.h"
 #include "security/security_util.h"
@@ -71,6 +66,14 @@ VIR_LOG_INIT("qemu.qemu_conf");
 #define QEMU_MIGRATION_PORT_MIN 49152
 #define QEMU_MIGRATION_PORT_MAX 49215
 
+VIR_ENUM_IMPL(virQEMUSchedCore,
+              QEMU_SCHED_CORE_LAST,
+              "none",
+              "vcpus",
+              "emulator",
+              "full");
+
+
 static virClass *virQEMUDriverConfigClass;
 static void virQEMUDriverConfigDispose(void *obj);
 
@@ -85,17 +88,6 @@ static int virQEMUConfigOnceInit(void)
 VIR_ONCE_GLOBAL_INIT(virQEMUConfig);
 
 
-static void
-qemuDriverLock(virQEMUDriver *driver)
-{
-    virMutexLock(&driver->lock);
-}
-static void
-qemuDriverUnlock(virQEMUDriver *driver)
-{
-    virMutexUnlock(&driver->lock);
-}
-
 #ifndef DEFAULT_LOADER_NVRAM
 # define DEFAULT_LOADER_NVRAM \
     "/usr/share/OVMF/OVMF_CODE.fd:/usr/share/OVMF/OVMF_VARS.fd:" \
@@ -106,7 +98,7 @@ qemuDriverUnlock(virQEMUDriver *driver)
 
 
 virQEMUDriverConfig *virQEMUDriverConfigNew(bool privileged,
-                                              const char *root)
+                                            const char *root)
 {
     g_autoptr(virQEMUDriverConfig) cfg = NULL;
 
@@ -181,12 +173,6 @@ virQEMUDriverConfig *virQEMUDriverConfigNew(bool privileged,
         cfg->memoryBackingDir = g_strdup_printf("%s/ram", cfg->libDir);
         cfg->swtpmStorageDir = g_strdup_printf("%s/lib/libvirt/swtpm",
                                                LOCALSTATEDIR);
-        if (!virDoesUserExist("tss") ||
-            virGetUserID("tss", &cfg->swtpm_user) < 0)
-            cfg->swtpm_user = 0; /* fall back to root */
-        if (!virDoesGroupExist("tss") ||
-            virGetGroupID("tss", &cfg->swtpm_group) < 0)
-            cfg->swtpm_group = 0; /* fall back to root */
     } else {
         g_autofree char *rundir = NULL;
         g_autofree char *cachedir = NULL;
@@ -233,6 +219,7 @@ virQEMUDriverConfig *virQEMUDriverConfigNew(bool privileged,
     cfg->configDir = g_strdup_printf("%s/qemu", cfg->configBaseDir);
     cfg->autostartDir = g_strdup_printf("%s/qemu/autostart", cfg->configBaseDir);
     cfg->slirpStateDir = g_strdup_printf("%s/slirp", cfg->stateDir);
+    cfg->passtStateDir = g_strdup_printf("%s/passt", cfg->stateDir);
     cfg->dbusStateDir = g_strdup_printf("%s/dbus", cfg->stateDir);
 
     /* Set the default directory to find TLS X.509 certificates.
@@ -318,6 +305,7 @@ static void virQEMUDriverConfigDispose(void *obj)
     g_free(cfg->stateDir);
     g_free(cfg->swtpmStateDir);
     g_free(cfg->slirpStateDir);
+    g_free(cfg->passtStateDir);
     g_free(cfg->dbusStateDir);
 
     g_free(cfg->libDir);
@@ -451,6 +439,12 @@ virQEMUDriverConfigLoadVNCEntry(virQEMUDriverConfig *cfg,
     if (virConfGetValueBool(conf, "vnc_allow_host_audio", &cfg->vncAllowHostAudio) < 0)
         return -1;
 
+    if (cfg->vncPassword &&
+        strlen(cfg->vncPassword) > 8) {
+        VIR_WARN("VNC password is %zu characters long, only 8 permitted, truncating",
+                 strlen(cfg->vncPassword));
+        cfg->vncPassword[8] = '\0';
+    }
     return 0;
 }
 
@@ -639,6 +633,7 @@ virQEMUDriverConfigLoadProcessEntry(virQEMUDriverConfig *cfg,
     g_auto(GStrv) hugetlbfs = NULL;
     g_autofree char *stdioHandler = NULL;
     g_autofree char *corestr = NULL;
+    g_autofree char *schedCore = NULL;
     size_t i;
 
     if (virConfGetValueStringList(conf, "hugetlbfs_mount", true,
@@ -714,6 +709,35 @@ virQEMUDriverConfigLoadProcessEntry(virQEMUDriverConfig *cfg,
                            stdioHandler);
             return -1;
         }
+    }
+
+    if (virConfGetValueString(conf, "sched_core", &schedCore) < 0)
+        return -1;
+    if (schedCore) {
+        int val = virQEMUSchedCoreTypeFromString(schedCore);
+
+        if (val < 0) {
+            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                           _("Unknown sched_core value %s"),
+                           schedCore);
+            return -1;
+        }
+
+        if (val != QEMU_SCHED_CORE_NONE) {
+            int rv = virProcessSchedCoreAvailable();
+
+            if (rv < 0) {
+                virReportSystemError(errno, "%s",
+                                     _("Unable to detect SCHED_CORE"));
+                return -1;
+            } else if (rv == 0) {
+                virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                               _("SCHED_CORE not supported by kernel"));
+                return -1;
+            }
+        }
+
+        cfg->schedCore = val;
     }
 
     return 0;
@@ -1273,40 +1297,45 @@ virQEMUDriverConfigSetDefaults(virQEMUDriverConfig *cfg)
 
 virQEMUDriverConfig *virQEMUDriverGetConfig(virQEMUDriver *driver)
 {
-    virQEMUDriverConfig *conf;
-    qemuDriverLock(driver);
-    conf = virObjectRef(driver->config);
-    qemuDriverUnlock(driver);
-    return conf;
+    VIR_LOCK_GUARD lock = virLockGuardLock(&driver->lock);
+
+    return virObjectRef(driver->config);
 }
 
 virDomainXMLOption *
 virQEMUDriverCreateXMLConf(virQEMUDriver *driver,
                            const char *defsecmodel)
 {
+    g_autoptr(virQEMUDriverConfig) cfg = virQEMUDriverGetConfig(driver);
+    virDomainXMLOption *ret = NULL;
+
     virQEMUDriverDomainDefParserConfig.priv = driver;
     virQEMUDriverDomainDefParserConfig.defSecModel = defsecmodel;
-    return virDomainXMLOptionNew(&virQEMUDriverDomainDefParserConfig,
-                                 &virQEMUDriverPrivateDataCallbacks,
-                                 &virQEMUDriverDomainXMLNamespace,
-                                 &virQEMUDriverDomainABIStability,
-                                 &virQEMUDriverDomainSaveCookie);
+    virQEMUDriverDomainJobConfig.maxQueuedJobs = cfg->maxQueuedJobs;
+
+    ret = virDomainXMLOptionNew(&virQEMUDriverDomainDefParserConfig,
+                                &virQEMUDriverPrivateDataCallbacks,
+                                &virQEMUDriverDomainXMLNamespace,
+                                &virQEMUDriverDomainABIStability,
+                                &virQEMUDriverDomainSaveCookie,
+                                &virQEMUDriverDomainJobConfig);
+
+    virDomainXMLOptionSetCloseCallbackAlloc(ret, virCloseCallbacksDomainAlloc);
+
+    return ret;
 }
 
 
 virCPUDef *
 virQEMUDriverGetHostCPU(virQEMUDriver *driver)
 {
-    virCPUDef *hostcpu;
+    virCPUDef *hostcpu = NULL;
 
-    qemuDriverLock(driver);
-
-    if (!driver->hostcpu)
-        driver->hostcpu = virCPUProbeHost(virArchFromHost());
-
-    hostcpu = driver->hostcpu;
-
-    qemuDriverUnlock(driver);
+    VIR_WITH_MUTEX_LOCK_GUARD(&driver->lock) {
+        if (!driver->hostcpu)
+            driver->hostcpu = virCPUProbeHost(virArchFromHost());
+        hostcpu = driver->hostcpu;
+    }
 
     if (hostcpu)
         virCPUDefRef(hostcpu);
@@ -1383,32 +1412,27 @@ virCaps *virQEMUDriverCreateCapabilities(virQEMUDriver *driver)
  * Returns: a reference to a virCaps *instance or NULL
  */
 virCaps *virQEMUDriverGetCapabilities(virQEMUDriver *driver,
-                                        bool refresh)
+                                      bool refresh)
 {
-    virCaps *ret = NULL;
     if (refresh) {
         virCaps *caps = NULL;
         if ((caps = virQEMUDriverCreateCapabilities(driver)) == NULL)
             return NULL;
 
-        qemuDriverLock(driver);
-        virObjectUnref(driver->caps);
-        driver->caps = caps;
-    } else {
-        qemuDriverLock(driver);
-
-        if (driver->caps == NULL ||
-            driver->caps->nguests == 0) {
-            VIR_DEBUG("Capabilities didn't detect any guests. Forcing a "
-                      "refresh.");
-            qemuDriverUnlock(driver);
-            return virQEMUDriverGetCapabilities(driver, true);
+        VIR_WITH_MUTEX_LOCK_GUARD(&driver->lock) {
+            virObjectUnref(driver->caps);
+            driver->caps = caps;
+            return virObjectRef(driver->caps);
         }
     }
 
-    ret = virObjectRef(driver->caps);
-    qemuDriverUnlock(driver);
-    return ret;
+    VIR_WITH_MUTEX_LOCK_GUARD(&driver->lock) {
+        if (driver->caps && driver->caps->nguests > 0)
+            return virObjectRef(driver->caps);
+    }
+
+    VIR_DEBUG("Capabilities didn't detect any guests. Forcing a refresh.");
+    return virQEMUDriverGetCapabilities(driver, true);
 }
 
 
@@ -1431,6 +1455,27 @@ virQEMUDriverGetDomainCapabilities(virQEMUDriver *driver,
     g_autoptr(virDomainCaps) domCaps = NULL;
     const char *path = virQEMUCapsGetBinary(qemuCaps);
 
+    if (!virQEMUCapsIsArchSupported(qemuCaps, arch)) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("Emulator '%s' does not support arch '%s'"),
+                       path, virArchToString(arch));
+        return NULL;
+    }
+
+    if (!virQEMUCapsIsVirtTypeSupported(qemuCaps, virttype)) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("Emulator '%s' does not support virt type '%s'"),
+                       path, virDomainVirtTypeToString(virttype));
+        return NULL;
+    }
+
+    if (!virQEMUCapsIsMachineSupported(qemuCaps, virttype, machine)) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                       _("Emulator '%s' does not support machine type '%s'"),
+                       path, NULLSTR(machine));
+        return NULL;
+    }
+
     if (!(domCaps = virDomainCapsNew(path, machine, arch, virttype)))
         return NULL;
 
@@ -1443,454 +1488,6 @@ virQEMUDriverGetDomainCapabilities(virQEMUDriver *driver,
     return g_steal_pointer(&domCaps);
 }
 
-
-struct _qemuSharedDeviceEntry {
-    size_t ref;
-    char **domains; /* array of domain names */
-};
-
-/* Construct the hash key for sharedDevices as "major:minor" */
-char *
-qemuGetSharedDeviceKey(const char *device_path)
-{
-    int maj, min;
-    int rc;
-
-    if ((rc = virGetDeviceID(device_path, &maj, &min)) < 0) {
-        virReportSystemError(-rc,
-                             _("Unable to get minor number of device '%s'"),
-                             device_path);
-        return NULL;
-    }
-
-    return g_strdup_printf("%d:%d", maj, min);
-}
-
-/*
- * Make necessary checks for the need to check and for the current setting
- * of the 'unpriv_sgio' value for the device_path passed.
- *
- * Returns:
- *  0 - Success
- * -1 - Some failure which would already have been messaged
- * -2 - Mismatch with the "shared" sgio setting - needs to be messaged
- *      by caller since it has context of which type of disk resource is
- *      being used and in the future the hostdev information.
- */
-static int
-qemuCheckUnprivSGIO(GHashTable *sharedDevices,
-                    const char *device_path,
-                    int sgio)
-{
-    g_autofree char *sysfs_path = NULL;
-    g_autofree char *key = NULL;
-    int val;
-
-    if (!(sysfs_path = virGetUnprivSGIOSysfsPath(device_path, NULL)))
-        return -1;
-
-    /* It can't be conflict if unpriv_sgio is not supported by kernel. */
-    if (!virFileExists(sysfs_path))
-        return 0;
-
-    if (!(key = qemuGetSharedDeviceKey(device_path)))
-        return -1;
-
-    /* It can't be conflict if no other domain is sharing it. */
-    if (!(virHashLookup(sharedDevices, key)))
-        return 0;
-
-    if (virGetDeviceUnprivSGIO(device_path, NULL, &val) < 0)
-        return -1;
-
-    /* Error message on failure needs to be handled in caller
-     * since there is more specific knowledge of device
-     */
-    if (!((val == 0 &&
-           (sgio == VIR_DOMAIN_DEVICE_SGIO_FILTERED ||
-            sgio == VIR_DOMAIN_DEVICE_SGIO_DEFAULT)) ||
-          (val == 1 &&
-           sgio == VIR_DOMAIN_DEVICE_SGIO_UNFILTERED))) {
-        return -2;
-    }
-
-    return 0;
-}
-
-
-/* Check if a shared device's setting conflicts with the conf
- * used by other domain(s). Currently only checks the sgio
- * setting. Note that this should only be called for disk with
- * block source if the device type is disk.
- *
- * Returns 0 if no conflicts, otherwise returns -1.
- */
-static int
-qemuCheckSharedDisk(GHashTable *sharedDevices,
-                    virDomainDiskDef *disk)
-{
-    int ret;
-
-    if (disk->device != VIR_DOMAIN_DISK_DEVICE_LUN)
-        return 0;
-
-    if ((ret = qemuCheckUnprivSGIO(sharedDevices, disk->src->path,
-                                   disk->sgio)) < 0) {
-        if (ret == -2) {
-            if (virDomainDiskGetType(disk) == VIR_STORAGE_TYPE_VOLUME) {
-                virReportError(VIR_ERR_OPERATION_INVALID,
-                               _("sgio of shared disk 'pool=%s' 'volume=%s' "
-                                 "conflicts with other active domains"),
-                               disk->src->srcpool->pool,
-                               disk->src->srcpool->volume);
-            } else {
-                virReportError(VIR_ERR_OPERATION_INVALID,
-                               _("sgio of shared disk '%s' conflicts with "
-                                 "other active domains"),
-                               disk->src->path);
-            }
-        }
-        return -1;
-    }
-
-    return 0;
-}
-
-
-bool
-qemuSharedDeviceEntryDomainExists(qemuSharedDeviceEntry *entry,
-                                  const char *name,
-                                  int *idx)
-{
-    size_t i;
-
-    for (i = 0; i < entry->ref; i++) {
-        if (STREQ(entry->domains[i], name)) {
-            if (idx)
-                *idx = i;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void
-qemuSharedDeviceEntryFree(void *payload)
-{
-    qemuSharedDeviceEntry *entry = payload;
-    size_t i;
-
-    if (!entry)
-        return;
-
-    for (i = 0; i < entry->ref; i++)
-        g_free(entry->domains[i]);
-    g_free(entry->domains);
-    g_free(entry);
-}
-
-
-static int
-qemuSharedDeviceEntryInsert(virQEMUDriver *driver,
-                            const char *key,
-                            const char *name)
-{
-    qemuSharedDeviceEntry *entry = NULL;
-
-    if ((entry = virHashLookup(driver->sharedDevices, key))) {
-        /* Nothing to do if the shared scsi host device is already
-         * recorded in the table.
-         */
-        if (!qemuSharedDeviceEntryDomainExists(entry, name, NULL)) {
-            VIR_EXPAND_N(entry->domains, entry->ref, 1);
-            entry->domains[entry->ref - 1] = g_strdup(name);
-        }
-    } else {
-        entry = g_new0(qemuSharedDeviceEntry, 1);
-        entry->domains = g_new0(char *, 1);
-
-        entry->domains[0] = g_strdup(name);
-
-        entry->ref = 1;
-
-        if (virHashAddEntry(driver->sharedDevices, key, entry) < 0)
-            goto error;
-    }
-
-    return 0;
-
- error:
-    qemuSharedDeviceEntryFree(entry);
-    return -1;
-}
-
-
-static int
-qemuSharedDeviceEntryRemove(virQEMUDriver *driver,
-                            const char *key,
-                            const char *name)
-{
-    qemuSharedDeviceEntry *entry = NULL;
-    int idx;
-
-    if (!(entry = virHashLookup(driver->sharedDevices, key)))
-        return -1;
-
-    /* Nothing to do if the shared disk is not recorded in the table. */
-    if (!qemuSharedDeviceEntryDomainExists(entry, name, &idx))
-        return 0;
-
-    if (entry->ref != 1) {
-        VIR_FREE(entry->domains[idx]);
-        VIR_DELETE_ELEMENT(entry->domains, idx, entry->ref);
-    } else {
-        ignore_value(virHashRemoveEntry(driver->sharedDevices, key));
-    }
-
-    return 0;
-}
-
-
-static int
-qemuSharedDiskAddRemoveInternal(virQEMUDriver *driver,
-                                virDomainDiskDef *disk,
-                                const char *name,
-                                bool addDisk)
-{
-    g_autofree char *key = NULL;
-    int ret = -1;
-
-    if (virStorageSourceIsEmpty(disk->src) ||
-        !disk->src->shared ||
-        !virStorageSourceIsBlockLocal(disk->src))
-        return 0;
-
-    qemuDriverLock(driver);
-
-    if (!(key = qemuGetSharedDeviceKey(virDomainDiskGetSource(disk))))
-        goto cleanup;
-
-    if (addDisk) {
-        if (qemuCheckSharedDisk(driver->sharedDevices, disk) < 0)
-            goto cleanup;
-
-        if (qemuSharedDeviceEntryInsert(driver, key, name) < 0)
-            goto cleanup;
-    } else {
-        if (qemuSharedDeviceEntryRemove(driver, key, name) < 0)
-            goto cleanup;
-    }
-
-    ret = 0;
- cleanup:
-    qemuDriverUnlock(driver);
-    return ret;
-}
-
-
-/* qemuAddSharedDisk:
- * @driver: Pointer to qemu driver struct
- * @src: disk source
- * @name: The domain name
- *
- * Increase ref count and add the domain name into the list which
- * records all the domains that use the shared device if the entry
- * already exists, otherwise add a new entry.
- */
-int
-qemuAddSharedDisk(virQEMUDriver *driver,
-                  virDomainDiskDef *disk,
-                  const char *name)
-{
-    return qemuSharedDiskAddRemoveInternal(driver, disk, name, true);
-}
-
-
-static bool
-qemuIsSharedHostdev(virDomainHostdevDef *hostdev)
-{
-    return (hostdev->shareable &&
-            (virHostdevIsSCSIDevice(hostdev) &&
-             hostdev->source.subsys.u.scsi.protocol !=
-             VIR_DOMAIN_HOSTDEV_SCSI_PROTOCOL_TYPE_ISCSI));
-}
-
-
-static char *
-qemuGetHostdevPath(virDomainHostdevDef *hostdev)
-{
-    virDomainHostdevSubsysSCSI *scsisrc = &hostdev->source.subsys.u.scsi;
-    virDomainHostdevSubsysSCSIHost *scsihostsrc = &scsisrc->u.host;
-    g_autofree char *dev_name = NULL;
-
-    if (!(dev_name = virSCSIDeviceGetDevName(NULL,
-                                             scsihostsrc->adapter,
-                                             scsihostsrc->bus,
-                                             scsihostsrc->target,
-                                             scsihostsrc->unit)))
-        return NULL;
-
-    return g_strdup_printf("/dev/%s", dev_name);
-}
-
-
-static int
-qemuSharedHostdevAddRemoveInternal(virQEMUDriver *driver,
-                                   virDomainHostdevDef *hostdev,
-                                   const char *name,
-                                   bool addDevice)
-{
-    g_autofree char *dev_path = NULL;
-    g_autofree char *key = NULL;
-    int ret = -1;
-
-    if (!qemuIsSharedHostdev(hostdev))
-        return 0;
-
-    if (!(dev_path = qemuGetHostdevPath(hostdev)) ||
-        !(key = qemuGetSharedDeviceKey(dev_path)))
-        return -1;
-
-    qemuDriverLock(driver);
-
-    if (addDevice)
-        ret = qemuSharedDeviceEntryInsert(driver, key, name);
-    else
-        ret = qemuSharedDeviceEntryRemove(driver, key, name);
-
-    qemuDriverUnlock(driver);
-
-    return ret;
-}
-
-static int
-qemuSharedDeviceAddRemoveInternal(virQEMUDriver *driver,
-                                  virDomainDeviceDef *dev,
-                                  const char *name,
-                                  bool addDevice)
-{
-    /* Currently the only conflicts we have to care about for
-     * the shared disk and shared host device is "sgio" setting,
-     * which is only valid for block disk and scsi host device.
-     */
-    if (dev->type == VIR_DOMAIN_DEVICE_DISK)
-        return qemuSharedDiskAddRemoveInternal(driver, dev->data.disk,
-                                               name, addDevice);
-    if (dev->type == VIR_DOMAIN_DEVICE_HOSTDEV)
-        return qemuSharedHostdevAddRemoveInternal(driver, dev->data.hostdev,
-                                                  name, addDevice);
-    return 0;
-}
-
-
-/* qemuAddSharedDevice:
- * @driver: Pointer to qemu driver struct
- * @dev: The device def
- * @name: The domain name
- *
- * Increase ref count and add the domain name into the list which
- * records all the domains that use the shared device if the entry
- * already exists, otherwise add a new entry.
- */
-int
-qemuAddSharedDevice(virQEMUDriver *driver,
-                    virDomainDeviceDef *dev,
-                    const char *name)
-{
-    return qemuSharedDeviceAddRemoveInternal(driver, dev, name, true);
-}
-
-
-int
-qemuRemoveSharedDisk(virQEMUDriver *driver,
-                     virDomainDiskDef *disk,
-                     const char *name)
-{
-    return qemuSharedDiskAddRemoveInternal(driver, disk, name, false);
-}
-
-
-/* qemuRemoveSharedDevice:
- * @driver: Pointer to qemu driver struct
- * @device: The device def
- * @name: The domain name
- *
- * Decrease ref count and remove the domain name from the list which
- * records all the domains that use the shared device if ref is not
- * 1, otherwise remove the entry.
- */
-int
-qemuRemoveSharedDevice(virQEMUDriver *driver,
-                       virDomainDeviceDef *dev,
-                       const char *name)
-{
-    return qemuSharedDeviceAddRemoveInternal(driver, dev, name, false);
-}
-
-
-int
-qemuSetUnprivSGIO(virDomainDeviceDef *dev)
-{
-    virDomainDiskDef *disk = NULL;
-    virDomainHostdevDef *hostdev = NULL;
-    g_autofree char *sysfs_path = NULL;
-    const char *path = NULL;
-    int val = -1;
-
-    /* "sgio" is only valid for block disk; cdrom
-     * and floopy disk can have empty source.
-     */
-    if (dev->type == VIR_DOMAIN_DEVICE_DISK) {
-        disk = dev->data.disk;
-
-        if (disk->device != VIR_DOMAIN_DISK_DEVICE_LUN ||
-            !virStorageSourceIsBlockLocal(disk->src))
-            return 0;
-
-        path = virDomainDiskGetSource(disk);
-    } else if (dev->type == VIR_DOMAIN_DEVICE_HOSTDEV) {
-        hostdev = dev->data.hostdev;
-
-        if (!qemuIsSharedHostdev(hostdev))
-            return 0;
-
-        if (hostdev->source.subsys.u.scsi.sgio) {
-            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                           _("'sgio' is not supported for SCSI "
-                             "generic device yet "));
-            return -1;
-        }
-
-        return 0;
-    } else {
-        return 0;
-    }
-
-    if (!(sysfs_path = virGetUnprivSGIOSysfsPath(path, NULL)))
-        return -1;
-
-    /* By default, filter the SG_IO commands, i.e. set unpriv_sgio to 0.  */
-    val = (disk->sgio == VIR_DOMAIN_DEVICE_SGIO_UNFILTERED);
-
-    /* Do not do anything if unpriv_sgio is not supported by the kernel and the
-     * whitelist is enabled.  But if requesting unfiltered access, always call
-     * virSetDeviceUnprivSGIO, to report an error for unsupported unpriv_sgio.
-     */
-    if (virFileExists(sysfs_path) || val == 1) {
-        int curr_val;
-
-        if (virGetDeviceUnprivSGIO(path, NULL, &curr_val) < 0)
-            return -1;
-
-        if (curr_val != val &&
-            virSetDeviceUnprivSGIO(path, NULL, val) < 0) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
 
 int qemuDriverAllocateID(virQEMUDriver *driver)
 {
@@ -2037,5 +1634,32 @@ qemuGetMemoryBackingPath(virQEMUDriver *driver,
         return -1;
 
     *memPath = g_strdup_printf("%s/%s", domainPath, alias);
+    return 0;
+}
+
+
+int
+qemuHugepageMakeBasedir(virQEMUDriver *driver,
+                        virHugeTLBFS *hugepage)
+{
+
+    g_autofree char *hugepagePath = NULL;
+
+    hugepagePath = qemuGetBaseHugepagePath(driver, hugepage);
+
+    if (!hugepagePath)
+        return -1;
+
+    if (g_mkdir_with_parents(hugepagePath, 0777) < 0) {
+        virReportSystemError(errno,
+                             _("unable to create hugepage path %s"),
+                             hugepagePath);
+        return -1;
+    }
+
+    if (driver->privileged &&
+        virFileUpdatePerm(hugepage->mnt_dir, 0, S_IXGRP | S_IXOTH) < 0)
+        return -1;
+
     return 0;
 }

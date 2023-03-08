@@ -30,15 +30,12 @@
 #define LIBVIRT_VIRIDENTITYPRIV_H_ALLOW
 
 #include "internal.h"
-#include "viralloc.h"
 #include "virerror.h"
 #include "viridentitypriv.h"
 #include "virlog.h"
-#include "virobject.h"
 #include "virrandom.h"
 #include "virthread.h"
 #include "virutil.h"
-#include "virstring.h"
 #include "virprocess.h"
 #include "virtypedparam.h"
 #include "virfile.h"
@@ -423,8 +420,7 @@ virIdentity *virIdentityNewCopy(virIdentity *src)
 {
     g_autoptr(virIdentity) ident = virIdentityNew();
 
-    if (virTypedParamsCopy(&ident->params, src->params, src->nparams) < 0)
-        return NULL;
+    virTypedParamsCopy(&ident->params, src->params, src->nparams);
     ident->nparams = src->nparams;
     ident->maxparams = src->nparams;
 
@@ -829,8 +825,8 @@ int virIdentitySetParameters(virIdentity *ident,
     ident->params = NULL;
     ident->nparams = 0;
     ident->maxparams = 0;
-    if (virTypedParamsCopy(&ident->params, params, nparams) < 0)
-        return -1;
+
+    virTypedParamsCopy(&ident->params, params, nparams);
     ident->nparams = nparams;
     ident->maxparams = nparams;
 
@@ -838,17 +834,11 @@ int virIdentitySetParameters(virIdentity *ident,
 }
 
 
-int virIdentityGetParameters(virIdentity *ident,
-                             virTypedParameterPtr *params,
-                             int *nparams)
+virTypedParamList *virIdentityGetParameters(virIdentity *ident)
 {
-    *params = NULL;
-    *nparams = 0;
+    virTypedParameter *tmp = NULL;
 
-    if (virTypedParamsCopy(params, ident->params, ident->nparams) < 0)
-        return -1;
+    virTypedParamsCopy(&tmp, ident->params, ident->nparams);
 
-    *nparams = ident->nparams;
-
-    return 0;
+    return virTypedParamListFromParams(&tmp, ident->nparams);
 }

@@ -26,8 +26,6 @@
 #include "virjson.h"
 #include "virfile.h"
 #include "virhash.h"
-#include "virstring.h"
-#include "viralloc.h"
 
 #define VIR_FROM_THIS VIR_FROM_NETWORK
 
@@ -214,9 +212,7 @@ virMACMapHashDumper(void *payload,
     GSList *next;
 
     for (next = macs; next; next = next->next) {
-        g_autoptr(virJSONValue) m = virJSONValueNewString((const char *) next->data);
-
-        if (virJSONValueArrayAppend(arr, &m) < 0)
+        if (virJSONValueArrayAppendString(arr, (const char *) next->data) < 0)
             return -1;
     }
 

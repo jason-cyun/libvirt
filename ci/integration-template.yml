@@ -1,0 +1,135 @@
+.qemu-build-template: &qemu-build-template
+  - git clone --depth 1 https://gitlab.com/qemu-project/qemu.git
+  - cd qemu
+  #
+  # inspired by upstream QEMU's buildtest-template.yml
+  - export JOBS="$(expr $(nproc) + 1)"
+  - mkdir build
+  - cd build
+  - ../configure --prefix=/usr
+                 --enable-werror
+                 --disable-tcg
+                 --disable-docs
+                 --target-list=x86_64-softmmu || (cat config.log meson-logs/meson-log.txt && exit 1)
+  - make -j"$JOBS"
+  - if test -n "$MAKE_CHECK_ARGS";
+    then
+      make -j"$JOBS" check-build;
+    fi
+
+  # we need the following since the fix for CVE-2022-24765 now causes a fatal
+  # error if a user issues a git command from within a directory owned by some
+  # other user
+  - sudo git config --global --add safe.directory "$SCRATCH_DIR/qemu"
+  - sudo make install
+
+
+.install-deps: &install-deps
+  - sudo dnf install -y libvirt-rpms/* libvirt-perl-rpms/* libvirt-python-rpms/*
+
+  # Avocado >98.0 fails with the nwfilter TCK tests, so stick with 98.0 for now
+  - sudo pip3 install --prefix=/usr avocado-framework
+
+
+.enable-core-dumps: &enable-core-dumps
+  - sudo sh -c "echo DefaultLimitCORE=infinity >> /etc/systemd/system.conf" # Explicitly allow storing cores globally
+  - sudo systemctl daemon-reexec # need to reexec systemd after changing config
+
+
+.enable-libvirt-debugging: &enable-libvirt-debugging
+  - source /etc/os-release  # in order to query the vendor-provided variables
+  - if test "$ID" = "centos" && test "$VERSION_ID" -lt 9 ||
+       test "$ID" = "fedora" && test "$VERSION_ID" -lt 35;
+    then
+      DAEMONS="libvirtd virtlockd virtlogd";
+    else
+      DAEMONS="virtinterfaced virtlockd virtlogd virtnetworkd virtnodedevd virtnwfilterd virtproxyd virtqemud virtsecretd virtstoraged";
+    fi
+  - for daemon in $DAEMONS;
+    do
+      LOG_OUTPUTS="1:file:/var/log/libvirt/${daemon}.log";
+      LOG_FILTERS="3:remote 4:event 3:util.json 3:util.object 3:util.dbus 3:util.netlink 3:node_device 3:rpc 3:access 1:*";
+      sudo augtool set /files/etc/libvirt/${daemon}.conf/log_filters "'$LOG_FILTERS'" &>/dev/null;
+      sudo augtool set /files/etc/libvirt/${daemon}.conf/log_outputs "'$LOG_OUTPUTS'" &>/dev/null;
+      sudo systemctl --quiet stop ${daemon}.service;
+      sudo systemctl restart ${daemon}.socket;
+    done
+
+
+.collect-logs: &collect-logs
+  - set +e
+  - shopt -s nullglob
+  - mkdir logs
+  - test -d "$SCRATCH_DIR"/avocado && mkdir logs/avocado
+  - sudo coredumpctl &>/dev/null && sudo coredumpctl info --no-pager > logs/coredumpctl.txt
+  - sudo mv /var/log/libvirt logs/libvirt
+  # filter only the failed tests, omitting successful job logs
+  - for test_log in "$SCRATCH_DIR"/avocado/latest/test-results/by-status/{ERROR,FAIL}/*;
+    do
+      sudo mv "$(realpath $test_log)" logs/avocado;
+    done;
+  - sudo chown -R $(whoami):$(whoami) logs
+    # rename all Avocado stderr/stdout logs to *.log so that GitLab's web UI doesn't mangle the MIME type
+  - find logs/avocado/ -type f ! -name "*.log" -exec
+      sh -c 'DIR=$(dirname {}); NAME=$(basename {}); mv $DIR/$NAME{,.log}' \;
+
+
+.integration_tests:
+  stage: integration_tests
+  before_script:
+    - mkdir "$SCRATCH_DIR"
+    - *install-deps
+    - *enable-core-dumps
+    - *enable-libvirt-debugging
+    - sudo virsh net-start default &>/dev/null || true;
+  script:
+    - cd "$SCRATCH_DIR"
+    - git clone --depth 1 https://gitlab.com/libvirt/libvirt-tck.git
+    - cd libvirt-tck
+    - sudo avocado --config avocado.config run --job-results-dir "$SCRATCH_DIR"/avocado
+  after_script:
+    - test "$CI_JOB_STATUS" = "success" && exit 0;
+    - *collect-logs
+  variables:
+    SCRATCH_DIR: "/tmp/scratch"
+  artifacts:
+    name: logs
+    expire_in: 1 day
+    paths:
+      - logs
+    when: on_failure
+
+.integration_tests_prebuilt_env:
+  extends: .integration_tests
+  rules:
+    - if: '$LIBVIRT_CI_INTEGRATION == null'
+      when: never
+    - !reference [.gitlab_native_build_job_prebuilt_env, rules]
+
+.integration_tests_local_env:
+  extends: .integration_tests
+  rules:
+    - if: '$LIBVIRT_CI_INTEGRATION == null'
+      when: never
+    - !reference [.gitlab_native_build_job_local_env, rules]
+
+
+# YAML anchors don't work with Shell conditions so we can't use a variable
+# to conditionally build+install QEMU from source.
+# Instead, create a new test job template for this scenario.
+.integration_tests_upstream_qemu:
+  before_script:
+    - !reference [.integration_tests, before_script]
+    - cd "$SCRATCH_DIR"
+    - *qemu-build-template
+    - sudo restorecon -R /usr
+
+.integration_tests_upstream_qemu_prebuilt_env:
+  extends:
+    - .integration_tests_prebuilt_env
+    - .integration_tests_upstream_qemu
+
+.integration_tests_upstream_qemu_local_env:
+  extends:
+    - .integration_tests_local_env
+    - .integration_tests_upstream_qemu

@@ -3,7 +3,6 @@
 #include <unistd.h>
 
 #include "internal.h"
-#include "viralloc.h"
 #include "testutils.h"
 #include "virutil.h"
 
@@ -48,8 +47,7 @@ testIndexToDiskName(const void *data G_GNUC_UNUSED)
 
         diskName = virIndexToDiskName(i, "sd");
 
-        if (STRNEQ(diskNames[i], diskName)) {
-            virTestDifference(stderr, diskNames[i], diskName);
+        if (virTestCompareToString(diskNames[i], diskName) < 0) {
             return -1;
         }
     }
@@ -151,7 +149,7 @@ testParseVersionString(const void *data G_GNUC_UNUSED)
     unsigned long version;
 
     for (i = 0; i < G_N_ELEMENTS(versions); ++i) {
-        result = virParseVersionString(versions[i].string, &version,
+        result = virStringParseVersion(&version, versions[i].string,
                                        versions[i].allowMissing);
 
         if (result != versions[i].result) {

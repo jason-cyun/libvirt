@@ -28,7 +28,6 @@
 #include "viralloc.h"
 #include "virerror.h"
 #include "virlog.h"
-#include "virstring.h"
 #include "viruri.h"
 #include "storage_file_probe.h"
 #include "storage_util.h"
@@ -196,11 +195,7 @@ virStorageBackendGlusterSetMetadata(virStorageBackendGlusterState *state,
 
     tmp = state->uri->path;
     state->uri->path = g_strdup_printf("/%s", path);
-    if (!(vol->target.path = virURIFormat(state->uri))) {
-        VIR_FREE(state->uri->path);
-        state->uri->path = tmp;
-        return -1;
-    }
+    vol->target.path = virURIFormat(state->uri);
     VIR_FREE(state->uri->path);
     state->uri->path = tmp;
 
@@ -290,13 +285,10 @@ virStorageBackendGlusterRefreshVol(virStorageBackendGlusterState *state,
     if (meta->capacity)
         vol->target.capacity = meta->capacity;
     if (meta->encryption) {
-        vol->target.encryption = meta->encryption;
-        meta->encryption = NULL;
+        vol->target.encryption = g_steal_pointer(&meta->encryption);
     }
-    vol->target.features = meta->features;
-    meta->features = NULL;
-    vol->target.compat = meta->compat;
-    meta->compat = NULL;
+    vol->target.features = g_steal_pointer(&meta->features);
+    vol->target.compat = g_steal_pointer(&meta->compat);
 
     *volptr = g_steal_pointer(&vol);
     ret = 0;

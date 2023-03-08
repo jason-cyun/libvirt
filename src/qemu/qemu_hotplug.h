@@ -23,7 +23,6 @@
 
 #include "qemu_conf.h"
 #include "qemu_domain.h"
-#include "domain_conf.h"
 
 int qemuDomainChangeEjectableMedia(virQEMUDriver *driver,
                                    virDomainObj *vm,
@@ -31,15 +30,13 @@ int qemuDomainChangeEjectableMedia(virQEMUDriver *driver,
                                    virStorageSource *newsrc,
                                    bool force);
 
-void qemuDomainDelTLSObjects(virQEMUDriver *driver,
-                             virDomainObj *vm,
-                             qemuDomainAsyncJob asyncJob,
+void qemuDomainDelTLSObjects(virDomainObj *vm,
+                             virDomainAsyncJob asyncJob,
                              const char *secAlias,
                              const char *tlsAlias);
 
-int qemuDomainAddTLSObjects(virQEMUDriver *driver,
-                            virDomainObj *vm,
-                            qemuDomainAsyncJob asyncJob,
+int qemuDomainAddTLSObjects(virDomainObj *vm,
+                            virDomainAsyncJob asyncJob,
                             virJSONValue **secProps,
                             virJSONValue **tlsProps);
 
@@ -51,17 +48,15 @@ int qemuDomainGetTLSObjects(qemuDomainSecretInfo *secinfo,
                             virJSONValue **tlsProps,
                             virJSONValue **secProps);
 
-int qemuDomainAttachControllerDevice(virQEMUDriver *driver,
-                                     virDomainObj *vm,
+int qemuDomainAttachControllerDevice(virDomainObj *vm,
                                      virDomainControllerDef *controller);
 int qemuDomainAttachDeviceDiskLive(virQEMUDriver *driver,
                                    virDomainObj *vm,
                                    virDomainDeviceDef *dev);
 
-int qemuDomainAttachDiskGeneric(virQEMUDriver *driver,
-                                virDomainObj *vm,
+int qemuDomainAttachDiskGeneric(virDomainObj *vm,
                                 virDomainDiskDef *disk,
-                                qemuDomainAsyncJob asyncJob);
+                                virDomainAsyncJob asyncJob);
 
 int qemuDomainAttachNetDevice(virQEMUDriver *driver,
                               virDomainObj *vm,
@@ -72,11 +67,9 @@ int qemuDomainAttachRedirdevDevice(virQEMUDriver *driver,
 int qemuDomainAttachHostDevice(virQEMUDriver *driver,
                                virDomainObj *vm,
                                virDomainHostdevDef *hostdev);
-int qemuDomainAttachShmemDevice(virQEMUDriver *driver,
-                                virDomainObj *vm,
+int qemuDomainAttachShmemDevice(virDomainObj *vm,
                                 virDomainShmemDef *shmem);
-int qemuDomainAttachWatchdog(virQEMUDriver *driver,
-                             virDomainObj *vm,
+int qemuDomainAttachWatchdog(virDomainObj *vm,
                              virDomainWatchdogDef *watchdog);
 int qemuDomainFindGraphicsIndex(virDomainDef *def,
                                 virDomainGraphicsDef *dev);
@@ -86,8 +79,7 @@ int qemuDomainAttachMemory(virQEMUDriver *driver,
 int qemuDomainChangeGraphics(virQEMUDriver *driver,
                              virDomainObj *vm,
                              virDomainGraphicsDef *dev);
-int qemuDomainChangeGraphicsPasswords(virQEMUDriver *driver,
-                                      virDomainObj *vm,
+int qemuDomainChangeGraphicsPasswords(virDomainObj *vm,
                                       int type,
                                       virDomainGraphicsAuthDef *auth,
                                       const char *defaultPasswd,
@@ -95,17 +87,14 @@ int qemuDomainChangeGraphicsPasswords(virQEMUDriver *driver,
 int qemuDomainChangeNet(virQEMUDriver *driver,
                         virDomainObj *vm,
                         virDomainDeviceDef *dev);
-int qemuDomainChangeNetLinkState(virQEMUDriver *driver,
-                                 virDomainObj *vm,
+int qemuDomainChangeNetLinkState(virDomainObj *vm,
                                  virDomainNetDef *dev,
                                  int linkstate);
 
-int qemuDomainAttachInputDevice(virQEMUDriver *driver,
-                                virDomainObj *vm,
+int qemuDomainAttachInputDevice(virDomainObj *vm,
                                 virDomainInputDef *input);
 
-int qemuDomainAttachVsockDevice(virQEMUDriver *driver,
-                                virDomainObj *vm,
+int qemuDomainAttachVsockDevice(virDomainObj *vm,
                                 virDomainVsockDef *vsock);
 int
 qemuDomainAttachFSDevice(virQEMUDriver *driver,
@@ -117,7 +106,7 @@ int qemuDomainAttachLease(virQEMUDriver *driver,
                           virDomainLeaseDef *lease);
 int qemuDomainAttachChrDevice(virQEMUDriver *driver,
                               virDomainObj *vm,
-                              virDomainChrDef *chr);
+                              virDomainDeviceDef *dev);
 int qemuDomainAttachRNGDevice(virQEMUDriver *driver,
                               virDomainObj *vm,
                               virDomainRNGDef *rng);
@@ -127,8 +116,7 @@ int qemuDomainDetachDeviceLive(virDomainObj *vm,
                                virQEMUDriver *driver,
                                bool async);
 
-void qemuDomainRemoveVcpuAlias(virQEMUDriver *driver,
-                               virDomainObj *vm,
+void qemuDomainRemoveVcpuAlias(virDomainObj *vm,
                                const char *alias);
 
 int
@@ -160,17 +148,15 @@ int qemuDomainSetVcpuInternal(virQEMUDriver *driver,
                               virBitmap *vcpus,
                               bool state);
 
-unsigned long long qemuDomainGetUnplugTimeout(virDomainObj *vm) G_GNUC_NO_INLINE;
+unsigned long long qemuDomainGetUnplugTimeout(virDomainObj *vm) G_NO_INLINE;
 
 int qemuHotplugAttachDBusVMState(virQEMUDriver *driver,
                                  virDomainObj *vm,
-                                 qemuDomainAsyncJob asyncJob);
+                                 virDomainAsyncJob asyncJob);
 
-int qemuHotplugRemoveDBusVMState(virQEMUDriver *driver,
-                                 virDomainObj *vm,
-                                 qemuDomainAsyncJob asyncJob);
+int qemuHotplugRemoveDBusVMState(virDomainObj *vm,
+                                 virDomainAsyncJob asyncJob);
 
-int qemuDomainChangeMemoryRequestedSize(virQEMUDriver *driver,
-                                        virDomainObj *vm,
+int qemuDomainChangeMemoryRequestedSize(virDomainObj *vm,
                                         const char *alias,
                                         unsigned long long requestedsize);

@@ -23,12 +23,10 @@
 #include "internal.h"
 #include "virlog.h"
 #include "virerror.h"
-#include "virconf.h"
 #include "datatypes.h"
 #include "virfile.h"
 #include "viralloc.h"
 #include "viruuid.h"
-#include "vircommand.h"
 #include "virstring.h"
 #include "virobject.h"
 #include "virthread.h"
@@ -36,7 +34,6 @@
 #include "rpc/virnetsocket.h"
 #include "libxl_api_wrapper.h"
 #include "libxl_domain.h"
-#include "libxl_driver.h"
 #include "libxl_conf.h"
 #include "libxl_migration.h"
 #include "locking/domain_lock.h"
@@ -262,8 +259,7 @@ libxlDoMigrateDstReceive(void *opaque)
     for (i = 0; i < nsocks; i++) {
         virNetSocketRemoveIOCallback(socks[i]);
         virNetSocketClose(socks[i]);
-        virObjectUnref(socks[i]);
-        socks[i] = NULL;
+        g_clear_pointer(&socks[i], virObjectUnref);
     }
     args->nsocks = 0;
     VIR_FORCE_CLOSE(recvfd);
@@ -323,8 +319,7 @@ libxlMigrateDstReceive(virNetSocket *sock,
     for (i = 0; i < nsocks; i++) {
         virNetSocketUpdateIOCallback(socks[i], 0);
         virNetSocketRemoveIOCallback(socks[i]);
-        virNetSocketClose(socks[i]);
-        socks[i] = NULL;
+        g_clear_pointer(&socks[i], virNetSocketClose);
     }
     args->nsocks = 0;
     VIR_FORCE_CLOSE(recvfd);
@@ -334,7 +329,7 @@ libxlMigrateDstReceive(virNetSocket *sock,
 static int
 libxlDoMigrateSrcSend(libxlDriverPrivate *driver,
                       virDomainObj *vm,
-                      unsigned long flags,
+                      unsigned int flags,
                       int sockfd)
 {
     libxlDriverConfig *cfg = libxlDriverConfigGet(driver);
@@ -388,7 +383,7 @@ libxlDomainMigrationSrcBegin(virConnectPtr conn,
      * terminated in the confirm phase. Errors in the begin or perform
      * phase will also terminate the job.
      */
-    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         goto cleanup;
 
     if (!(mig = libxlMigrationCookieNew(vm)))
@@ -422,7 +417,7 @@ libxlDomainMigrationSrcBegin(virConnectPtr conn,
         goto cleanup;
 
  endjob:
-    libxlDomainObjEndJob(driver, vm);
+    virDomainObjEndJob(vm);
 
  cleanup:
     libxlMigrationCookieFree(mig);
@@ -558,7 +553,7 @@ libxlDomainMigrationDstPrepareTunnel3(virConnectPtr dconn,
      * Unless an error is encountered in this function, the job will
      * be terminated in the finish phase.
      */
-    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         goto error;
 
     priv = vm->privateData;
@@ -609,7 +604,7 @@ libxlDomainMigrationDstPrepareTunnel3(virConnectPtr dconn,
     goto done;
 
  endjob:
-    libxlDomainObjEndJob(driver, vm);
+    virDomainObjEndJob(vm);
 
  error:
     libxlMigrationCookieFree(mig);
@@ -642,7 +637,7 @@ libxlDomainMigrationDstPrepare(virConnectPtr dconn,
     char *xmlout = NULL;
     unsigned short port;
     char portstr[100];
-    virURI *uri = NULL;
+    g_autoptr(virURI) uri = NULL;
     virNetSocket **socks = NULL;
     size_t nsocks = 0;
     int nsocks_listen = 0;
@@ -667,7 +662,7 @@ libxlDomainMigrationDstPrepare(virConnectPtr dconn,
      * Unless an error is encountered in this function, the job will
      * be terminated in the finish phase.
      */
-    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         goto error;
 
     priv = vm->privateData;
@@ -779,7 +774,7 @@ libxlDomainMigrationDstPrepare(virConnectPtr dconn,
     goto done;
 
  endjob:
-    libxlDomainObjEndJob(driver, vm);
+    virDomainObjEndJob(vm);
 
  error:
     for (i = 0; i < nsocks; i++) {
@@ -800,8 +795,6 @@ libxlDomainMigrationDstPrepare(virConnectPtr dconn,
     libxlMigrationCookieFree(mig);
     if (!uri_in)
         VIR_FREE(hostname);
-    else
-        virURIFree(uri);
     virObjectUnref(args);
     virDomainObjEndAPI(&vm);
     virObjectUnref(cfg);
@@ -884,7 +877,7 @@ struct libxlTunnelControl {
 static int
 libxlMigrationSrcStartTunnel(libxlDriverPrivate *driver,
                              virDomainObj *vm,
-                             unsigned long flags,
+                             unsigned int flags,
                              virStreamPtr st,
                              struct libxlTunnelControl **tnl)
 {
@@ -1134,9 +1127,6 @@ libxlDomainMigrationSrcPerformP2P(libxlDriverPrivate *driver,
     virObjectLock(vm);
 
     if (dconn == NULL) {
-        virReportError(VIR_ERR_OPERATION_FAILED,
-                       _("Failed to connect to remote libvirt URI %s: %s"),
-                       dconnuri, virGetLastErrorMessage());
         return ret;
     }
 
@@ -1165,7 +1155,7 @@ libxlDomainMigrationSrcPerformP2P(libxlDriverPrivate *driver,
          * Confirm phase will not be executed if perform fails. End the
          * job started in begin phase.
          */
-        libxlDomainObjEndJob(driver, vm);
+        virDomainObjEndJob(vm);
     }
 
  cleanup:
@@ -1191,15 +1181,15 @@ libxlDomainMigrationSrcPerform(libxlDriverPrivate *driver,
     char *hostname = NULL;
     unsigned short port = 0;
     char portstr[100];
-    virURI *uri = NULL;
+    g_autoptr(virURI) uri = NULL;
     virNetSocket *sock;
-    int sockfd = -1;
+    VIR_AUTOCLOSE sockfd = -1;
     int ret = -1;
 
     /* parse dst host:port from uri */
     uri = virURIParse(uri_str);
     if (uri == NULL || uri->server == NULL || uri->port == 0)
-        goto cleanup;
+        return -1;
 
     hostname = uri->server;
     port = uri->port;
@@ -1209,11 +1199,11 @@ libxlDomainMigrationSrcPerform(libxlDriverPrivate *driver,
     if (virNetSocketNewConnectTCP(hostname, portstr,
                                   AF_UNSPEC,
                                   &sock) < 0)
-        goto cleanup;
+        return -1;
 
     if (virNetSocketSetBlocking(sock, true) < 0) {
         virObjectUnref(sock);
-        goto cleanup;
+        return -1;
     }
 
     sockfd = virNetSocketDupFD(sock, true);
@@ -1236,12 +1226,9 @@ libxlDomainMigrationSrcPerform(libxlDriverPrivate *driver,
          * Confirm phase will not be executed if perform fails. End the
          * job started in begin phase.
          */
-        libxlDomainObjEndJob(driver, vm);
+        virDomainObjEndJob(vm);
     }
 
- cleanup:
-    VIR_FORCE_CLOSE(sockfd);
-    virURIFree(uri);
     return ret;
 }
 
@@ -1340,7 +1327,7 @@ libxlDomainMigrationDstFinish(virConnectPtr dconn,
     }
 
     /* EndJob for corresponding BeginJob in prepare phase */
-    libxlDomainObjEndJob(driver, vm);
+    virDomainObjEndJob(vm);
     virObjectEventStateQueue(driver->domainEventState, event);
     virObjectUnref(cfg);
     return dom;
@@ -1397,7 +1384,7 @@ libxlDomainMigrationSrcConfirm(libxlDriverPrivate *driver,
 
  cleanup:
     /* EndJob for corresponding BeginJob in begin phase */
-    libxlDomainObjEndJob(driver, vm);
+    virDomainObjEndJob(vm);
     virObjectEventStateQueue(driver->domainEventState, event);
     virObjectUnref(cfg);
     return ret;

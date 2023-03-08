@@ -1,20 +1,19 @@
 LC_ALL=C \
 PATH=/bin \
-HOME=/tmp/lib/domain--1-expander-test \
+HOME=/var/lib/libvirt/qemu/domain--1-expander-test \
 USER=test \
 LOGNAME=test \
-XDG_DATA_HOME=/tmp/lib/domain--1-expander-test/.local/share \
-XDG_CACHE_HOME=/tmp/lib/domain--1-expander-test/.cache \
-XDG_CONFIG_HOME=/tmp/lib/domain--1-expander-test/.config \
-QEMU_AUDIO_DRV=none \
+XDG_DATA_HOME=/var/lib/libvirt/qemu/domain--1-expander-test/.local/share \
+XDG_CACHE_HOME=/var/lib/libvirt/qemu/domain--1-expander-test/.cache \
+XDG_CONFIG_HOME=/var/lib/libvirt/qemu/domain--1-expander-test/.config \
 /usr/bin/qemu-system-x86_64 \
 -name guest=expander-test,debug-threads=on \
 -S \
--object secret,id=masterKey0,format=raw,file=/tmp/lib/domain--1-expander-test/master-key.aes \
--machine pc-i440fx-2.5,usb=off,dump-guest-core=off \
+-object secret,id=masterKey0,format=raw,file=/var/lib/libvirt/qemu/domain--1-expander-test/master-key.aes \
+-machine pc,usb=off,dump-guest-core=off \
 -accel tcg \
 -m 214 \
--realtime mlock=off \
+-overcommit mem-lock=off \
 -smp 16,sockets=2,cores=4,threads=2 \
 -numa node,nodeid=0,cpus=0-7,mem=107 \
 -numa node,nodeid=1,cpus=8-15,mem=107 \
@@ -22,7 +21,7 @@ QEMU_AUDIO_DRV=none \
 -display none \
 -no-user-config \
 -nodefaults \
--chardev socket,id=charmonitor,path=/tmp/lib/domain--1-expander-test/monitor.sock,server=on,wait=off \
+-chardev socket,id=charmonitor,fd=1729,server=on,wait=off \
 -mon chardev=charmonitor,id=monitor,mode=control \
 -rtc base=utc \
 -no-shutdown \
@@ -94,5 +93,6 @@ QEMU_AUDIO_DRV=none \
 -device e1000,netdev=hostnet30,id=net30,mac=52:54:00:ec:d5:e3,bus=pci.1,addr=0x3 \
 -netdev user,id=hostnet31 \
 -device e1000,netdev=hostnet31,id=net31,mac=52:54:00:7e:6e:c8,bus=pci.1,addr=0x4 \
+-audiodev '{"id":"audio1","driver":"none"}' \
 -device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x6 \
 -msg timestamp=on

@@ -104,8 +104,7 @@ virVBoxSnapshotConfCreateVBoxSnapshotConfHardDiskPtr(xmlNodePtr diskNode,
     VIR_FREE(location);
     VIR_FREE(tmp);
     if (result < 0) {
-        virVboxSnapshotConfHardDiskFree(hardDisk);
-        hardDisk = NULL;
+        g_clear_pointer(&hardDisk, virVboxSnapshotConfHardDiskFree);
     }
     return hardDisk;
 }
@@ -165,8 +164,7 @@ virVBoxSnapshotConfRetrieveMediaRegistry(xmlNodePtr mediaRegistryNode,
 
  cleanup:
     if (result < 0) {
-        virVBoxSnapshotConfMediaRegistryFree(mediaRegistry);
-        mediaRegistry = NULL;
+        g_clear_pointer(&mediaRegistry, virVBoxSnapshotConfMediaRegistryFree);
     }
     VIR_FREE(nodes);
     return mediaRegistry;
@@ -264,8 +262,7 @@ virVBoxSnapshotConfRetrieveSnapshot(xmlNodePtr snapshotNode,
 
  cleanup:
     if (result < 0) {
-        virVBoxSnapshotConfSnapshotFree(snapshot);
-        snapshot = NULL;
+        g_clear_pointer(&snapshot, virVBoxSnapshotConfSnapshotFree);
     }
     VIR_FREE(nodes);
     VIR_FREE(uuid);
@@ -348,8 +345,7 @@ virVBoxSnapshotConfCreateHardDiskNode(virVBoxSnapshotConfHardDisk *hardDisk)
  cleanup:
     if (result < 0) {
         xmlUnlinkNode(ret);
-        xmlFreeNode(ret);
-        ret = NULL;
+        g_clear_pointer(&ret, xmlFreeNode);
     }
     VIR_FREE(uuid);
     return ret;
@@ -458,7 +454,6 @@ virVBoxSnapshotConfAllChildren(virVBoxSnapshotConfHardDisk *disk,
                                virVBoxSnapshotConfHardDisk ***list)
 {
     size_t returnSize = 0;
-    size_t tempSize = 0;
     virVBoxSnapshotConfHardDisk **ret = NULL;
     virVBoxSnapshotConfHardDisk **tempList = NULL;
     size_t i = 0;
@@ -467,7 +462,7 @@ virVBoxSnapshotConfAllChildren(virVBoxSnapshotConfHardDisk *disk,
     ret = g_new0(virVBoxSnapshotConfHardDisk *, 0);
 
     for (i = 0; i < disk->nchildren; i++) {
-        tempSize = virVBoxSnapshotConfAllChildren(disk->children[i], &tempList);
+        size_t tempSize = virVBoxSnapshotConfAllChildren(disk->children[i], &tempList);
         VIR_EXPAND_N(ret, returnSize, tempSize);
 
         for (j = 0; j < tempSize; j++)
@@ -589,15 +584,12 @@ virVBoxSnapshotConfLoadVboxFile(const char *filePath,
 
     machineDescription = g_new0(virVBoxSnapshotConfMachine, 1);
 
-    xml = virXMLParse(filePath, NULL, NULL, NULL, false);
+    xml = virXMLParse(filePath, NULL, NULL, NULL, &xPathContext, NULL, false);
     if (xml == NULL) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
                        _("Unable to parse the xml"));
         goto cleanup;
     }
-    if (!(xPathContext = virXMLXPathContextNew(xml)))
-        goto cleanup;
-
     if (xmlXPathRegisterNs(xPathContext,
                            BAD_CAST "vbox",
                            BAD_CAST VBOX_SETTINGS_NS) < 0) {
@@ -608,8 +600,6 @@ virVBoxSnapshotConfLoadVboxFile(const char *filePath,
     }
 
     /* Retrieve MachineNode */
-    cur = xmlDocGetRootElement(xml);
-    xPathContext->node = cur;
     machineNode = virXPathNode("./vbox:Machine", xPathContext);
     if (machineNode == NULL) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
@@ -1197,6 +1187,41 @@ virVBoxSnapshotConfIsCurrentSnapshot(virVBoxSnapshotConfMachine *machine,
     return STREQ(snapshot->uuid, machine->currentSnapshot);
 }
 
+static int
+virVBoxSnapshotConfGetDisksPathsFromLibvirtXML(const char *filePath,
+                                               char ***disksPath,
+                                               const char *xpath)
+{
+    size_t i = 0;
+    g_autoptr(xmlDoc) xml = NULL;
+    g_autoptr(xmlXPathContext) xPathContext = NULL;
+    g_autofree xmlNodePtr *nodes = NULL;
+    int nodeSize = 0;
+
+    *disksPath = NULL;
+
+    if (filePath == NULL) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s", _("filePath is null"));
+        return -1;
+    }
+
+    if (!(xml = virXMLParse(filePath, NULL, NULL, NULL, &xPathContext, NULL, false)))
+        return -1;
+
+    if ((nodeSize = virXPathNodeSet(xpath, xPathContext, &nodes)) < 0)
+        return -1;
+
+    *disksPath = g_new0(char *, nodeSize);
+
+    for (i = 0; i < nodeSize; i++) {
+        xPathContext->node = nodes[i];
+        (*disksPath)[i] = virXPathString("string(./source/@file)", xPathContext);
+    }
+
+    return nodeSize;
+}
+
+
 /*
  *getRWDisksPathsFromLibvirtXML: Parse a libvirt XML snapshot file, allocates and
  *fills a list of read-write disk paths.
@@ -1206,54 +1231,10 @@ int
 virVBoxSnapshotConfGetRWDisksPathsFromLibvirtXML(const char *filePath,
                                                  char ***rwDisksPath)
 {
-    int result = -1;
-    size_t i = 0;
-    g_auto(GStrv) ret = NULL;
-    g_autoptr(xmlDoc) xml = NULL;
-    g_autoptr(xmlXPathContext) xPathContext = NULL;
-    xmlNodePtr *nodes = NULL;
-    int nodeSize = 0;
-    *rwDisksPath = NULL;
-    if (filePath == NULL) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                       _("filePath is null"));
-        goto cleanup;
-    }
-    xml = virXMLParse(filePath, NULL, NULL, NULL, false);
-    if (xml == NULL) {
-        virReportError(VIR_ERR_XML_ERROR, "%s",
-                       _("Unable to parse the xml"));
-        goto cleanup;
-    }
-
-    if (!(xPathContext = virXMLXPathContextNew(xml)))
-        goto cleanup;
-
-    xPathContext->node = xmlDocGetRootElement(xml);
-    if ((nodeSize = virXPathNodeSet("/domainsnapshot/disks/disk",
-                                    xPathContext, &nodes)) < 0)
-        goto cleanup;
-
-    ret = g_new0(char *, nodeSize);
-
-    for (i = 0; i < nodeSize; i++) {
-        xmlNodePtr node = nodes[i];
-        xmlNodePtr sourceNode;
-
-        xPathContext->node = node;
-        sourceNode = virXPathNode("./source", xPathContext);
-        if (sourceNode)
-            ret[i] = virXMLPropString(sourceNode, "file");
-    }
-    *rwDisksPath = g_steal_pointer(&ret);
-    result = 0;
-
- cleanup:
-    if (result < 0)
-        nodeSize = -1;
-    VIR_FREE(nodes);
-    return nodeSize;
+    return virVBoxSnapshotConfGetDisksPathsFromLibvirtXML(filePath, rwDisksPath,
+                                                          "/domainsnapshot/disks/disk");
 }
+
 
 /*
  *getRODisksPathsFromLibvirtXML: *Parse a libvirt XML snapshot file, allocates and fills
@@ -1264,53 +1245,10 @@ int
 virVBoxSnapshotConfGetRODisksPathsFromLibvirtXML(const char *filePath,
                                                  char ***roDisksPath)
 {
-    int result = -1;
-    size_t i = 0;
-    g_auto(GStrv) ret = NULL;
-    g_autoptr(xmlDoc) xml = NULL;
-    g_autoptr(xmlXPathContext) xPathContext = NULL;
-    xmlNodePtr *nodes = NULL;
-    int nodeSize = 0;
-    if (filePath == NULL) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                       _("filePath is null"));
-        goto cleanup;
-    }
-    xml = virXMLParse(filePath, NULL, NULL, NULL, false);
-    if (xml == NULL) {
-        virReportError(VIR_ERR_XML_ERROR, "%s",
-                       _("Unable to parse the xml"));
-        goto cleanup;
-    }
-
-    if (!(xPathContext = virXMLXPathContextNew(xml)))
-        goto cleanup;
-
-    xPathContext->node = xmlDocGetRootElement(xml);
-    if ((nodeSize = virXPathNodeSet("/domainsnapshot/domain/devices/disk",
-                                    xPathContext,
-                                    &nodes)) < 0)
-        goto cleanup;
-    ret = g_new0(char *, nodeSize);
-
-    for (i = 0; i < nodeSize; i++) {
-        xmlNodePtr node = nodes[i];
-        xmlNodePtr sourceNode;
-
-        xPathContext->node = node;
-        sourceNode = virXPathNode("./source", xPathContext);
-        if (sourceNode)
-            ret[i] = virXMLPropString(sourceNode, "file");
-    }
-    *roDisksPath = g_steal_pointer(&ret);
-    result = 0;
-
- cleanup:
-    if (result < 0)
-        nodeSize = -1;
-    VIR_FREE(nodes);
-    return nodeSize;
+    return virVBoxSnapshotConfGetDisksPathsFromLibvirtXML(filePath, roDisksPath,
+                                                          "/domainsnapshot/domain/devices/disk");
 }
+
 
 /*
  *hardDiskUuidByLocation: Return the uuid of the hard disk whose location is 'location'

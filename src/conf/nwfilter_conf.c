@@ -38,10 +38,8 @@
 #include "viruuid.h"
 #include "viralloc.h"
 #include "virerror.h"
-#include "datatypes.h"
 #include "nwfilter_params.h"
 #include "nwfilter_conf.h"
-#include "domain_conf.h"
 #include "virfile.h"
 #include "virstring.h"
 
@@ -149,33 +147,6 @@ static const struct int_map chain_priorities[] = {
     INTMAP_ENTRY(NWFILTER_RARP_FILTER_PRI, "rarp"),
     INTMAP_ENTRY_LAST,
 };
-
-
-/*
- * only one filter update allowed
- */
-static virRWLock updateLock;
-static bool initialized;
-
-void
-virNWFilterReadLockFilterUpdates(void)
-{
-    virRWLockRead(&updateLock);
-}
-
-
-void
-virNWFilterWriteLockFilterUpdates(void)
-{
-    virRWLockWrite(&updateLock);
-}
-
-
-void
-virNWFilterUnlockFilterUpdates(void)
-{
-    virRWLockUnlock(&updateLock);
-}
 
 
 /*
@@ -1134,8 +1105,8 @@ static const virXMLAttr2Struct vlanAttributes[] = {
     }
 };
 
-/* STP is documented by IEEE 802.1D; for a synopsis,
- * see http://www.javvin.com/protocolSTP.html */
+/* STP is documented by IEEE 802.1D; for a synopsis, see
+ * https://web.archive.org/web/20130530200728/http://www.javvin.com/protocolSTP.html */
 static const virXMLAttr2Struct stpAttributes[] = {
     /* spanning tree uses a special destination MAC address */
     {
@@ -1813,7 +1784,6 @@ virNWFilterRuleDetailsParse(xmlNodePtr node,
     if (match && STREQ(match, "no"))
         match_flag = NWFILTER_ENTRY_ITEM_FLAG_IS_NEG;
     VIR_FREE(match);
-    match = NULL;
 
     while (att[idx].name != NULL) {
         prop = virXMLPropString(node, att[idx].name);
@@ -2405,16 +2375,16 @@ virNWFilterRuleDefFixup(virNWFilterRuleDef *rule)
 static virNWFilterRuleDef *
 virNWFilterRuleParse(xmlNodePtr node)
 {
-    char *action;
-    char *direction;
-    char *prio;
-    char *statematch;
+    g_autofree char *action = NULL;
+    g_autofree char *direction = NULL;
+    g_autofree char *prio = NULL;
+    g_autofree char *statematch = NULL;
     bool found;
     int found_i = 0;
     int priority;
 
     xmlNodePtr cur;
-    virNWFilterRuleDef *ret;
+    g_autoptr(virNWFilterRuleDef) ret = NULL;
 
     ret = g_new0(virNWFilterRuleDef, 1);
 
@@ -2427,28 +2397,28 @@ virNWFilterRuleParse(xmlNodePtr node)
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s",
                        _("rule node requires action attribute"));
-        goto err_exit;
+        return NULL;
     }
 
     if ((ret->action = virNWFilterRuleActionTypeFromString(action)) < 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        "%s",
                        _("unknown rule action attribute value"));
-        goto err_exit;
+        return NULL;
     }
 
     if (!direction) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s",
                        _("rule node requires direction attribute"));
-        goto err_exit;
+        return NULL;
     }
 
     if ((ret->tt = virNWFilterRuleDirectionTypeFromString(direction)) < 0) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
                        "%s",
                        _("unknown rule direction attribute value"));
-        goto err_exit;
+        return NULL;
     }
 
     ret->priority = MAX_RULE_PRIORITY / 2;
@@ -2485,10 +2455,10 @@ virNWFilterRuleParse(xmlNodePtr node)
                     if (virNWFilterRuleDetailsParse(cur,
                                                     ret,
                                                     virAttr[i].att) < 0) {
-                        goto err_exit;
+                        return NULL;
                     }
                     if (virNWFilterRuleValidate(ret) < 0)
-                        goto err_exit;
+                        return NULL;
                     break;
                 }
                 if (!found) {
@@ -2506,18 +2476,7 @@ virNWFilterRuleParse(xmlNodePtr node)
 
     virNWFilterRuleDefFixup(ret);
 
- cleanup:
-    VIR_FREE(prio);
-    VIR_FREE(action);
-    VIR_FREE(direction);
-    VIR_FREE(statematch);
-
-    return ret;
-
- err_exit:
-    virNWFilterRuleDefFree(ret);
-    ret = NULL;
-    goto cleanup;
+    return g_steal_pointer(&ret);
 }
 
 
@@ -2552,7 +2511,7 @@ virNWFilterIsAllowedChain(const char *chainname)
 {
     virNWFilterChainSuffixType i;
     const char *name;
-    char *msg;
+    g_autofree char *msg = NULL;
     g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
     bool printed = false;
 
@@ -2590,7 +2549,6 @@ virNWFilterIsAllowedChain(const char *chainname)
     msg = virBufferContentAndReset(&buf);
 
     virReportError(VIR_ERR_INVALID_ARG, "%s", msg);
-    VIR_FREE(msg);
 
     return NULL;
 }
@@ -2599,11 +2557,11 @@ virNWFilterIsAllowedChain(const char *chainname)
 static virNWFilterDef *
 virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
 {
-    virNWFilterDef *ret;
+    g_autoptr(virNWFilterDef) ret = NULL;
     xmlNodePtr curr = ctxt->node;
-    char *uuid = NULL;
-    char *chain = NULL;
-    char *chain_pri_s = NULL;
+    g_autofree char *uuid = NULL;
+    g_autofree char *chain = NULL;
+    g_autofree char *chain_pri_s = NULL;
     virNWFilterEntry *entry;
     int chain_priority;
     const char *name_prefix;
@@ -2614,7 +2572,7 @@ virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
     if (!ret->name) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s", _("filter has no name"));
-        goto cleanup;
+        return NULL;
     }
 
     chain_pri_s = virXPathString("string(./@priority)", ctxt);
@@ -2623,7 +2581,7 @@ virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
             virReportError(VIR_ERR_INVALID_ARG,
                            _("Could not parse chain priority '%s'"),
                            chain_pri_s);
-            goto cleanup;
+            return NULL;
         }
         if (chain_priority < NWFILTER_MIN_FILTER_PRIORITY ||
             chain_priority > NWFILTER_MAX_FILTER_PRIORITY) {
@@ -2633,7 +2591,7 @@ virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
                            chain_priority,
                            NWFILTER_MIN_FILTER_PRIORITY,
                            NWFILTER_MAX_FILTER_PRIORITY);
-            goto cleanup;
+            return NULL;
         }
     }
 
@@ -2641,7 +2599,7 @@ virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
     if (chain) {
         name_prefix = virNWFilterIsAllowedChain(chain);
         if (name_prefix == NULL)
-            goto cleanup;
+            return NULL;
         ret->chainsuffix = g_steal_pointer(&chain);
 
         if (chain_pri_s) {
@@ -2664,15 +2622,14 @@ virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
         if (virUUIDGenerate(ret->uuid) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
                            "%s", _("unable to generate uuid"));
-            goto cleanup;
+            return NULL;
         }
     } else {
         if (virUUIDParse(uuid, ret->uuid) < 0) {
             virReportError(VIR_ERR_XML_ERROR,
                            "%s", _("malformed uuid element"));
-            goto cleanup;
+            return NULL;
         }
-        VIR_FREE(uuid);
     }
 
     curr = curr->children;
@@ -2684,12 +2641,12 @@ virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
             if (virXMLNodeNameEqual(curr, "rule")) {
                 if (!(entry->rule = virNWFilterRuleParse(curr))) {
                     virNWFilterEntryFree(entry);
-                    goto cleanup;
+                    return NULL;
                 }
             } else if (virXMLNodeNameEqual(curr, "filterref")) {
                 if (!(entry->include = virNWFilterIncludeParse(curr))) {
                     virNWFilterEntryFree(entry);
-                    goto cleanup;
+                    return NULL;
                 }
             }
 
@@ -2702,70 +2659,24 @@ virNWFilterDefParseXML(xmlXPathContextPtr ctxt)
         curr = curr->next;
     }
 
-    VIR_FREE(chain);
-    VIR_FREE(chain_pri_s);
-
-    return ret;
-
- cleanup:
-    virNWFilterDefFree(ret);
-    VIR_FREE(chain);
-    VIR_FREE(uuid);
-    VIR_FREE(chain_pri_s);
-    return NULL;
+    return g_steal_pointer(&ret);
 }
 
 
 virNWFilterDef *
-virNWFilterDefParseNode(xmlDocPtr xml,
-                        xmlNodePtr root)
-{
-    g_autoptr(xmlXPathContext) ctxt = NULL;
-
-    if (STRNEQ((const char *)root->name, "filter")) {
-        virReportError(VIR_ERR_XML_ERROR,
-                       "%s",
-                       _("unknown root element for nw filter"));
-        return NULL;
-    }
-
-    if (!(ctxt = virXMLXPathContextNew(xml)))
-        return NULL;
-
-    ctxt->node = root;
-    return virNWFilterDefParseXML(ctxt);
-}
-
-
-static virNWFilterDef *
 virNWFilterDefParse(const char *xmlStr,
                     const char *filename,
                     unsigned int flags)
 {
-    virNWFilterDef *def = NULL;
     g_autoptr(xmlDoc) xml = NULL;
+    g_autoptr(xmlXPathContext) ctxt = NULL;
+    bool validate = flags & VIR_NWFILTER_DEFINE_VALIDATE;
 
-    if ((xml = virXMLParse(filename, xmlStr, _("(nwfilter_definition)"), "nwfilter.rng",
-                           flags & VIR_NWFILTER_DEFINE_VALIDATE))) {
-        def = virNWFilterDefParseNode(xml, xmlDocGetRootElement(xml));
-    }
+    if (!(xml = virXMLParse(filename, xmlStr, _("(nwfilter_definition)"),
+                            "filter", &ctxt, "nwfilter.rng", validate)))
+        return NULL;
 
-    return def;
-}
-
-
-virNWFilterDef *
-virNWFilterDefParseString(const char *xmlStr,
-                          unsigned int flags)
-{
-    return virNWFilterDefParse(xmlStr, NULL, flags);
-}
-
-
-virNWFilterDef *
-virNWFilterDefParseFile(const char *filename)
-{
-    return virNWFilterDefParse(NULL, filename, 0);
+    return virNWFilterDefParseXML(ctxt);
 }
 
 
@@ -2773,26 +2684,21 @@ int
 virNWFilterSaveConfig(const char *configDir,
                       virNWFilterDef *def)
 {
-    int ret = -1;
-    char *xml;
+    g_autofree char *xml = NULL;
     char uuidstr[VIR_UUID_STRING_BUFLEN];
-    char *configFile = NULL;
+    g_autofree char *configFile = NULL;
 
     if (!(xml = virNWFilterDefFormat(def)))
-        goto cleanup;
+        return -1;
 
     if (!(configFile = virFileBuildPath(configDir, def->name, ".xml")))
-        goto cleanup;
+        return -1;
 
     virUUIDFormat(def->uuid, uuidstr);
-    ret = virXMLSaveFile(configFile,
-                         virXMLPickShellSafeComment(def->name, uuidstr),
-                         "nwfilter-edit", xml);
 
- cleanup:
-    VIR_FREE(configFile);
-    VIR_FREE(xml);
-    return ret;
+    return virXMLSaveFile(configFile,
+                          virXMLPickShellSafeComment(def->name, uuidstr),
+                          "nwfilter-edit", xml);
 }
 
 
@@ -2800,23 +2706,19 @@ int
 virNWFilterDeleteDef(const char *configDir,
                      virNWFilterDef *def)
 {
-    int ret = -1;
-    char *configFile = NULL;
+    g_autofree char *configFile = NULL;
 
     if (!(configFile = virFileBuildPath(configDir, def->name, ".xml")))
-        goto error;
+        return -1;
 
     if (unlink(configFile) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("cannot remove config for %s"),
                        def->name);
-        goto error;
+        return -1;
     }
 
-    ret = 0;
- error:
-    VIR_FREE(configFile);
-    return ret;
+    return 0;
 }
 
 
@@ -3061,6 +2963,7 @@ virNWFilterDefFormat(const virNWFilterDef *def)
     return virBufferContentAndReset(&buf);
 }
 
+static bool initialized;
 static virNWFilterTriggerRebuildCallback rebuildCallback;
 static void *rebuildOpaque;
 
@@ -3076,9 +2979,6 @@ virNWFilterConfLayerInit(virNWFilterTriggerRebuildCallback cb,
 
     initialized = true;
 
-    if (virRWLockInit(&updateLock) < 0)
-        return -1;
-
     return 0;
 }
 
@@ -3088,8 +2988,6 @@ virNWFilterConfLayerShutdown(void)
 {
     if (!initialized)
         return;
-
-    virRWLockDestroy(&updateLock);
 
     initialized = false;
     rebuildCallback = NULL;

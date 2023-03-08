@@ -6,9 +6,10 @@ gitlab:
   project: libvirt
 
 targets:
-  centos-8:
+  almalinux-8:
     jobs:
       - arch: x86_64
+        builds: false
         variables:
           RPM: skip
 
@@ -18,45 +19,28 @@ targets:
           RPM: skip
           CC: clang
 
+  alpine-315: x86_64
+
+  alpine-edge:
+    jobs:
+      - arch: x86_64
+        allow-failure: true
+
   centos-stream-8:
     jobs:
       - arch: x86_64
-        variables:
-          RPM: skip
+        artifacts:
+          expire_in: 1 day
+          paths:
+            - libvirt-rpms
 
-  debian-10:
+  centos-stream-9:
     jobs:
       - arch: x86_64
-
-      - arch: aarch64
-        allow-failure: true
-        builds: false
-
-      - arch: armv6l
-
-      - arch: armv7l
-        allow-failure: true
-        builds: false
-
-      - arch: i686
-        allow-failure: true
-        builds: false
-
-      - arch: mips
-
-      - arch: mips64el
-        allow-failure: true
-        builds: false
-
-      - arch: mipsel
-
-      - arch: ppc64le
-        allow-failure: true
-        builds: false
-
-      - arch: s390x
-        allow-failure: true
-        builds: false
+        artifacts:
+          expire_in: 1 day
+          paths:
+            - libvirt-rpms
 
   debian-11:
     jobs:
@@ -66,29 +50,33 @@ targets:
         suffix: -clang
 
       - arch: aarch64
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: armv6l
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: armv7l
 
       - arch: i686
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: mips64el
+        containers: false
+        builds: false
 
       - arch: mipsel
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: ppc64le
+        containers: false
+        builds: false
 
       - arch: s390x
-        allow-failure: true
+        containers: false
         builds: false
 
   debian-sid:
@@ -97,42 +85,54 @@ targets:
         allow-failure: true
 
       - arch: aarch64
-        allow-failure: true
+        containers: false
+        builds: false
 
       - arch: armv6l
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: armv7l
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: i686
-        allow-failure: true
+        containers: false
+        builds: false
 
       - arch: mips64el
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: mipsel
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: ppc64le
-        allow-failure: true
+        containers: false
         builds: false
 
       - arch: s390x
-        allow-failure: true
+        containers: false
+        builds: false
 
-  fedora-34: x86_64
-
-  fedora-35:
+  fedora-36:
     jobs:
       - arch: x86_64
+        artifacts:
+          expire_in: 1 day
+          paths:
+            - libvirt-rpms
+
+  fedora-37:
+    jobs:
+      - arch: x86_64
+        artifacts:
+          expire_in: 1 day
+          paths:
+            - libvirt-rpms
 
       - arch: mingw32
-        allow-failure: true
         builds: false
 
       - arch: mingw64
@@ -160,13 +160,7 @@ targets:
 
   freebsd-13: x86_64
 
-  freebsd-current:
-    jobs:
-      - arch: x86_64
-        allow-failure: true
-        builds: False
-
-  opensuse-leap-152:
+  opensuse-leap-153:
     jobs:
       - arch: x86_64
         variables:
@@ -179,14 +173,12 @@ targets:
         variables:
           RPM: skip
 
-  macos-11:
+  macos-12:
     jobs:
-      - arch: x86_64
+      - arch: aarch64
         variables:
           PATH_EXTRA: /usr/local/opt/ccache/libexec:/usr/local/opt/gettext/bin:/usr/local/opt/libpcap/bin:/usr/local/opt/libxslt/bin:/usr/local/opt/rpcgen/bin
           PKG_CONFIG_PATH: /usr/local/opt/curl/lib/pkgconfig:/usr/local/opt/libpcap/lib/pkgconfig:/usr/local/opt/libxml2/lib/pkgconfig:/usr/local/opt/ncurses/lib/pkgconfig:/usr/local/opt/readline/lib/pkgconfig
-
-  ubuntu-1804: x86_64
 
   ubuntu-2004:
     jobs:
@@ -195,6 +187,11 @@ targets:
           ASAN_OPTIONS: verify_asan_link_order=0
           MESON_ARGS: -Db_lundef=false -Db_sanitize=address,undefined
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+  ubuntu-2204:
+    jobs:
+      - arch: x86_64
+        builds: false
 
       - arch: x86_64
         suffix: -clang

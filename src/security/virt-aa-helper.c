@@ -476,11 +476,14 @@ valid_path(const char *path, const bool readonly)
         "/initrd",
         "/initrd.img",
         "/usr/share/edk2/",
-        "/usr/share/OVMF/",              /* for OVMF images */
-        "/usr/share/ovmf/",              /* for OVMF images */
-        "/usr/share/AAVMF/",             /* for AAVMF images */
-        "/usr/share/qemu-efi/",          /* for AAVMF images */
-        "/usr/share/qemu-efi-aarch64/"   /* for AAVMF images */
+        "/usr/share/OVMF/",                  /* for OVMF images */
+        "/usr/share/ovmf/",                  /* for OVMF images */
+        "/usr/share/AAVMF/",                 /* for AAVMF images */
+        "/usr/share/qemu-efi/",              /* for AAVMF images */
+        "/usr/share/qemu-efi-aarch64/",      /* for AAVMF images */
+        "/usr/share/qemu/",                  /* SUSE path for OVMF and AAVMF images */
+        "/usr/lib/u-boot/",                  /* u-boot loaders for qemu */
+        "/usr/lib/riscv64-linux-gnu/opensbi" /* RISC-V SBI implementation */
     };
     /* override the above with these */
     const char * const override[] = {
@@ -571,13 +574,8 @@ caps_mockup(vahControl * ctl, const char *xmlStr)
     g_autoptr(xmlXPathContext) ctxt = NULL;
     char *arch;
 
-    if (!(xml = virXMLParseStringCtxt(xmlStr, _("(domain_definition)"),
-                                      &ctxt))) {
-        return -1;
-    }
-
-    if (!virXMLNodeNameEqual(ctxt->node, "domain")) {
-        vah_error(NULL, 0, _("unexpected root element, expecting <domain>"));
+    if (!(xml = virXMLParse(NULL, xmlStr, _("(domain_definition)"),
+                            "domain", &ctxt, NULL, false))) {
         return -1;
     }
 
@@ -610,7 +608,8 @@ virDomainDefParserConfig virAAHelperDomainDefParserConfig = {
     .features = VIR_DOMAIN_DEF_FEATURE_MEMORY_HOTPLUG |
                 VIR_DOMAIN_DEF_FEATURE_OFFLINE_VCPUPIN |
                 VIR_DOMAIN_DEF_FEATURE_INDIVIDUAL_VCPUS |
-                VIR_DOMAIN_DEF_FEATURE_NET_MODEL_STRING,
+                VIR_DOMAIN_DEF_FEATURE_NET_MODEL_STRING |
+                VIR_DOMAIN_DEF_FEATURE_DISK_FD,
 };
 
 static int
@@ -632,7 +631,7 @@ get_definition(vahControl * ctl, const char *xmlStr)
     }
 
     if (!(ctl->xmlopt = virDomainXMLOptionNew(&virAAHelperDomainDefParserConfig,
-                                              NULL, NULL, NULL, NULL))) {
+                                              NULL, NULL, NULL, NULL, NULL))) {
         vah_error(ctl, 0, _("Failed to create XML config object"));
         return -1;
     }
@@ -1006,9 +1005,10 @@ get_files(vahControl * ctl)
         if (vah_add_file(&buf, ctl->def->os.loader->path, "rk") != 0)
             goto cleanup;
 
-    if (ctl->def->os.loader && ctl->def->os.loader->nvram)
-        if (vah_add_file(&buf, ctl->def->os.loader->nvram, "rwk") != 0)
+    if (ctl->def->os.loader && ctl->def->os.loader->nvram) {
+        if (storage_source_add_files(ctl->def->os.loader->nvram, &buf, 0) < 0)
             goto cleanup;
+    }
 
     for (i = 0; i < ctl->def->ngraphics; i++) {
         virDomainGraphicsDef *graphics = ctl->def->graphics[i];
@@ -1070,7 +1070,7 @@ get_files(vahControl * ctl)
 
             case VIR_DOMAIN_HOSTDEV_SUBSYS_TYPE_MDEV: {
                 virDomainHostdevSubsysMediatedDev *mdevsrc = &dev->source.subsys.u.mdev;
-                switch ((virMediatedDeviceModelType) mdevsrc->model) {
+                switch (mdevsrc->model) {
                     case VIR_MDEV_MODEL_TYPE_VFIO_PCI:
                     case VIR_MDEV_MODEL_TYPE_VFIO_AP:
                     case VIR_MDEV_MODEL_TYPE_VFIO_CCW:
@@ -1211,7 +1211,7 @@ get_files(vahControl * ctl)
 
             shortName = virDomainDefGetShortName(ctl->def);
 
-            switch (ctl->def->tpms[i]->version) {
+            switch (ctl->def->tpms[i]->data.emulator.version) {
             case VIR_DOMAIN_TPM_VERSION_1_2:
                 tpmpath = "tpm1.2";
                 break;
@@ -1284,7 +1284,7 @@ get_files(vahControl * ctl)
         for (i = 0; i < ctl->def->nnets; i++) {
             virDomainNetDef *net = ctl->def->nets[i];
             if (net && virDomainNetGetModelString(net)) {
-                if (net->driver.virtio.name == VIR_DOMAIN_NET_BACKEND_TYPE_QEMU)
+                if (net->driver.virtio.name == VIR_DOMAIN_NET_DRIVER_TYPE_QEMU)
                     continue;
                 if (!virDomainNetIsVirtioModel(net))
                     continue;
@@ -1316,7 +1316,7 @@ get_files(vahControl * ctl)
         virBufferAddLit(&buf, "  \"/dev/nvidiactl\" rw,\n");
         virBufferAddLit(&buf, "  # Probe DRI device attributes\n");
         virBufferAddLit(&buf, "  \"/dev/dri/\" r,\n");
-        virBufferAddLit(&buf, "  \"/sys/devices/**/{uevent,vendor,device,subsystem_vendor,subsystem_device}\" r,\n");
+        virBufferAddLit(&buf, "  \"/sys/devices/**/{uevent,vendor,device,subsystem_vendor,subsystem_device,config,revision}\" r,\n");
         virBufferAddLit(&buf, "  # dri libs will trigger that, but t is not requited and DAC would deny it anyway\n");
         virBufferAddLit(&buf, "  deny \"/var/lib/libvirt/.cache/\" w,\n");
     }
@@ -1339,17 +1339,17 @@ vahParseArgv(vahControl * ctl, int argc, char **argv)
 {
     int arg, idx = 0;
     struct option opt[] = {
-        {"add", 0, 0, 'a'},
-        {"create", 0, 0, 'c'},
-        {"dryrun", 0, 0, 'd'},
-        {"delete", 0, 0, 'D'},
-        {"add-file", 0, 0, 'f'},
-        {"append-file", 0, 0, 'F'},
-        {"help", 0, 0, 'h'},
-        {"replace", 0, 0, 'r'},
-        {"remove", 0, 0, 'R'},
-        {"uuid", 1, 0, 'u'},
-        {0, 0, 0, 0}
+        { "add", 0, 0, 'a' },
+        { "create", 0, 0, 'c' },
+        { "dryrun", 0, 0, 'd' },
+        { "delete", 0, 0, 'D' },
+        { "add-file", 0, 0, 'f' },
+        { "append-file", 0, 0, 'F' },
+        { "help", 0, 0, 'h' },
+        { "replace", 0, 0, 'r' },
+        { "remove", 0, 0, 'R' },
+        { "uuid", 1, 0, 'u' },
+        { 0, 0, 0, 0 },
     };
 
     while ((arg = getopt_long(argc, argv, "acdDhrRH:b:u:p:f:F:", opt,
@@ -1449,7 +1449,8 @@ main(int argc, char **argv)
     virFileActivateDirOverrideForProg(argv[0]);
 
     /* Initialize the log system */
-    virLogSetFromEnv();
+    if (virLogSetFromEnv() < 0)
+        exit(EXIT_FAILURE);
 
     /* clear the environment */
     environ = NULL;
@@ -1496,7 +1497,7 @@ main(int argc, char **argv)
                 size = virFileLength(profile, -1);
                 if (size == 0) {
                         vah_warning(_("Profile of 0 size detected, will attempt to remove it"));
-                        if ((rc = parserRemove(ctl->uuid) != 0))
+                        if ((rc = parserRemove(ctl->uuid)) != 0)
                                 vah_error(ctl, 1, _("could not remove profile"));
                         unlink(profile);
                         purged = true;

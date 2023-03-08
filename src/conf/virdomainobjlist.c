@@ -25,8 +25,6 @@
 #include "internal.h"
 #include "datatypes.h"
 #include "virdomainobjlist.h"
-#include "checkpoint_conf.h"
-#include "snapshot_conf.h"
 #include "viralloc.h"
 #include "virfile.h"
 #include "virlog.h"
@@ -46,11 +44,11 @@ struct _virDomainObjList {
     virObjectRWLockable parent;
 
     /* uuid string -> virDomainObj  mapping
-     * for O(1), lockless lookup-by-uuid */
+     * for O(1), lookup-by-uuid */
     GHashTable *objs;
 
     /* name -> virDomainObj mapping for O(1),
-     * lockless lookup-by-name */
+     * lookup-by-name */
     GHashTable *objsName;
 };
 
@@ -75,8 +73,8 @@ virDomainObjList *virDomainObjListNew(void)
     if (!(doms = virObjectRWLockableNew(virDomainObjListClass)))
         return NULL;
 
-    doms->objs = virHashNew(virObjectFreeHashData);
-    doms->objsName = virHashNew(virObjectFreeHashData);
+    doms->objs = virHashNew(virObjectUnref);
+    doms->objsName = virHashNew(virObjectUnref);
     return doms;
 }
 
@@ -219,7 +217,7 @@ virDomainObjListFindByName(virDomainObjList *doms,
  * tables. Once successfully added into a table, increase the
  * reference count since upon removal in virHashRemoveEntry
  * the virObjectUnref will be called since the hash tables were
- * configured to call virObjectFreeHashData when the object is
+ * configured to call virObjectUnref when the object is
  * removed from the hash table.
  *
  * Returns 0 on success with 3 references and locked
@@ -455,7 +453,7 @@ virDomainObjListRename(virDomainObjList *doms,
 
     /* Increment the refcnt for @new_name. We're about to remove
      * the @old_name which will cause the refcnt to be decremented
-     * via the virObjectUnref call made during the virObjectFreeHashData
+     * via the virObjectUnref call made during the virObjectUnref
      * as a result of removing something from the object list hash
      * table as set up during virDomainObjListNew. */
     virObjectRef(dom);
@@ -915,6 +913,24 @@ virDomainObjListCollectIterator(void *payload,
 }
 
 
+void
+virDomainObjListCollectAll(virDomainObjList *domlist,
+                           virDomainObj ***vms,
+                           size_t *nvms)
+{
+    struct virDomainListData data = { NULL, 0 };
+
+    virObjectRWLockRead(domlist);
+    data.vms = g_new0(virDomainObj *, virHashSize(domlist->objs));
+
+    virHashForEach(domlist->objs, virDomainObjListCollectIterator, &data);
+    virObjectRWUnlock(domlist);
+
+    *nvms = data.nvms;
+    *vms = data.vms;
+}
+
+
 static void
 virDomainObjListFilter(virDomainObj ***list,
                        size_t *nvms,
@@ -948,7 +964,7 @@ virDomainObjListFilter(virDomainObj ***list,
 }
 
 
-int
+void
 virDomainObjListCollect(virDomainObjList *domlist,
                         virConnectPtr conn,
                         virDomainObj ***vms,
@@ -956,20 +972,8 @@ virDomainObjListCollect(virDomainObjList *domlist,
                         virDomainObjListACLFilter filter,
                         unsigned int flags)
 {
-    struct virDomainListData data = { NULL, 0 };
-
-    virObjectRWLockRead(domlist);
-    data.vms = g_new0(virDomainObj *, virHashSize(domlist->objs));
-
-    virHashForEach(domlist->objs, virDomainObjListCollectIterator, &data);
-    virObjectRWUnlock(domlist);
-
-    virDomainObjListFilter(&data.vms, &data.nvms, conn, filter, flags);
-
-    *nvms = data.nvms;
-    *vms = data.vms;
-
-    return 0;
+    virDomainObjListCollectAll(domlist, vms, nvms);
+    virDomainObjListFilter(vms, nvms, conn, filter, flags);
 }
 
 
@@ -1040,8 +1044,7 @@ virDomainObjListExport(virDomainObjList *domlist,
     size_t i;
     int ret = -1;
 
-    if (virDomainObjListCollect(domlist, conn, &vms, &nvms, filter, flags) < 0)
-        return -1;
+    virDomainObjListCollect(domlist, conn, &vms, &nvms, filter, flags);
 
     if (domains) {
         doms = g_new0(virDomainPtr, nvms + 1);

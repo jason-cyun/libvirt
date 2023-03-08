@@ -482,8 +482,6 @@ hypervDomainAddVirtualDiskParent(virDomainPtr domain,
     parent__PATH = g_strdup_printf("\\\\%s\\Root\\Virtualization\\V2:"
                                    "Msvm_ResourceAllocationSettingData.InstanceID=\"%s\"",
                                    hostname, parentInstanceIDEscaped);
-    if (!parent__PATH)
-        return -1;
 
     if (hypervSetEmbeddedProperty(controllerResource, "Parent", parent__PATH) < 0)
         return -1;
@@ -528,9 +526,6 @@ hypervDomainAddVirtualHardDisk(virDomainPtr domain,
     vhd__PATH = g_strdup_printf("\\\\%s\\Root\\Virtualization\\V2:"
                                 "Msvm_ResourceAllocationSettingData.InstanceID=\"%s\"",
                                 hostname, vhdInstanceIdEscaped);
-
-    if (!vhd__PATH)
-        return -1;
 
     if (hypervSetEmbeddedProperty(volumeResource, "Parent", vhd__PATH) < 0)
         return -1;
@@ -660,8 +655,6 @@ hypervDomainAttachPhysicalDisk(virDomainPtr domain,
     controller__PATH = g_strdup_printf("\\\\%s\\Root\\Virtualization\\V2:"
                                        "Msvm_ResourceAllocationSettingData.InstanceID=\"%s\"",
                                        hostname, controllerInstanceIdEscaped);
-    if (!controller__PATH)
-        return -1;
 
     if (hypervSetEmbeddedProperty(diskResource, "Parent", controller__PATH) < 0)
         return -1;
@@ -711,8 +704,6 @@ hypervDomainAddOpticalDrive(virDomainPtr domain,
     parent__PATH = g_strdup_printf("\\\\%s\\Root\\Virtualization\\V2:"
                                    "Msvm_ResourceAllocationSettingData.InstanceID=\"%s\"",
                                    hostname, parentInstanceIDEscaped);
-    if (!parent__PATH)
-        return -1;
 
     if (hypervSetEmbeddedProperty(driveResource, "Parent", parent__PATH) < 0)
         return -1;
@@ -756,8 +747,6 @@ hypervDomainAddOpticalDisk(virDomainPtr domain,
     vhd__PATH = g_strdup_printf("\\\\%s\\Root\\Virtualization\\V2:"
                                 "Msvm_ResourceAllocationSettingData.InstanceID=\"%s\"",
                                 hostname, vhdInstanceIdEscaped);
-    if (!vhd__PATH)
-        return -1;
 
     if (hypervSetEmbeddedProperty(volumeResource, "Parent", vhd__PATH) < 0)
         return -1;
@@ -828,9 +817,6 @@ hypervDomainAttachFloppy(virDomainPtr domain,
     vfd__PATH = g_strdup_printf("\\\\%s\\Root\\Virtualization\\V2:"
                                 "Msvm_ResourceAllocationSettingData.InstanceID=\"%s\"",
                                 hostname, vhdInstanceIdEscaped);
-
-    if (!vfd__PATH)
-        return -1;
 
     if (hypervSetEmbeddedProperty(volumeResource, "Parent", vfd__PATH) < 0)
         return -1;
@@ -1780,7 +1766,7 @@ hypervConnectOpen(virConnectPtr conn, virConnectAuthPtr auth,
         goto cleanup;
 
     /* init xmlopt for domain XML */
-    priv->xmlopt = virDomainXMLOptionNew(&hypervDomainDefParserConfig, NULL, NULL, NULL, NULL);
+    priv->xmlopt = virDomainXMLOptionNew(&hypervDomainDefParserConfig, NULL, NULL, NULL, NULL, NULL);
 
     if (hypervGetOperatingSystem(priv, &os) < 0)
         goto cleanup;
@@ -1794,8 +1780,7 @@ hypervConnectOpen(virConnectPtr conn, virConnectAuthPtr auth,
 
     priv->version = g_strdup(os->data->Version);
 
-    conn->privateData = priv;
-    priv = NULL;
+    conn->privateData = g_steal_pointer(&priv);
     result = VIR_DRV_OPEN_SUCCESS;
 
  cleanup:
@@ -3121,8 +3106,32 @@ hypervDomainAttachDeviceFlags(virDomainPtr domain, const char *xml, unsigned int
         if (hypervDomainAttachSyntheticEthernetAdapter(domain, dev->data.net, hostname) < 0)
             return -1;
         break;
-    default:
-        /* unsupported device type */
+
+    case VIR_DOMAIN_DEVICE_LEASE:
+    case VIR_DOMAIN_DEVICE_FS:
+    case VIR_DOMAIN_DEVICE_INPUT:
+    case VIR_DOMAIN_DEVICE_SOUND:
+    case VIR_DOMAIN_DEVICE_VIDEO:
+    case VIR_DOMAIN_DEVICE_HOSTDEV:
+    case VIR_DOMAIN_DEVICE_WATCHDOG:
+    case VIR_DOMAIN_DEVICE_CONTROLLER:
+    case VIR_DOMAIN_DEVICE_GRAPHICS:
+    case VIR_DOMAIN_DEVICE_HUB:
+    case VIR_DOMAIN_DEVICE_REDIRDEV:
+    case VIR_DOMAIN_DEVICE_NONE:
+    case VIR_DOMAIN_DEVICE_SMARTCARD:
+    case VIR_DOMAIN_DEVICE_MEMBALLOON:
+    case VIR_DOMAIN_DEVICE_NVRAM:
+    case VIR_DOMAIN_DEVICE_LAST:
+    case VIR_DOMAIN_DEVICE_RNG:
+    case VIR_DOMAIN_DEVICE_TPM:
+    case VIR_DOMAIN_DEVICE_PANIC:
+    case VIR_DOMAIN_DEVICE_SHMEM:
+    case VIR_DOMAIN_DEVICE_MEMORY:
+    case VIR_DOMAIN_DEVICE_IOMMU:
+    case VIR_DOMAIN_DEVICE_VSOCK:
+    case VIR_DOMAIN_DEVICE_AUDIO:
+    case VIR_DOMAIN_DEVICE_CRYPTO:
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Attaching devices of type %d is not implemented"), dev->type);
         return -1;
@@ -3533,8 +3542,7 @@ hypervConnectListAllDomains(virConnectPtr conn,
     }
 
     if (doms)
-        *domains = doms;
-    doms = NULL;
+        *domains = g_steal_pointer(&doms);
     ret = count;
 
  cleanup:

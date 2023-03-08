@@ -26,7 +26,6 @@
 #include "cpu.h"
 #include "virstring.h"
 #include "cpu_map.h"
-#include "virbuffer.h"
 
 #define VIR_FROM_THIS VIR_FROM_CPU
 
@@ -53,6 +52,12 @@ struct _ppc64_map {
     size_t nmodels;
     struct _ppc64_model **models;
 };
+
+static virCPUppc64Map *cpuMap;
+
+int virCPUppc64DriverOnceInit(void);
+VIR_ONCE_GLOBAL_INIT(virCPUppc64Driver);
+
 
 /* Convert a legacy CPU definition by transforming
  * model names to generation names:
@@ -88,22 +93,22 @@ ppc64CheckCompatibilityMode(const char *host_model,
     if (!compat_mode)
         return VIR_CPU_COMPARE_IDENTICAL;
 
-    /* Valid host CPUs: POWER6, POWER7, POWER8, POWER9 */
+    /* Valid host CPUs: POWER6, POWER7, POWER8, POWER9, POWER10 */
     if (!STRPREFIX(host_model, "POWER") ||
         !(tmp = (char *) host_model + strlen("POWER")) ||
         virStrToLong_i(tmp, NULL, 10, &host) < 0 ||
-        host < 6 || host > 9) {
+        host < 6 || host > 10) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s",
                        _("Host CPU does not support compatibility modes"));
         return VIR_CPU_COMPARE_ERROR;
     }
 
-    /* Valid compatibility modes: power6, power7, power8, power9 */
+    /* Valid compatibility modes: power6, power7, power8, power9, power10 */
     if (!STRPREFIX(compat_mode, "power") ||
         !(tmp = (char *) compat_mode + strlen("power")) ||
         virStrToLong_i(tmp, NULL, 10, &compat) < 0 ||
-        compat < 6 || compat > 9) {
+        compat < 6 || compat > 10) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Unknown compatibility mode %s"),
                        compat_mode);
@@ -300,7 +305,6 @@ ppc64ModelParse(xmlXPathContextPtr ctxt,
     g_autoptr(virCPUppc64Model) model = NULL;
     g_autofree xmlNodePtr *nodes = NULL;
     g_autofree char *vendor = NULL;
-    unsigned long pvr;
     size_t i;
     int n;
 
@@ -341,23 +345,13 @@ ppc64ModelParse(xmlXPathContextPtr ctxt,
     model->data.len = n;
 
     for (i = 0; i < n; i++) {
-        ctxt->node = nodes[i];
-
-        if (virXPathULongHex("string(./@value)", ctxt, &pvr) < 0) {
-            virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Missing or invalid PVR value in CPU model %s"),
-                           model->name);
+        if (virXMLPropUInt(nodes[i], "value", 16, VIR_XML_PROP_REQUIRED,
+                           &model->data.pvr[i].value) < 0)
             return -1;
-        }
-        model->data.pvr[i].value = pvr;
 
-        if (virXPathULongHex("string(./@mask)", ctxt, &pvr) < 0) {
-            virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Missing or invalid PVR mask in CPU model %s"),
-                           model->name);
+        if (virXMLPropUInt(nodes[i], "mask", 16, VIR_XML_PROP_REQUIRED,
+                           &model->data.pvr[i].mask) < 0)
             return -1;
-        }
-        model->data.pvr[i].mask = pvr;
     }
 
     VIR_APPEND_ELEMENT(map->models, map->nmodels, model);
@@ -366,8 +360,8 @@ ppc64ModelParse(xmlXPathContextPtr ctxt,
 }
 
 
-static struct _ppc64_map *
-ppc64LoadMap(void)
+static virCPUppc64Map *
+virCPUppc64LoadMap(void)
 {
     g_autoptr(virCPUppc64Map) map = NULL;
 
@@ -379,20 +373,45 @@ ppc64LoadMap(void)
     return g_steal_pointer(&map);
 }
 
+
+int
+virCPUppc64DriverOnceInit(void)
+{
+    if (!(cpuMap = virCPUppc64LoadMap()))
+        return -1;
+
+    return 0;
+}
+
+
+static virCPUppc64Map *
+virCPUppc64GetMap(void)
+{
+    if (virCPUppc64DriverInitialize() < 0)
+        return NULL;
+
+    return cpuMap;
+}
+
+
 static virCPUCompareResult
 ppc64Compute(virCPUDef *host,
              const virCPUDef *other,
              char **message)
 {
-    g_autoptr(virCPUppc64Map) map = NULL;
+    virCPUppc64Map *map = NULL;
     g_autoptr(virCPUppc64Model) host_model = NULL;
     g_autoptr(virCPUppc64Model) guest_model = NULL;
     g_autoptr(virCPUDef) cpu = NULL;
     size_t i;
 
     /* Ensure existing configurations are handled correctly */
-    if (!(cpu = virCPUDefCopy(other)) ||
-        virCPUppc64ConvertLegacy(cpu) < 0)
+    if (!other)
+        return VIR_CPU_COMPARE_ERROR;
+
+    cpu = virCPUDefCopy(other);
+
+    if (virCPUppc64ConvertLegacy(cpu) < 0)
         return VIR_CPU_COMPARE_ERROR;
 
     if (cpu->arch != VIR_ARCH_NONE) {
@@ -429,7 +448,7 @@ ppc64Compute(virCPUDef *host,
         return VIR_CPU_COMPARE_INCOMPATIBLE;
     }
 
-    if (!(map = ppc64LoadMap()))
+    if (!(map = virCPUppc64GetMap()))
         return VIR_CPU_COMPARE_ERROR;
 
     /* Host CPU information */
@@ -527,10 +546,10 @@ ppc64DriverDecode(virCPUDef *cpu,
                   const virCPUData *data,
                   virDomainCapsCPUModels *models)
 {
-    g_autoptr(virCPUppc64Map) map = NULL;
+    virCPUppc64Map *map = NULL;
     const virCPUppc64Model *model;
 
-    if (!data || !(map = ppc64LoadMap()))
+    if (!data || !(map = virCPUppc64GetMap()))
         return -1;
 
     if (!(model = ppc64ModelFindPVR(map, data->data.ppc64.pvr[0].value))) {
@@ -657,13 +676,13 @@ virCPUppc64Baseline(virCPUDef **cpus,
                     const char **features G_GNUC_UNUSED,
                     bool migratable G_GNUC_UNUSED)
 {
-    g_autoptr(virCPUppc64Map) map = NULL;
+    virCPUppc64Map *map = NULL;
     const virCPUppc64Model *model;
     const virCPUppc64Vendor *vendor = NULL;
     g_autoptr(virCPUDef) cpu = NULL;
     size_t i;
 
-    if (!(map = ppc64LoadMap()))
+    if (!(map = virCPUppc64GetMap()))
         return NULL;
 
     if (!(model = ppc64ModelFind(map, cpus[0]->model))) {
@@ -738,10 +757,10 @@ virCPUppc64Baseline(virCPUDef **cpus,
 static int
 virCPUppc64DriverGetModels(char ***models)
 {
-    g_autoptr(virCPUppc64Map) map = NULL;
+    virCPUppc64Map *map = NULL;
     size_t i;
 
-    if (!(map = ppc64LoadMap()))
+    if (!(map = virCPUppc64GetMap()))
         return -1;
 
     if (models) {
@@ -753,6 +772,25 @@ virCPUppc64DriverGetModels(char ***models)
 
     return map->nmodels;
 }
+
+
+static const char *
+virCPUppc64GetVendorForModel(const char *modelName)
+{
+    virCPUppc64Map *map = NULL;
+    virCPUppc64Model *model;
+
+    if (!(map = virCPUppc64GetMap()))
+        return NULL;
+
+    model = ppc64ModelFind(map, modelName);
+
+    if (!model || !model->vendor)
+        return NULL;
+
+    return model->vendor->name;
+}
+
 
 struct cpuArchDriver cpuDriverPPC64 = {
     .name       = "ppc64",
@@ -767,6 +805,7 @@ struct cpuArchDriver cpuDriverPPC64 = {
     .baseline   = virCPUppc64Baseline,
     .update     = virCPUppc64Update,
     .getModels  = virCPUppc64DriverGetModels,
+    .getVendorForModel = virCPUppc64GetVendorForModel,
     .convertLegacy = virCPUppc64ConvertLegacy,
     .dataIsIdentical = virCPUppc64DataIsIdentical,
 };

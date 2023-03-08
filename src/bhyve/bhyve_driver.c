@@ -70,24 +70,13 @@ VIR_LOG_INIT("bhyve.bhyve_driver");
 
 struct _bhyveConn *bhyve_driver = NULL;
 
-void
-bhyveDriverLock(struct _bhyveConn *driver)
-{
-    virMutexLock(&driver->lock);
-}
-
-void
-bhyveDriverUnlock(struct _bhyveConn *driver)
-{
-    virMutexUnlock(&driver->lock);
-}
-
 static int
 bhyveAutostartDomain(virDomainObj *vm, void *opaque)
 {
     const struct bhyveAutostartData *data = opaque;
     int ret = 0;
-    virObjectLock(vm);
+    VIR_LOCK_GUARD lock = virObjectLockGuard(vm);
+
     if (vm->autostart && !virDomainObjIsActive(vm)) {
         virResetLastError();
         ret = virBhyveProcessStart(data->conn, vm,
@@ -98,7 +87,6 @@ bhyveAutostartDomain(virDomainObj *vm, void *opaque)
                            vm->def->name, virGetLastErrorMessage());
         }
     }
-    virObjectUnlock(vm);
     return ret;
 }
 
@@ -219,7 +207,7 @@ bhyveConnectClose(virConnectPtr conn)
 {
     struct _bhyveConn *privconn = conn->privateData;
 
-    virCloseCallbacksRun(privconn->closeCallbacks, conn, privconn->domains, privconn);
+    virCloseCallbacksDomainRunForConn(privconn->domains, conn);
     conn->privateData = NULL;
 
     return 0;
@@ -267,7 +255,7 @@ bhyveConnectGetVersion(virConnectPtr conn, unsigned long *version)
 
     uname(&ver);
 
-    if (virParseVersionString(ver.release, version, true) < 0) {
+    if (virStringParseVersion(version, ver.release, true) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("Unknown release: %s"), ver.release);
         return -1;
@@ -1173,7 +1161,6 @@ bhyveStateCleanup(void)
     virObjectUnref(bhyve_driver->caps);
     virObjectUnref(bhyve_driver->xmlopt);
     virSysinfoDefFree(bhyve_driver->hostsysinfo);
-    virObjectUnref(bhyve_driver->closeCallbacks);
     virObjectUnref(bhyve_driver->domainEventState);
     virObjectUnref(bhyve_driver->config);
     virPortAllocatorRangeFree(bhyve_driver->remotePorts);
@@ -1190,6 +1177,7 @@ bhyveStateCleanup(void)
 static int
 bhyveStateInitialize(bool privileged,
                      const char *root,
+                     bool monolithic G_GNUC_UNUSED,
                      virStateInhibitCallback callback G_GNUC_UNUSED,
                      void *opaque G_GNUC_UNUSED)
 {
@@ -1213,9 +1201,6 @@ bhyveStateInitialize(bool privileged,
         VIR_FREE(bhyve_driver);
         return VIR_DRV_STATE_INIT_ERROR;
     }
-
-    if (!(bhyve_driver->closeCallbacks = virCloseCallbacksNew()))
-        goto cleanup;
 
     if (!(bhyve_driver->caps = virBhyveCapsBuild()))
         goto cleanup;

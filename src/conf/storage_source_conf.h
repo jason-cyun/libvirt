@@ -86,6 +86,7 @@ VIR_ENUM_DECL(virStorageFileFormat);
 
 typedef enum {
     VIR_STORAGE_FILE_FEATURE_LAZY_REFCOUNTS = 0,
+    VIR_STORAGE_FILE_FEATURE_EXTENDED_L2,
 
     VIR_STORAGE_FILE_FEATURE_LAST
 } virStorageFileFeature;
@@ -198,7 +199,7 @@ struct _virStorageSourcePoolDef {
     char *volume; /* volume name */
     int voltype; /* virStorageVolType, internal only */
     int pooltype; /* virStoragePoolType from storage_conf.h, internal only */
-    int actualtype; /* virStorageType, internal only */
+    virStorageType actualtype; /* internal only */
     int mode; /* virStorageSourcePoolMode, currently makes sense only for iscsi pool */
 };
 
@@ -225,7 +226,7 @@ struct _virStorageAuthDef {
 
 typedef struct _virStoragePRDef virStoragePRDef;
 struct _virStoragePRDef {
-    int managed; /* enum virTristateBool */
+    virTristateBool managed;
     char *path;
 
     /* manager object alias */
@@ -257,6 +258,27 @@ struct _virStorageSourceSlice {
 };
 
 
+struct _virStorageSourceFDTuple {
+    GObject parent;
+    int *fds;
+    size_t nfds;
+    int *testfds; /* populated by tests to ensure stable FDs */
+
+    bool writable;
+    bool tryRestoreLabel;
+
+    /* connection this FD tuple is associated with for auto-closing */
+    virConnect *conn;
+
+    /* original selinux label when we relabel the image */
+    char *selinuxLabel;
+};
+G_DECLARE_FINAL_TYPE(virStorageSourceFDTuple, vir_storage_source_fd_tuple, VIR, STORAGE_SOURCE_FD_TUPLE, GObject);
+
+virStorageSourceFDTuple *
+virStorageSourceFDTupleNew(void);
+
+
 typedef struct _virStorageSource virStorageSource;
 
 /* Stores information related to a host resource.  In the case of backing
@@ -268,8 +290,9 @@ struct _virStorageSource {
     virObject parent;
 
     unsigned int id; /* backing chain identifier, 0 is unset */
-    int type; /* virStorageType */
+    virStorageType type;
     char *path;
+    char *fdgroup; /* name of group of file descriptors the user wishes to use instead of 'path' */
     int protocol; /* virStorageNetProtocol */
     char *volume; /* volume name for remote storage */
     char *snapshot; /* for storage systems supporting internal snapshots */
@@ -357,6 +380,9 @@ struct _virStorageSource {
     char *tlsAlias;
     char *tlsCertdir;
 
+    /* TLS hostname override */
+    char *tlsHostname;
+
     bool detected; /* true if this entry was not provided by the user */
 
     unsigned int debugLevel;
@@ -392,6 +418,8 @@ struct _virStorageSource {
      * registered with a full index (vda[3]) so that we can properly report just
      * one event for it */
     bool thresholdEventWithIndex;
+
+    virStorageSourceFDTuple *fdtuple;
 };
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virStorageSource, virObjectUnref);
@@ -465,11 +493,14 @@ virStorageSourcePoolDefFree(virStorageSourcePoolDef *def);
 void
 virStorageSourceClear(virStorageSource *def);
 
-int
+virStorageType
 virStorageSourceGetActualType(const virStorageSource *def);
 
 bool
 virStorageSourceIsLocalStorage(const virStorageSource *src);
+
+bool
+virStorageSourceIsFD(const virStorageSource *src);
 
 bool
 virStorageSourceIsEmpty(virStorageSource *src);
