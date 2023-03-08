@@ -4618,7 +4618,7 @@ qemuMigrationSrcPerformPeer2Peer3(virQEMUDriverPtr driver,
     cookieout = NULL;
     cookieoutlen = 0;
 
-    // confirm means: update jobinfo stats got from dst libvirtd and kill vm if migration is ok, or resume it if fails
+    // confirm means: update jobinfo stats got from dst libvirtd if have and kill vm if migration is ok, or resume it if fails
     ret = qemuMigrationSrcConfirmPhase(driver, vm,
                                        cookiein, cookieinlen,
                                        flags, cancelled);
