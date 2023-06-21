@@ -3171,6 +3171,8 @@ virDomainMigrateVersion3Full(virDomainPtr domain,
                                         domain->name) < 0) {
             ddomain = NULL;
         } else {
+            // if qemu on dst crash, will this rpc all hang for ever???
+            // This rpc is between two libvirtd not qemy it self
             ddomain = dconn->driver->domainMigrateFinish3Params
                 (dconn, params, nparams, cookiein, cookieinlen,
                  &cookieout, &cookieoutlen, destflags, cancelled);

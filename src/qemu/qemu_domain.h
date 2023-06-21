@@ -373,6 +373,7 @@ struct _qemuDomainObjPrivate {
 
     virPerfPtr perf;
 
+    // this is used when remove a unplug device, set it before move, reset it after deleted
     qemuDomainUnpluggingDevice unplug;
 
     char **qemuDevices; /* NULL-terminated list of devices aliases known to QEMU */

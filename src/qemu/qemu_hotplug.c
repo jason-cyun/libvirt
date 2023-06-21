@@ -4616,14 +4616,20 @@ qemuDomainWaitForDeviceRemoval(virDomainObjPtr vm)
     until += qemuDomainRemoveDeviceWaitTime;
 
     while (priv->unplug.alias) {
+        // 1 timedout, 0 on success, -1 error
         if ((rc = virDomainObjWaitUntil(vm, until)) == 1)
             return 0;
 
+        // rc = -1 goes here
         if (rc < 0) {
             VIR_WARN("Failed to wait on unplug condition for domain '%s' "
                      "device '%s'", vm->def->name, priv->unplug.alias);
             return 1;
         }
+
+        // rc = 0, got DEVICE_DELETED, at there
+        // at there qemuDomainResetDeviceRemoval will be called
+        // so that priv->unplug.alias will be set with NULL, break the loop as well
     }
 
     if (priv->unplug.status == QEMU_DOMAIN_UNPLUGGING_DEVICE_STATUS_GUEST_REJECTED) {
@@ -5419,6 +5425,7 @@ qemuDomainDetachNetDevice(virQEMUDriverPtr driver,
     ignore_value(qemuInterfaceStopDevice(detach));
 
     if (!async)
+        // set unplug device at private data
         qemuDomainMarkDeviceForRemoval(vm, &detach->info);
 
     qemuDomainObjEnterMonitor(driver, vm);
@@ -5434,12 +5441,20 @@ qemuDomainDetachNetDevice(virQEMUDriverPtr driver,
     if (async) {
         ret = 0;
     } else {
+        // ret = 1: means we can remove netdevice right now
+        // 1. qemu does not support DEVICE_DELETED event
+        // 2. can NOT get current time_t
+        // 3. wait break due to error
+        // 4. got DEVICE_DELETED event
+        //
+        // ret = 0: timedout, we can NOT remove net device
         if ((ret = qemuDomainWaitForDeviceRemoval(vm)) == 1)
             ret = qemuDomainRemoveNetDevice(driver, vm, detach);
     }
 
  cleanup:
     if (!async)
+        // reset unplug device after this call
         qemuDomainResetDeviceRemoval(vm);
     return ret;
 }
