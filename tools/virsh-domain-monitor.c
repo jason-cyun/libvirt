@@ -192,6 +192,7 @@ VIR_ENUM_IMPL(virshDomainPausedReason,
               N_("starting up"),
               N_("post-copy"),
               N_("post-copy failed"),
+              N_("api error"),
 );
 
 VIR_ENUM_DECL(virshDomainShutdownReason);
@@ -327,7 +328,7 @@ cmdDomMemStat(vshControl *ctl, const vshCmd *cmd)
         return false;
     if (rv > 0) {
         if (period < 0) {
-            vshError(ctl, _("Invalid collection period value '%d'"), period);
+            vshError(ctl, _("Invalid collection period value '%1$d'"), period);
             return false;
         }
 
@@ -341,7 +342,7 @@ cmdDomMemStat(vshControl *ctl, const vshCmd *cmd)
 
     nr_stats = virDomainMemoryStats(dom, stats, VIR_DOMAIN_MEMORY_STAT_NR, 0);
     if (nr_stats == -1) {
-        vshError(ctl, _("Failed to get memory statistics for domain %s"), name);
+        vshError(ctl, _("Failed to get memory statistics for domain %1$s"), name);
         return false;
     }
 
@@ -443,7 +444,6 @@ cmdDomblkinfoGet(const virDomainBlockInfo *info,
 static bool
 cmdDomblkinfo(vshControl *ctl, const vshCmd *cmd)
 {
-    virDomainBlockInfo info;
     g_autoptr(virshDomain) dom = NULL;
     bool human = false;
     bool all = false;
@@ -490,6 +490,7 @@ cmdDomblkinfo(vshControl *ctl, const vshCmd *cmd)
             g_autofree char *cap = NULL;
             g_autofree char *alloc = NULL;
             g_autofree char *phy = NULL;
+            virDomainBlockInfo info = { 0 };
 
             ctxt->node = disks[i];
             protocol = virXPathString("string(./source/@protocol)", ctxt);
@@ -512,10 +513,6 @@ cmdDomblkinfo(vshControl *ctl, const vshCmd *cmd)
                         return false;
                     }
                 }
-            } else {
-                /* if we don't call virDomainGetBlockInfo() who clears 'info'
-                 * we have to do it manually */
-                memset(&info, 0, sizeof(info));
             }
 
             if (!cmdDomblkinfoGet(&info, &cap, &alloc, &phy, human))
@@ -530,6 +527,7 @@ cmdDomblkinfo(vshControl *ctl, const vshCmd *cmd)
         g_autofree char *cap = NULL;
         g_autofree char *alloc = NULL;
         g_autofree char *phy = NULL;
+        virDomainBlockInfo info = { 0 };
 
         if (virDomainGetBlockInfo(dom, device, &info, 0) < 0)
             return false;
@@ -811,9 +809,9 @@ cmdDomIfGetLink(vshControl *ctl, const vshCmd *cmd)
 
     if (ninterfaces < 1) {
         if (macstr[0])
-            vshError(ctl, _("Interface (mac: %s) not found."), macstr);
+            vshError(ctl, _("Interface (mac: %1$s) not found."), macstr);
         else
-            vshError(ctl, _("Interface (dev: %s) not found."), iface);
+            vshError(ctl, _("Interface (dev: %1$s) not found."), iface);
 
         return false;
     } else if (ninterfaces > 1) {
@@ -986,14 +984,14 @@ cmdDomblkstat(vshControl *ctl, const vshCmd *cmd)
 
         if (virDomainBlockStats(dom, device, &stats,
                                 sizeof(stats)) == -1) {
-            vshError(ctl, _("Failed to get block stats %s %s"),
+            vshError(ctl, _("Failed to get block stats %1$s %2$s"),
                      name, device);
             return false;
         }
 
         /* human friendly output */
         if (human) {
-            vshPrint(ctl, N_("Device: %s\n"), device);
+            vshPrint(ctl, N_("Device: %1$s\n"), device);
             device = "";
         }
 
@@ -1005,13 +1003,13 @@ cmdDomblkstat(vshControl *ctl, const vshCmd *cmd)
     } else {
         params = g_new0(virTypedParameter, nparams);
         if (virDomainBlockStatsFlags(dom, device, params, &nparams, 0) < 0) {
-            vshError(ctl, _("Failed to get block stats for domain '%s' device '%s'"), name, device);
+            vshError(ctl, _("Failed to get block stats for domain '%1$s' device '%2$s'"), name, device);
             return false;
         }
 
         /* set for prettier output */
         if (human) {
-            vshPrint(ctl, N_("Device: %s\n"), device);
+            vshPrint(ctl, N_("Device: %1$s\n"), device);
             device = "";
         }
 
@@ -1097,7 +1095,7 @@ cmdDomIfstat(vshControl *ctl, const vshCmd *cmd)
         return false;
 
     if (virDomainInterfaceStats(dom, device, &stats, sizeof(stats)) == -1) {
-        vshError(ctl, _("Failed to get interface stats %s %s"), name, device);
+        vshError(ctl, _("Failed to get interface stats %1$s %2$s"), name, device);
         return false;
     }
 
@@ -1212,7 +1210,7 @@ cmdDominfo(vshControl *ctl, const vshCmd *cmd)
 {
     virDomainInfo info;
     g_autoptr(virshDomain) dom = NULL;
-    virSecurityModel secmodel;
+    virSecurityModel secmodel = { 0 };
     int persistent = 0;
     bool ret = true;
     int autostart;
@@ -1290,7 +1288,6 @@ cmdDominfo(vshControl *ctl, const vshCmd *cmd)
                  has_managed_save ? _("yes") : _("no"));
 
     /* Security model and label information */
-    memset(&secmodel, 0, sizeof(secmodel));
     if (virNodeGetSecurityModel(priv->conn, &secmodel) == -1) {
         if (last_error->code != VIR_ERR_NO_SUPPORT) {
             return false;
@@ -1462,9 +1459,9 @@ cmdDomTime(vshControl *ctl, const vshCmd *cmd)
             then = g_date_time_new_from_unix_utc(seconds);
             thenstr = g_date_time_format(then, "%Y-%m-%d %H:%M:%S");
 
-            vshPrint(ctl, _("Time: %s"), thenstr);
+            vshPrint(ctl, _("Time: %1$s"), thenstr);
         } else {
-            vshPrint(ctl, _("Time: %lld"), seconds);
+            vshPrint(ctl, _("Time: %1$lld"), seconds);
         }
     }
 
@@ -2320,7 +2317,7 @@ cmdDomIfAddr(vshControl *ctl, const vshCmd *cmd)
 
     if (sourcestr &&
         (source = virshDomainInterfaceAddressesSourceTypeFromString(sourcestr)) < 0) {
-        vshError(ctl, _("Unknown data source '%s'"), sourcestr);
+        vshError(ctl, _("Unknown data source '%1$s'"), sourcestr);
         return false;
     }
 

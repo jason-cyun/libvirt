@@ -64,7 +64,6 @@ virCapabilitiesDomainDataLookup;
 virCapabilitiesDomainSupported;
 virCapabilitiesFormatXML;
 virCapabilitiesFreeGuest;
-virCapabilitiesFreeMachines;
 virCapabilitiesGetNodeInfo;
 virCapabilitiesHostInitIOMMU;
 virCapabilitiesHostNUMAAddCell;
@@ -461,7 +460,6 @@ virDomainGraphicsVNCSharePolicyTypeFromString;
 virDomainGraphicsVNCSharePolicyTypeToString;
 virDomainHasNet;
 virDomainHostdevCapsTypeToString;
-virDomainHostdevDefClear;
 virDomainHostdevDefFree;
 virDomainHostdevDefNew;
 virDomainHostdevFind;
@@ -1095,6 +1093,7 @@ virStorageVolTypeToString;
 
 # conf/storage_encryption_conf.h
 virStorageEncryptionFormat;
+virStorageEncryptionFormatTypeToString;
 virStorageEncryptionFree;
 virStorageEncryptionParseNode;
 
@@ -1830,6 +1829,13 @@ vir_g_strdup_printf;
 vir_g_strdup_vprintf;
 
 
+# util/viracpi.c
+virAcpiHasSMMU;
+virAcpiParseIORT;
+virIORTNodeTypeTypeFromString;
+virIORTNodeTypeTypeToString;
+
+
 # util/viralloc.h
 virAppendElement;
 virDeleteElementsN;
@@ -2091,6 +2097,7 @@ virCommandDryRunTokenNew;
 virCommandExec;
 virCommandFree;
 virCommandGetArgList;
+virCommandGetBinaryPath;
 virCommandGetGID;
 virCommandGetUID;
 virCommandHandshakeNotify;
@@ -2264,6 +2271,7 @@ safezero;
 virBuildPathInternal;
 virDirClose;
 virDirCreate;
+virDirIsEmpty;
 virDirOpen;
 virDirOpenIfExists;
 virDirOpenQuiet;
@@ -2351,6 +2359,7 @@ virFileWrapperFdFree;
 virFileWrapperFdNew;
 virFileWriteStr;
 virFindFileInPath;
+virFindFileInPathFull;
 
 
 # util/virfilecache.h
@@ -2975,6 +2984,7 @@ virNodeSuspendGetTargetMask;
 
 
 # util/virnuma.h
+virNumaCPUSetToNodeset;
 virNumaGetAutoPlacementAdvice;
 virNumaGetDistances;
 virNumaGetHostMemoryNodeset;
@@ -2982,6 +2992,7 @@ virNumaGetMaxCPUs;
 virNumaGetMaxNode;
 virNumaGetNodeCPUs;
 virNumaGetNodeMemory;
+virNumaGetNodeOfCPU;
 virNumaGetPageInfo;
 virNumaGetPages;
 virNumaIsAvailable;
@@ -3126,6 +3137,7 @@ virPerfReadEvent;
 # util/virpidfile.h
 virPidFileAcquire;
 virPidFileAcquirePath;
+virPidFileAcquirePathFull;
 virPidFileBuildPath;
 virPidFileConstructPath;
 virPidFileDelete;
@@ -3160,6 +3172,7 @@ virPortAllocatorSetUsed;
 
 # util/virprocess.h
 virProcessAbort;
+virProcessActivateMaxFiles;
 virProcessExitWithStatus;
 virProcessGetAffinity;
 virProcessGetMaxMemLock;
@@ -3403,7 +3416,6 @@ virStringToUpper;
 virStringTrimOptionalNewline;
 virStrToDouble;
 virStrToLong_i;
-virStrToLong_l;
 virStrToLong_ll;
 virStrToLong_ui;
 virStrToLong_uip;
@@ -3545,14 +3557,19 @@ virTypedParamListAddLLong;
 virTypedParamListAddString;
 virTypedParamListAddUInt;
 virTypedParamListAddULLong;
+virTypedParamListAddUnsigned;
+virTypedParamListConcat;
+virTypedParamListFetch;
 virTypedParamListFree;
 virTypedParamListFromParams;
-virTypedParamListStealParams;
+virTypedParamListNew;
+virTypedParamListSteal;
 virTypedParamsCheck;
 virTypedParamsCopy;
 virTypedParamsDeserialize;
 virTypedParamsFilter;
 virTypedParamsGetStringList;
+virTypedParamsGetUnsigned;
 virTypedParamsRemoteFree;
 virTypedParamsReplaceString;
 virTypedParamsSerialize;
@@ -3693,6 +3710,7 @@ virXMLFormatMetadata;
 virXMLNewNode;
 virXMLNodeContentString;
 virXMLNodeGetSubelement;
+virXMLNodeGetSubelementList;
 virXMLNodeNameEqual;
 virXMLNodeSanitizeNamespaces;
 virXMLNodeToString;

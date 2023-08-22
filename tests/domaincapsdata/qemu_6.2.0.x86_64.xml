@@ -11,9 +11,8 @@
       <value>efi</value>
     </enum>
     <loader supported='yes'>
-      <value>/usr/share/AAVMF/AAVMF_CODE.fd</value>
-      <value>/usr/share/AAVMF/AAVMF32_CODE.fd</value>
-      <value>/usr/share/OVMF/OVMF_CODE.fd</value>
+      <value>/obviously/fake/firmware1.fd</value>
+      <value>/obviously/fake/firmware2.fd</value>
       <enum name='type'>
         <value>rom</value>
         <value>pflash</value>
@@ -43,6 +42,7 @@
     <mode name='host-model' supported='yes'>
       <model fallback='forbid'>EPYC-Rome</model>
       <vendor>AMD</vendor>
+      <maxphysaddr mode='passthrough' limit='64'/>
       <feature policy='require' name='x2apic'/>
       <feature policy='require' name='tsc-deadline'/>
       <feature policy='require' name='hypervisor'/>
@@ -253,6 +253,7 @@
     <genid supported='yes'/>
     <backingStoreInput supported='yes'/>
     <backup supported='yes'/>
+    <async-teardown supported='no'/>
     <sev supported='no'/>
     <sgx supported='no'/>
   </features>

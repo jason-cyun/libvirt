@@ -312,6 +312,10 @@ struct _virStorageSource {
     unsigned long long readahead; /* size of the readahead buffer in bytes */
     unsigned long long timeout; /* connection timeout in seconds */
 
+    /* NBD QEMU reconnect-delay option,
+     * 0 as default value */
+    unsigned int reconnectDelay;
+
     virStorageSourceNVMeDef *nvme; /* type == VIR_STORAGE_TYPE_NVME */
 
     virDomainChrSourceDef *vhostuser; /* type == VIR_STORAGE_TYPE_VHOST_USER */
@@ -395,6 +399,7 @@ struct _virStorageSource {
     int cachemode; /* enum virDomainDiskCache */
     int discard; /* enum virDomainDiskDiscard */
     int detect_zeroes; /* enum virDomainDiskDetectZeroes */
+    virTristateSwitch discard_no_unref;
 
     bool floppyimg; /* set to true if the storage source is going to be used
                        as a source for floppy drive */

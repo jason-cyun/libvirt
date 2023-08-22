@@ -44,7 +44,7 @@ qemuBlockNodeNameValidate(const char *nn)
 
     if (strlen(nn) >= qemuBlockNodeNameBufSize) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("node-name '%s' too long for qemu"), nn);
+                       _("node-name '%1$s' too long for qemu"), nn);
         return -1;
     }
 
@@ -80,7 +80,7 @@ qemuBlockStorageSourceGetURI(virStorageSource *src)
 
     if (src->nhosts != 1) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("protocol '%s' accepts only one host"),
+                       _("protocol '%1$s' accepts only one host"),
                        virStorageNetProtocolTypeToString(src->protocol));
         return NULL;
     }
@@ -153,7 +153,7 @@ qemuBlockStorageSourceBuildJSONSocketAddress(virStorageNetHostDef *host)
     case VIR_STORAGE_NET_HOST_TRANS_RDMA:
     case VIR_STORAGE_NET_HOST_TRANS_LAST:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("transport protocol '%s' is not yet supported"),
+                       _("transport protocol '%1$s' is not yet supported"),
                        virStorageNetHostTransportTypeToString(host->transport));
         return NULL;
     }
@@ -469,7 +469,7 @@ qemuBlockStorageSourceGetISCSIProps(virStorageSource *src,
         *(lunStr++) = '\0';
         if (virStrToLong_ui(lunStr, NULL, 10, &lun) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("cannot parse target for lunStr '%s'"),
+                           _("cannot parse target for lunStr '%1$s'"),
                            target);
             return NULL;
         }
@@ -529,6 +529,7 @@ qemuBlockStorageSourceGetNBDProps(virStorageSource *src,
                               "S:export", src->path,
                               "S:tls-creds", tlsAlias,
                               "S:tls-hostname", tlsHostname,
+                              "p:reconnect-delay", src->reconnectDelay,
                               NULL) < 0)
         return NULL;
 
@@ -563,6 +564,8 @@ qemuBlockStorageSourceGetRBDProps(virStorageSource *src,
 
     if (src->encryption &&
         src->encryption->engine == VIR_STORAGE_ENCRYPTION_ENGINE_LIBRBD) {
+        size_t i;
+
         switch ((virStorageEncryptionFormatType) src->encryption->format) {
             case VIR_STORAGE_ENCRYPTION_FORMAT_LUKS:
                 encformat = "luks";
@@ -572,6 +575,10 @@ qemuBlockStorageSourceGetRBDProps(virStorageSource *src,
                 encformat = "luks2";
                 break;
 
+            case VIR_STORAGE_ENCRYPTION_FORMAT_LUKS_ANY:
+                encformat = "luks-any";
+                break;
+
             case VIR_STORAGE_ENCRYPTION_FORMAT_QCOW:
             case VIR_STORAGE_ENCRYPTION_FORMAT_DEFAULT:
             case VIR_STORAGE_ENCRYPTION_FORMAT_LAST:
@@ -579,11 +586,19 @@ qemuBlockStorageSourceGetRBDProps(virStorageSource *src,
                 break;
         }
 
-        if (virJSONValueObjectAdd(&encrypt,
-                                  "s:format", encformat,
-                                  "s:key-secret", srcPriv->encinfo->alias,
-                                  NULL) < 0)
-            return NULL;
+        for (i = src->encryption->nsecrets; i > 0; --i) {
+            g_autoptr(virJSONValue) new = NULL;
+
+            /* we consume the lower layer 'encrypt' into a new object */
+            if (virJSONValueObjectAdd(&new,
+                                      "s:format", encformat,
+                                      "s:key-secret", srcPriv->encinfo[i-1]->alias,
+                                      "A:parent", &encrypt,
+                                      NULL) < 0)
+                return NULL;
+
+            encrypt = g_steal_pointer(&new);
+        }
     }
 
     if (virJSONValueObjectAdd(&ret,
@@ -865,7 +880,7 @@ qemuBlockStorageSourceGetBackendProps(virStorageSource *src,
 
     case VIR_STORAGE_TYPE_VOLUME:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("storage source pool '%s' volume '%s' is not translated"),
+                       _("storage source pool '%1$s' volume '%2$s' is not translated"),
                        src->srcpool->pool, src->srcpool->volume);
         return NULL;
 
@@ -978,7 +993,8 @@ qemuBlockStorageSourceGetFormatLUKSProps(virStorageSource *src,
 {
     qemuDomainStorageSourcePrivate *srcPriv = QEMU_DOMAIN_STORAGE_SOURCE_PRIVATE(src);
 
-    if (!srcPriv || !srcPriv->encinfo || !srcPriv->encinfo->alias) {
+    /* validation ensures that the qemu encryption engine accepts only a single secret */
+    if (!srcPriv || !srcPriv->encinfo || !srcPriv->encinfo[0]->alias) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("missing secret info for 'luks' driver"));
         return -1;
@@ -986,7 +1002,7 @@ qemuBlockStorageSourceGetFormatLUKSProps(virStorageSource *src,
 
     if (virJSONValueObjectAdd(&props,
                               "s:driver", "luks",
-                              "s:key-secret", srcPriv->encinfo->alias,
+                              "s:key-secret", srcPriv->encinfo[0]->alias,
                               NULL) < 0)
         return -1;
 
@@ -1040,10 +1056,8 @@ qemuBlockStorageSourceGetCryptoProps(virStorageSource *src,
         break;
 
     case VIR_STORAGE_ENCRYPTION_FORMAT_LUKS2:
-        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
-                       _("luks2 is currently not supported by the qemu encryption engine"));
-        return -1;
-
+    case VIR_STORAGE_ENCRYPTION_FORMAT_LUKS_ANY:
+        /* validation code asserts the above cases are impossible */
     case VIR_STORAGE_ENCRYPTION_FORMAT_DEFAULT:
     case VIR_STORAGE_ENCRYPTION_FORMAT_LAST:
     default:
@@ -1052,9 +1066,10 @@ qemuBlockStorageSourceGetCryptoProps(virStorageSource *src,
         return -1;
     }
 
+    /* validation ensures that the qemu encryption engine accepts only a single secret */
     return virJSONValueObjectAdd(encprops,
                                  "s:format", encformat,
-                                 "s:key-secret", srcpriv->encinfo->alias,
+                                 "s:key-secret", srcpriv->encinfo[0]->alias,
                                  NULL);
 }
 
@@ -1102,12 +1117,11 @@ qemuBlockStorageSourceGetFormatQcow2Props(virStorageSource *src,
      * see: qemu.git/docs/qcow2-cache.txt
      * https://git.qemu.org/?p=qemu.git;a=blob;f=docs/qcow2-cache.txt
      */
-    if (src->metadataCacheMaxSize > 0) {
-        if (virJSONValueObjectAdd(&props,
-                                  "U:cache-size", src->metadataCacheMaxSize,
-                                  NULL) < 0)
-            return -1;
-    }
+    if (virJSONValueObjectAdd(&props,
+                              "P:cache-size", src->metadataCacheMaxSize,
+                              "T:discard-no-unref", src->discard_no_unref,
+                              NULL) < 0)
+        return -1;
 
     return 0;
 }
@@ -1211,7 +1225,7 @@ qemuBlockStorageSourceGetBlockdevFormatProps(virStorageSource *src)
     case VIR_STORAGE_FILE_ISO:
     case VIR_STORAGE_FILE_DIR:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("mishandled storage format '%s'"),
+                       _("mishandled storage format '%1$s'"),
                        virStorageFileFormatTypeToString(src->format));
         return NULL;
 
@@ -1270,7 +1284,7 @@ qemuBlockStorageSourceGetBlockdevProps(virStorageSource *src,
         } else {
             if (virStorageSourceIsBacking(backingStore)) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("storage format '%s' does not support backing store"),
+                               _("storage format '%1$s' does not support backing store"),
                                virStorageFileFormatTypeToString(src->format));
                 return NULL;
             }
@@ -1310,6 +1324,7 @@ qemuBlockStorageSourceGetBlockdevStorageSliceProps(virStorageSource *src)
 void
 qemuBlockStorageSourceAttachDataFree(qemuBlockStorageSourceAttachData *data)
 {
+    size_t i;
     if (!data)
         return;
 
@@ -1319,12 +1334,16 @@ qemuBlockStorageSourceAttachDataFree(qemuBlockStorageSourceAttachData *data)
     virJSONValueFree(data->prmgrProps);
     virJSONValueFree(data->authsecretProps);
     virJSONValueFree(data->httpcookiesecretProps);
-    virJSONValueFree(data->encryptsecretProps);
+    for (i = 0; i < data->encryptsecretCount; ++i) {
+        virJSONValueFree(data->encryptsecretProps[i]);
+        g_free(data->encryptsecretAlias[i]);
+    }
     virJSONValueFree(data->tlsProps);
     virJSONValueFree(data->tlsKeySecretProps);
     g_free(data->tlsAlias);
     g_free(data->tlsKeySecretAlias);
     g_free(data->authsecretAlias);
+    g_free(data->encryptsecretProps);
     g_free(data->encryptsecretAlias);
     g_free(data->httpcookiesecretAlias);
     g_free(data->driveCmd);
@@ -1435,10 +1454,12 @@ static int
 qemuBlockStorageSourceAttachApplyFormatDeps(qemuMonitor *mon,
                                             qemuBlockStorageSourceAttachData *data)
 {
-    if (data->encryptsecretProps &&
-        qemuMonitorAddObject(mon, &data->encryptsecretProps,
-                             &data->encryptsecretAlias) < 0)
-        return -1;
+    size_t i;
+    for (i = 0; i < data->encryptsecretCount; ++i) {
+        if (qemuMonitorAddObject(mon, &data->encryptsecretProps[i],
+                                 &data->encryptsecretAlias[i]) < 0)
+            return -1;
+    }
 
     return 0;
 }
@@ -1524,6 +1545,7 @@ qemuBlockStorageSourceAttachRollback(qemuMonitor *mon,
                                      qemuBlockStorageSourceAttachData *data)
 {
     virErrorPtr orig_err;
+    size_t i;
 
     virErrorPreserveLast(&orig_err);
 
@@ -1549,8 +1571,10 @@ qemuBlockStorageSourceAttachRollback(qemuMonitor *mon,
     if (data->authsecretAlias)
         ignore_value(qemuMonitorDelObject(mon, data->authsecretAlias, false));
 
-    if (data->encryptsecretAlias)
-        ignore_value(qemuMonitorDelObject(mon, data->encryptsecretAlias, false));
+    for (i = 0; i < data->encryptsecretCount; ++i) {
+        if (data->encryptsecretAlias[i])
+            ignore_value(qemuMonitorDelObject(mon, data->encryptsecretAlias[i], false));
+    }
 
     if (data->httpcookiesecretAlias)
         ignore_value(qemuMonitorDelObject(mon, data->httpcookiesecretAlias, false));
@@ -1605,8 +1629,17 @@ qemuBlockStorageSourceDetachPrepare(virStorageSource *src)
         if (srcpriv->secinfo)
             data->authsecretAlias = g_strdup(srcpriv->secinfo->alias);
 
-        if (srcpriv->encinfo)
-            data->encryptsecretAlias = g_strdup(srcpriv->encinfo->alias);
+        if (srcpriv->encinfo) {
+            size_t i;
+
+            data->encryptsecretCount = srcpriv->enccount;
+            data->encryptsecretProps = g_new0(virJSONValue *, srcpriv->enccount);
+            data->encryptsecretAlias = g_new0(char *, srcpriv->enccount);
+
+            for (i = 0; i < srcpriv->enccount; ++i) {
+                data->encryptsecretAlias[i] = g_strdup(srcpriv->encinfo[i]->alias);
+            }
+        }
 
         if (srcpriv->httpcookie)
             data->httpcookiesecretAlias = g_strdup(srcpriv->httpcookie->alias);
@@ -1848,7 +1881,8 @@ qemuBlockGetBackingStoreString(virStorageSource *src,
             src->ncookies == 0 &&
             src->sslverify == VIR_TRISTATE_BOOL_ABSENT &&
             src->timeout == 0 &&
-            src->readahead == 0) {
+            src->readahead == 0 &&
+            src->reconnectDelay == 0) {
 
             switch ((virStorageNetProtocol) src->protocol) {
             case VIR_STORAGE_NET_PROTOCOL_NBD:
@@ -1970,7 +2004,7 @@ qemuBlockStorageSourceCreateGetEncryptionLUKS(virStorageSource *src,
 
     if (srcpriv &&
         srcpriv->encinfo)
-        keysecret = srcpriv->encinfo->alias;
+        keysecret = srcpriv->encinfo[0]->alias;
 
     if (virJSONValueObjectAdd(&props,
                               "s:key-secret", keysecret,
@@ -2196,7 +2230,7 @@ qemuBlockStorageSourceCreateGetFormatProps(virStorageSource *src,
     case VIR_STORAGE_FILE_AUTO:
     case VIR_STORAGE_FILE_NONE:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("mishandled storage format '%s'"),
+                       _("mishandled storage format '%1$s'"),
                        virStorageFileFormatTypeToString(src->format));
         return -1;
 
@@ -2350,7 +2384,7 @@ qemuBlockStorageSourceCreateGeneric(virDomainObj *vm,
                            _("blockdev-create job was cancelled"));
         } else {
             virReportError(VIR_ERR_OPERATION_FAILED,
-                           _("failed to format image: '%s'"), NULLSTR(job->errmsg));
+                           _("failed to format image: '%1$s'"), NULLSTR(job->errmsg));
         }
         goto cleanup;
     }
@@ -2419,7 +2453,7 @@ qemuBlockStorageSourceCreateFormat(virDomainObj *vm,
 
     if (!createformatprops) {
         virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
-                       _("can't create storage format '%s'"),
+                       _("can't create storage format '%1$s'"),
                        virStorageFileFormatTypeToString(src->format));
         return -1;
     }
@@ -2550,7 +2584,7 @@ qemuBlockStorageSourceCreateDetectSize(GHashTable *blockNamedNodeData,
 
     if (!(entry = virHashLookup(blockNamedNodeData, templ->nodeformat))) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to update capacity data for block node '%s'"),
+                       _("failed to update capacity data for block node '%1$s'"),
                        templ->nodeformat);
         return -1;
     }
@@ -3280,7 +3314,7 @@ qemuBlockCommit(virDomainObj *vm,
 
     if (virStorageSourceIsEmpty(disk->src)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("disk %s has no source file to be committed"),
+                       _("disk %1$s has no source file to be committed"),
                        disk->dst);
         return NULL;
     }
@@ -3295,20 +3329,20 @@ qemuBlockCommit(virDomainObj *vm,
         /* XXX Should we auto-pivot when COMMIT_ACTIVE is not specified? */
         if (!(flags & VIR_DOMAIN_BLOCK_COMMIT_ACTIVE)) {
             virReportError(VIR_ERR_INVALID_ARG,
-                           _("commit of '%s' active layer requires active flag"),
+                           _("commit of '%1$s' active layer requires active flag"),
                            disk->dst);
             return NULL;
         }
     } else if (flags & VIR_DOMAIN_BLOCK_COMMIT_ACTIVE) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("active commit requested but '%s' is not active"),
+                       _("active commit requested but '%1$s' is not active"),
                        topSource->path);
         return NULL;
     }
 
     if (!virStorageSourceHasBacking(topSource)) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("top '%s' in chain for '%s' has no backing file"),
+                       _("top '%1$s' in chain for '%2$s' has no backing file"),
                        topSource->path, disk->src->path);
         return NULL;
     }
@@ -3316,8 +3350,7 @@ qemuBlockCommit(virDomainObj *vm,
     if ((flags & VIR_DOMAIN_BLOCK_COMMIT_SHALLOW) &&
         baseSource != topSource->backingStore) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("base '%s' is not immediately below '%s' in chain "
-                         "for '%s'"),
+                       _("base '%1$s' is not immediately below '%2$s' in chain for '%3$s'"),
                        baseSource->path, topSource->path, disk->src->path);
         return NULL;
     }
@@ -3446,7 +3479,7 @@ qemuBlockPivot(virDomainObj *vm,
 
     if (job->state != QEMU_BLOCKJOB_STATE_READY) {
         virReportError(VIR_ERR_BLOCK_COPY_ACTIVE,
-                       _("block job '%s' not ready for pivot yet"),
+                       _("block job '%1$s' not ready for pivot yet"),
                        job->name);
         return -1;
     }
@@ -3455,7 +3488,7 @@ qemuBlockPivot(virDomainObj *vm,
     case QEMU_BLOCKJOB_TYPE_NONE:
     case QEMU_BLOCKJOB_TYPE_LAST:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("invalid job type '%d'"), job->type);
+                       _("invalid job type '%1$d'"), job->type);
         return -1;
 
     case QEMU_BLOCKJOB_TYPE_PULL:
@@ -3465,7 +3498,7 @@ qemuBlockPivot(virDomainObj *vm,
     case QEMU_BLOCKJOB_TYPE_CREATE:
     case QEMU_BLOCKJOB_TYPE_BROKEN:
         virReportError(VIR_ERR_OPERATION_INVALID,
-                       _("job type '%s' does not support pivot"),
+                       _("job type '%1$s' does not support pivot"),
                        qemuBlockjobTypeToString(job->type));
         return -1;
 

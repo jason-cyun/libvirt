@@ -1052,12 +1052,10 @@ int qemuMonitorOpenGraphics(qemuMonitor *mon,
                             bool skipauth);
 
 int qemuMonitorSetBlockIoThrottle(qemuMonitor *mon,
-                                  const char *drivealias,
                                   const char *qomid,
                                   virDomainBlockIoTuneInfo *info);
 
 int qemuMonitorGetBlockIoThrottle(qemuMonitor *mon,
-                                  const char *drivealias,
                                   const char *qdevid,
                                   virDomainBlockIoTuneInfo *reply);
 
@@ -1173,8 +1171,6 @@ int qemuMonitorGetCPUModelComparison(qemuMonitor *mon,
 qemuMonitorCPUModelInfo *
 qemuMonitorCPUModelInfoCopy(const qemuMonitorCPUModelInfo *orig);
 
-int qemuMonitorGetCommands(qemuMonitor *mon,
-                           char ***commands);
 GHashTable *qemuMonitorGetCommandLineOptions(qemuMonitor *mon);
 
 int qemuMonitorGetKVMState(qemuMonitor *mon,
@@ -1254,8 +1250,8 @@ struct _qemuMonitorIOThreadInfo {
     int thread_id;
     bool poll_valid;
     unsigned long long poll_max_ns;
-    unsigned int poll_grow;
-    unsigned int poll_shrink;
+    unsigned long long poll_grow;
+    unsigned long long poll_shrink;
     int thread_pool_min;
     int thread_pool_max;
     bool set_poll_max_ns;

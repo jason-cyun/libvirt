@@ -13,7 +13,7 @@ XDG_CONFIG_HOME=/var/lib/libvirt/qemu/domain--1-QEMUGuest1/.config \
 -machine s390-ccw-virtio,usb=off,dump-guest-core=off,memory-backend=s390.ram \
 -accel tcg \
 -cpu qemu \
--m 214 \
+-m size=219136k \
 -object '{"qom-type":"memory-backend-ram","id":"s390.ram","size":224395264}' \
 -overcommit mem-lock=off \
 -smp 1,sockets=1,cores=1,threads=1 \
@@ -26,11 +26,11 @@ XDG_CONFIG_HOME=/var/lib/libvirt/qemu/domain--1-QEMUGuest1/.config \
 -rtc base=utc \
 -no-shutdown \
 -boot strict=on \
--netdev user,id=hostnet0 \
--device virtio-net-ccw,netdev=hostnet0,id=net0,mac=00:11:22:33:44:55,devno=fe.0.0001 \
--netdev user,id=hostnet1 \
--device virtio-net-ccw,netdev=hostnet1,id=net1,mac=00:11:22:33:44:54,devno=fe.0.0000 \
+-netdev '{"type":"user","id":"hostnet0"}' \
+-device '{"driver":"virtio-net-ccw","netdev":"hostnet0","id":"net0","mac":"00:11:22:33:44:55","devno":"fe.0.0001"}' \
+-netdev '{"type":"user","id":"hostnet1"}' \
+-device '{"driver":"virtio-net-ccw","netdev":"hostnet1","id":"net1","mac":"00:11:22:33:44:54","devno":"fe.0.0000"}' \
 -audiodev '{"id":"audio1","driver":"none"}' \
--device virtio-balloon-ccw,id=balloon0,devno=fe.0.000a \
+-device '{"driver":"virtio-balloon-ccw","id":"balloon0","devno":"fe.0.000a"}' \
 -sandbox on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny \
 -msg timestamp=on

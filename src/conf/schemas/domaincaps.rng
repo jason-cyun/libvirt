@@ -132,6 +132,9 @@
         <optional>
           <ref name="cpuVendor"/>
         </optional>
+        <optional>
+          <ref name="cpuMaxPhysAddr"/>
+        </optional>
         <zeroOrMore>
           <ref name="cpuFeature"/>
         </zeroOrMore>
@@ -298,6 +301,9 @@
         <ref name="backup"/>
       </optional>
       <optional>
+        <ref name="async-teardown"/>
+      </optional>
+      <optional>
         <ref name="s390-pv"/>
       </optional>
       <optional>
@@ -309,6 +315,12 @@
       <optional>
         <ref name="hyperv"/>
       </optional>
+    </element>
+  </define>
+
+  <define name="async-teardown">
+    <element name="async-teardown">
+      <ref name="supported"/>
     </element>
   </define>
 

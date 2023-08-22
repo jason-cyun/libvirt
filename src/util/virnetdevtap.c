@@ -105,7 +105,7 @@ virNetDevTapGetRealDeviceName(char *ifname G_GNUC_UNUSED)
 
     if ((ifindex = if_nametoindex(ifname)) == 0) {
         virReportSystemError(errno,
-                             _("Unable to get interface index for '%s'"),
+                             _("Unable to get interface index for '%1$s'"),
                              ifname);
         return NULL;
     }
@@ -119,7 +119,7 @@ virNetDevTapGetRealDeviceName(char *ifname G_GNUC_UNUSED)
 
     if (sysctl(name, 6, NULL, &len, 0, 0) < 0) {
         virReportSystemError(errno,
-                             _("Unable to get driver name for '%s'"),
+                             _("Unable to get driver name for '%1$s'"),
                              ifname);
         return NULL;
     }
@@ -128,7 +128,7 @@ virNetDevTapGetRealDeviceName(char *ifname G_GNUC_UNUSED)
 
     if (sysctl(name, 6, ret, &len, 0, 0) < 0) {
         virReportSystemError(errno,
-                             _("Unable to get driver name for '%s'"),
+                             _("Unable to get driver name for '%1$s'"),
                              ifname);
         VIR_FREE(ret);
         return NULL;
@@ -172,7 +172,6 @@ int virNetDevTapCreate(char **ifname,
                        unsigned int flags)
 {
     size_t i = 0;
-    struct ifreq ifr;
     int rc;
     int ret = -1;
     int fd = -1;
@@ -195,7 +194,7 @@ int virNetDevTapCreate(char **ifname,
             return -1;
         } else if (rc > 0) {
             virReportError(VIR_ERR_OPERATION_INVALID,
-                           _("The %s interface already exists"),
+                           _("The %1$s interface already exists"),
                            *ifname);
             return -1;
         }
@@ -204,16 +203,15 @@ int virNetDevTapCreate(char **ifname,
     if (!tunpath)
         tunpath = "/dev/net/tun";
 
-    memset(&ifr, 0, sizeof(ifr));
     for (i = 0; i < tapfdSize; i++) {
+        struct ifreq ifr = { 0 };
+
         if ((fd = open(tunpath, O_RDWR)) < 0) {
             virReportSystemError(errno,
-                                 _("Unable to open %s, is tun module loaded?"),
+                                 _("Unable to open %1$s, is tun module loaded?"),
                                  tunpath);
             goto cleanup;
         }
-
-        memset(&ifr, 0, sizeof(ifr));
 
         ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
         /* If tapfdSize is greater than one, request multiqueue */
@@ -225,7 +223,7 @@ int virNetDevTapCreate(char **ifname,
 
         if (virStrcpyStatic(ifr.ifr_name, *ifname) < 0) {
             virReportSystemError(ERANGE,
-                                 _("Network interface name '%s' is too long"),
+                                 _("Network interface name '%1$s' is too long"),
                                  *ifname);
             goto cleanup;
 
@@ -233,7 +231,7 @@ int virNetDevTapCreate(char **ifname,
 
         if (ioctl(fd, TUNSETIFF, &ifr) < 0) {
             virReportSystemError(errno,
-                                 _("Unable to create tap device %s"),
+                                 _("Unable to create tap device %1$s"),
                                  NULLSTR(*ifname));
             goto cleanup;
         }
@@ -248,7 +246,7 @@ int virNetDevTapCreate(char **ifname,
         if ((flags & VIR_NETDEV_TAP_CREATE_PERSIST) &&
             ioctl(fd, TUNSETPERSIST, 1) < 0) {
             virReportSystemError(errno,
-                                 _("Unable to set tap device %s to persistent"),
+                                 _("Unable to set tap device %1$s to persistent"),
                                  NULLSTR(*ifname));
             goto cleanup;
         }
@@ -272,7 +270,7 @@ int virNetDevTapCreate(char **ifname,
 int virNetDevTapDelete(const char *ifname,
                        const char *tunpath)
 {
-    struct ifreq try;
+    struct ifreq try = { 0 };
     int fd;
     int ret = -1;
 
@@ -281,17 +279,16 @@ int virNetDevTapDelete(const char *ifname,
 
     if ((fd = open(tunpath, O_RDWR)) < 0) {
         virReportSystemError(errno,
-                             _("Unable to open %s, is tun module loaded?"),
+                             _("Unable to open %1$s, is tun module loaded?"),
                              tunpath);
         return -1;
     }
 
-    memset(&try, 0, sizeof(struct ifreq));
     try.ifr_flags = IFF_TAP|IFF_NO_PI;
 
     if (virStrcpyStatic(try.ifr_name, ifname) < 0) {
         virReportSystemError(ERANGE,
-                             _("Network interface name '%s' is too long"),
+                             _("Network interface name '%1$s' is too long"),
                              ifname);
         goto cleanup;
     }
@@ -357,7 +354,7 @@ int virNetDevTapCreate(char **ifname,
 
         if ((*tapfd = open(dev_path, O_RDWR)) < 0) {
             virReportSystemError(errno,
-                                 _("Unable to open %s"),
+                                 _("Unable to open %1$s"),
                                  dev_path);
             goto cleanup;
         }
@@ -386,7 +383,7 @@ int virNetDevTapDelete(const char *ifname,
 
     if (ioctl(s, SIOCIFDESTROY, &ifr) < 0) {
         virReportSystemError(errno,
-                             _("Unable to remove tap device %s"),
+                             _("Unable to remove tap device %1$s"),
                              ifname);
         goto cleanup;
     }

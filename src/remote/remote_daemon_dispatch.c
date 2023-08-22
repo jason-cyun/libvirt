@@ -55,7 +55,7 @@ VIR_LOG_INIT("daemon.remote");
     do { \
         if ((_from) != (_type)(_from)) { \
             virReportError(VIR_ERR_OVERFLOW, \
-                           _("conversion from hyper to %s overflowed"), \
+                           _("conversion from hyper to %1$s overflowed"), \
                            #_type); \
             goto cleanup; \
         } \
@@ -313,7 +313,7 @@ remoteRelayDomainEventLifecycle(virConnectPtr conn,
                                 void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_lifecycle_msg data;
+    remote_domain_event_lifecycle_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -323,7 +323,6 @@ remoteRelayDomainEventLifecycle(virConnectPtr conn,
               event, detail, callback->callbackID, callback->legacy);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
     data.event = event;
     data.detail = detail;
@@ -352,7 +351,7 @@ remoteRelayDomainEventReboot(virConnectPtr conn,
                              void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_reboot_msg data;
+    remote_domain_event_reboot_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -362,7 +361,6 @@ remoteRelayDomainEventReboot(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID, callback->legacy);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
 
     if (callback->legacy) {
@@ -389,7 +387,7 @@ remoteRelayDomainEventRTCChange(virConnectPtr conn,
                                 void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_rtc_change_msg data;
+    remote_domain_event_rtc_change_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -400,7 +398,6 @@ remoteRelayDomainEventRTCChange(virConnectPtr conn,
               callback->callbackID, callback->legacy);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
     data.offset = offset;
 
@@ -428,7 +425,7 @@ remoteRelayDomainEventWatchdog(virConnectPtr conn,
                                void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_watchdog_msg data;
+    remote_domain_event_watchdog_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -438,7 +435,6 @@ remoteRelayDomainEventWatchdog(virConnectPtr conn,
               dom->name, dom->id, action, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
     data.action = action;
 
@@ -468,7 +464,7 @@ remoteRelayDomainEventIOError(virConnectPtr conn,
                               void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_io_error_msg data;
+    remote_domain_event_io_error_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -479,7 +475,6 @@ remoteRelayDomainEventIOError(virConnectPtr conn,
               callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.srcPath = g_strdup(srcPath);
     data.devAlias = g_strdup(devAlias);
     make_nonnull_domain(&data.dom, dom);
@@ -512,7 +507,7 @@ remoteRelayDomainEventIOErrorReason(virConnectPtr conn,
                                     void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_io_error_reason_msg data;
+    remote_domain_event_io_error_reason_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -523,7 +518,6 @@ remoteRelayDomainEventIOErrorReason(virConnectPtr conn,
               callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.srcPath = g_strdup(srcPath);
     data.devAlias = g_strdup(devAlias);
     data.reason = g_strdup(reason);
@@ -558,7 +552,7 @@ remoteRelayDomainEventGraphics(virConnectPtr conn,
                                void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_graphics_msg data;
+    remote_domain_event_graphics_msg data = { 0 };
     size_t i;
 
     if (callback->callbackID < 0 ||
@@ -576,7 +570,6 @@ remoteRelayDomainEventGraphics(virConnectPtr conn,
         VIR_DEBUG("  %s=%s", subject->identities[i].type, subject->identities[i].name);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.phase = phase;
     data.local.family = local->family;
     data.remote.family = remote->family;
@@ -625,7 +618,7 @@ remoteRelayDomainEventBlockJob(virConnectPtr conn,
                                void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_block_job_msg data;
+    remote_domain_event_block_job_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -635,7 +628,6 @@ remoteRelayDomainEventBlockJob(virConnectPtr conn,
               dom->name, dom->id, path, type, status, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.path = g_strdup(path);
     data.type = type;
     data.status = status;
@@ -664,7 +656,7 @@ remoteRelayDomainEventControlError(virConnectPtr conn,
                                    void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_control_error_msg data;
+    remote_domain_event_control_error_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -674,7 +666,6 @@ remoteRelayDomainEventControlError(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
 
     if (callback->legacy) {
@@ -704,7 +695,7 @@ remoteRelayDomainEventDiskChange(virConnectPtr conn,
                                  void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_disk_change_msg data;
+    remote_domain_event_disk_change_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -715,7 +706,6 @@ remoteRelayDomainEventDiskChange(virConnectPtr conn,
               callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     if (oldSrcPath) {
         data.oldSrcPath = g_new0(remote_nonnull_string, 1);
         *(data.oldSrcPath) = g_strdup(oldSrcPath);
@@ -755,7 +745,7 @@ remoteRelayDomainEventTrayChange(virConnectPtr conn,
                                  void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_tray_change_msg data;
+    remote_domain_event_tray_change_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -765,8 +755,6 @@ remoteRelayDomainEventTrayChange(virConnectPtr conn,
               dom->name, dom->id, devAlias, reason, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
-
     data.devAlias = g_strdup(devAlias);
     data.reason = reason;
     make_nonnull_domain(&data.dom, dom);
@@ -794,7 +782,7 @@ remoteRelayDomainEventPMWakeup(virConnectPtr conn,
                                void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_pmwakeup_msg data;
+    remote_domain_event_pmwakeup_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -804,7 +792,6 @@ remoteRelayDomainEventPMWakeup(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
 
     if (callback->legacy) {
@@ -830,7 +817,7 @@ remoteRelayDomainEventPMSuspend(virConnectPtr conn,
                                 void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_pmsuspend_msg data;
+    remote_domain_event_pmsuspend_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -840,7 +827,6 @@ remoteRelayDomainEventPMSuspend(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
 
     if (callback->legacy) {
@@ -866,7 +852,7 @@ remoteRelayDomainEventBalloonChange(virConnectPtr conn,
                                     void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_balloon_change_msg data;
+    remote_domain_event_balloon_change_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -876,7 +862,6 @@ remoteRelayDomainEventBalloonChange(virConnectPtr conn,
               dom->name, dom->id, actual, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
     data.actual = actual;
 
@@ -904,7 +889,7 @@ remoteRelayDomainEventPMSuspendDisk(virConnectPtr conn,
                                     void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_pmsuspend_disk_msg data;
+    remote_domain_event_pmsuspend_disk_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -914,7 +899,6 @@ remoteRelayDomainEventPMSuspendDisk(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_domain(&data.dom, dom);
 
     if (callback->legacy) {
@@ -940,7 +924,7 @@ remoteRelayDomainEventDeviceRemoved(virConnectPtr conn,
                                     void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_device_removed_msg data;
+    remote_domain_event_device_removed_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -950,8 +934,6 @@ remoteRelayDomainEventDeviceRemoved(virConnectPtr conn,
               dom->name, dom->id, devAlias, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
-
     data.devAlias = g_strdup(devAlias);
 
     make_nonnull_domain(&data.dom, dom);
@@ -984,7 +966,7 @@ remoteRelayDomainEventBlockJob2(virConnectPtr conn,
                                 void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_block_job_2_msg data;
+    remote_domain_event_block_job_2_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -994,7 +976,6 @@ remoteRelayDomainEventBlockJob2(virConnectPtr conn,
               dom->name, dom->id, dst, type, status, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.callbackID = callback->callbackID;
     data.dst = g_strdup(dst);
     data.type = type;
@@ -1017,7 +998,7 @@ remoteRelayDomainEventTunable(virConnectPtr conn,
                               void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_callback_tunable_msg data;
+    remote_domain_event_callback_tunable_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1027,8 +1008,6 @@ remoteRelayDomainEventTunable(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID, params, nparams);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
-
     if (virTypedParamsSerialize(params, nparams,
                                 REMOTE_DOMAIN_EVENT_TUNABLE_MAX,
                                 (struct _virTypedParameterRemote **) &data.params.params_val,
@@ -1057,7 +1036,7 @@ remoteRelayDomainEventAgentLifecycle(virConnectPtr conn,
                                      void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_callback_agent_lifecycle_msg data;
+    remote_domain_event_callback_agent_lifecycle_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1068,7 +1047,6 @@ remoteRelayDomainEventAgentLifecycle(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID, state, reason);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.callbackID = callback->callbackID;
     make_nonnull_domain(&data.dom, dom);
     data.state = state;
@@ -1090,7 +1068,7 @@ remoteRelayDomainEventDeviceAdded(virConnectPtr conn,
                                   void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_callback_device_added_msg data;
+    remote_domain_event_callback_device_added_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1100,8 +1078,6 @@ remoteRelayDomainEventDeviceAdded(virConnectPtr conn,
               dom->name, dom->id, devAlias, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
-
     data.devAlias = g_strdup(devAlias);
     make_nonnull_domain(&data.dom, dom);
     data.callbackID = callback->callbackID;
@@ -1122,7 +1098,7 @@ remoteRelayDomainEventMigrationIteration(virConnectPtr conn,
                                          void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_callback_migration_iteration_msg data;
+    remote_domain_event_callback_migration_iteration_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1133,7 +1109,6 @@ remoteRelayDomainEventMigrationIteration(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID, iteration);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.callbackID = callback->callbackID;
     make_nonnull_domain(&data.dom, dom);
 
@@ -1156,7 +1131,7 @@ remoteRelayDomainEventJobCompleted(virConnectPtr conn,
                                    void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_callback_job_completed_msg data;
+    remote_domain_event_callback_job_completed_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1167,8 +1142,6 @@ remoteRelayDomainEventJobCompleted(virConnectPtr conn,
               dom->name, dom->id, callback->callbackID, params, nparams);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
-
     if (virTypedParamsSerialize(params, nparams,
                                 REMOTE_DOMAIN_JOB_STATS_MAX,
                                 (struct _virTypedParameterRemote **) &data.params.params_val,
@@ -1194,7 +1167,7 @@ remoteRelayDomainEventDeviceRemovalFailed(virConnectPtr conn,
                                           void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_callback_device_removal_failed_msg data;
+    remote_domain_event_callback_device_removal_failed_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1204,8 +1177,6 @@ remoteRelayDomainEventDeviceRemovalFailed(virConnectPtr conn,
               dom->name, dom->id, devAlias, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
-
     data.devAlias = g_strdup(devAlias);
 
     make_nonnull_domain(&data.dom, dom);
@@ -1228,7 +1199,7 @@ remoteRelayDomainEventMetadataChange(virConnectPtr conn,
                                      void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_callback_metadata_change_msg data;
+    remote_domain_event_callback_metadata_change_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1238,8 +1209,6 @@ remoteRelayDomainEventMetadataChange(virConnectPtr conn,
               dom->name, dom->id, type, NULLSTR(nsuri), callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
-
     data.type = type;
     if (nsuri) {
         data.nsuri = g_new0(remote_nonnull_string, 1);
@@ -1268,7 +1237,7 @@ remoteRelayDomainEventBlockThreshold(virConnectPtr conn,
                                      void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_block_threshold_msg data;
+    remote_domain_event_block_threshold_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
@@ -1278,7 +1247,6 @@ remoteRelayDomainEventBlockThreshold(virConnectPtr conn,
               dom->name, dom->id, dev, NULLSTR(path), threshold, excess, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.callbackID = callback->callbackID;
     data.dev = g_strdup(dev);
     if (path) {
@@ -1306,14 +1274,13 @@ remoteRelayDomainEventMemoryFailure(virConnectPtr conn,
                                     void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_memory_failure_msg data;
+    remote_domain_event_memory_failure_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
         return -1;
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.callbackID = callback->callbackID;
     data.recipient = recipient;
     data.action = action;
@@ -1336,14 +1303,13 @@ remoteRelayDomainEventMemoryDeviceSizeChange(virConnectPtr conn,
                                              void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_domain_event_memory_device_size_change_msg data;
+    remote_domain_event_memory_device_size_change_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainEventCheckACL(callback->client, conn, dom))
         return -1;
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.callbackID = callback->callbackID;
     data.alias = g_strdup(alias);
     data.size = size;
@@ -1397,7 +1363,7 @@ remoteRelayNetworkEventLifecycle(virConnectPtr conn,
                                  void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_network_event_lifecycle_msg data;
+    remote_network_event_lifecycle_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayNetworkEventCheckACL(callback->client, conn, net))
@@ -1407,7 +1373,6 @@ remoteRelayNetworkEventLifecycle(virConnectPtr conn,
               event, detail, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_network(&data.net, net);
     data.callbackID = callback->callbackID;
     data.event = event;
@@ -1434,7 +1399,7 @@ remoteRelayStoragePoolEventLifecycle(virConnectPtr conn,
                                      void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_storage_pool_event_lifecycle_msg data;
+    remote_storage_pool_event_lifecycle_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayStoragePoolEventCheckACL(callback->client, conn, pool))
@@ -1444,7 +1409,6 @@ remoteRelayStoragePoolEventLifecycle(virConnectPtr conn,
               event, detail, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_storage_pool(&data.pool, pool);
     data.callbackID = callback->callbackID;
     data.event = event;
@@ -1464,7 +1428,7 @@ remoteRelayStoragePoolEventRefresh(virConnectPtr conn,
                                    void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_storage_pool_event_refresh_msg data;
+    remote_storage_pool_event_refresh_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayStoragePoolEventCheckACL(callback->client, conn, pool))
@@ -1474,7 +1438,6 @@ remoteRelayStoragePoolEventRefresh(virConnectPtr conn,
               callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_storage_pool(&data.pool, pool);
     data.callbackID = callback->callbackID;
 
@@ -1501,7 +1464,7 @@ remoteRelayNodeDeviceEventLifecycle(virConnectPtr conn,
                                     void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_node_device_event_lifecycle_msg data;
+    remote_node_device_event_lifecycle_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayNodeDeviceEventCheckACL(callback->client, conn, dev))
@@ -1511,7 +1474,6 @@ remoteRelayNodeDeviceEventLifecycle(virConnectPtr conn,
               event, detail, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_node_device(&data.dev, dev);
     data.callbackID = callback->callbackID;
     data.event = event;
@@ -1531,7 +1493,7 @@ remoteRelayNodeDeviceEventUpdate(virConnectPtr conn,
                                  void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_node_device_event_update_msg data;
+    remote_node_device_event_update_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayNodeDeviceEventCheckACL(callback->client, conn, dev))
@@ -1541,7 +1503,6 @@ remoteRelayNodeDeviceEventUpdate(virConnectPtr conn,
               callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_node_device(&data.dev, dev);
     data.callbackID = callback->callbackID;
 
@@ -1568,7 +1529,7 @@ remoteRelaySecretEventLifecycle(virConnectPtr conn,
                                 void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_secret_event_lifecycle_msg data;
+    remote_secret_event_lifecycle_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelaySecretEventCheckACL(callback->client, conn, secret))
@@ -1578,7 +1539,6 @@ remoteRelaySecretEventLifecycle(virConnectPtr conn,
               event, detail, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_secret(&data.secret, secret);
     data.callbackID = callback->callbackID;
     data.event = event;
@@ -1598,7 +1558,7 @@ remoteRelaySecretEventValueChanged(virConnectPtr conn,
                                    void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    remote_secret_event_value_changed_msg data;
+    remote_secret_event_value_changed_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelaySecretEventCheckACL(callback->client, conn, secret))
@@ -1608,7 +1568,6 @@ remoteRelaySecretEventValueChanged(virConnectPtr conn,
               callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     make_nonnull_secret(&data.secret, secret);
     data.callbackID = callback->callbackID;
 
@@ -1637,7 +1596,7 @@ remoteRelayDomainQemuMonitorEvent(virConnectPtr conn,
                                   void *opaque)
 {
     daemonClientEventCallback *callback = opaque;
-    qemu_domain_monitor_event_msg data;
+    qemu_domain_monitor_event_msg data = { 0 };
 
     if (callback->callbackID < 0 ||
         !remoteRelayDomainQemuMonitorEventCheckACL(callback->client, conn,
@@ -1648,7 +1607,6 @@ remoteRelayDomainQemuMonitorEvent(virConnectPtr conn,
               event, details, callback->callbackID);
 
     /* build return data */
-    memset(&data, 0, sizeof(data));
     data.callbackID = callback->callbackID;
     data.event = g_strdup(event);
     data.seconds = seconds;
@@ -1824,7 +1782,13 @@ remoteOpenConn(const char *uri,
     VIR_DEBUG("Opened driver %p", newconn);
 
     if (preserveIdentity) {
-        if (virConnectSetIdentity(newconn, identparams->par, identparams->npar, 0) < 0)
+        virTypedParameterPtr par;
+        size_t npar;
+
+        if (virTypedParamListFetch(identparams, &par, &npar) < 0)
+            return -1;
+
+        if (virConnectSetIdentity(newconn, par, npar, 0) < 0)
             return -1;
 
         VIR_DEBUG("Forwarded current identity to secondary driver");
@@ -2150,7 +2114,7 @@ remoteDispatchConnectOpen(virNetServer *server G_GNUC_UNUSED,
             priv->secretURI = "secret:///session";
     } else {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Unexpected driver type '%s' opened"), type);
+                       _("Unexpected driver type '%1$s' opened"), type);
         goto cleanup;
     }
 #else /* !MODULE_NAME */
@@ -2671,14 +2635,13 @@ remoteDispatchNodeGetSecurityModel(virNetServer *server G_GNUC_UNUSED,
                                    struct virNetMessageError *rerr,
                                    remote_node_get_security_model_ret *ret)
 {
-    virSecurityModel secmodel;
+    virSecurityModel secmodel = { 0 };
     int rv = -1;
     virConnectPtr conn = remoteGetHypervisorConn(client);
 
     if (!conn)
         goto cleanup;
 
-    memset(&secmodel, 0, sizeof(secmodel));
     if (virNodeGetSecurityModel(conn, &secmodel) < 0)
         goto cleanup;
 
@@ -2937,7 +2900,7 @@ remoteDispatchDomainGetIOThreadInfo(virNetServer *server G_GNUC_UNUSED,
 
     if (ninfo > REMOTE_IOTHREAD_INFO_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many IOThreads in info: %d for limit %d"),
+                       _("Too many IOThreads in info: %1$d for limit %2$d"),
                        ninfo, REMOTE_IOTHREAD_INFO_MAX);
         goto cleanup;
     }
@@ -3704,7 +3667,7 @@ remoteSASLFinish(virNetServer *server,
 
         VIR_DEBUG("negotiated an SSF of %d", ssf);
         if (ssf < 56) { /* 56 is good for Kerberos */
-            VIR_ERROR(_("negotiated SSF %d was not strong enough"), ssf);
+            VIR_ERROR(_("negotiated SSF %1$d was not strong enough"), ssf);
             return -2;
         }
     }
@@ -3773,7 +3736,7 @@ remoteDispatchAuthSaslStart(virNetServer *server,
         goto authfail;
 
     if (serveroutlen > REMOTE_AUTH_SASL_DATA_MAX) {
-        VIR_ERROR(_("sasl start reply data too long %d"), (int)serveroutlen);
+        VIR_ERROR(_("sasl start reply data too long %1$d"), (int)serveroutlen);
         goto authfail;
     }
 
@@ -3863,7 +3826,7 @@ remoteDispatchAuthSaslStep(virNetServer *server,
         goto authfail;
 
     if (serveroutlen > REMOTE_AUTH_SASL_DATA_MAX) {
-        VIR_ERROR(_("sasl step reply data too long %d"),
+        VIR_ERROR(_("sasl step reply data too long %1$d"),
                   (int)serveroutlen);
         goto authfail;
     }
@@ -4221,7 +4184,7 @@ remoteDispatchConnectDomainEventDeregister(virNetServer *server G_GNUC_UNUSED,
 
     if (callbackID < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("domain event %d not registered"),
+                       _("domain event %1$d not registered"),
                        VIR_DOMAIN_EVENT_ID_LIFECYCLE);
         goto cleanup;
     }
@@ -4371,7 +4334,7 @@ remoteDispatchConnectDomainEventRegisterAny(virNetServer *server G_GNUC_UNUSED,
      * modern callback style of RPC.  */
     if (args->eventID > VIR_DOMAIN_EVENT_ID_DEVICE_REMOVED ||
         args->eventID < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("unsupported event ID %d"),
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("unsupported event ID %1$d"),
                        args->eventID);
         goto cleanup;
     }
@@ -4443,7 +4406,7 @@ remoteDispatchConnectDomainEventCallbackRegisterAny(virNetServer *server G_GNUC_
         goto cleanup;
 
     if (args->eventID >= VIR_DOMAIN_EVENT_ID_LAST || args->eventID < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("unsupported event ID %d"),
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("unsupported event ID %1$d"),
                        args->eventID);
         goto cleanup;
     }
@@ -4512,7 +4475,7 @@ remoteDispatchConnectDomainEventDeregisterAny(virNetServer *server G_GNUC_UNUSED
      * modern callback style of RPC.  */
     if (args->eventID > VIR_DOMAIN_EVENT_ID_DEVICE_REMOVED ||
         args->eventID < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("unsupported event ID %d"),
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("unsupported event ID %1$d"),
                        args->eventID);
         goto cleanup;
     }
@@ -4525,7 +4488,7 @@ remoteDispatchConnectDomainEventDeregisterAny(virNetServer *server G_GNUC_UNUSED
     }
     if (callbackID < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("domain event %d not registered"), args->eventID);
+                       _("domain event %1$d not registered"), args->eventID);
         goto cleanup;
     }
 
@@ -4565,7 +4528,7 @@ remoteDispatchConnectDomainEventCallbackDeregisterAny(virNetServer *server G_GNU
     }
     if (i == priv->ndomainEventCallbacks) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("domain event callback %d not registered"),
+                       _("domain event callback %1$d not registered"),
                        args->callbackID);
         goto cleanup;
     }
@@ -5488,7 +5451,7 @@ remoteDispatchDomainMigrateBegin3Params(virNetServer *server G_GNUC_UNUSED,
 
     if (args->params.params_len > REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many migration parameters '%d' for limit '%d'"),
+                       _("Too many migration parameters '%1$d' for limit '%2$d'"),
                        args->params.params_len, REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX);
         goto cleanup;
     }
@@ -5541,7 +5504,7 @@ remoteDispatchDomainMigratePrepare3Params(virNetServer *server G_GNUC_UNUSED,
 
     if (args->params.params_len > REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many migration parameters '%d' for limit '%d'"),
+                       _("Too many migration parameters '%1$d' for limit '%2$d'"),
                        args->params.params_len, REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX);
         goto cleanup;
     }
@@ -5597,7 +5560,7 @@ remoteDispatchDomainMigratePrepareTunnel3Params(virNetServer *server G_GNUC_UNUS
 
     if (args->params.params_len > REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many migration parameters '%d' for limit '%d'"),
+                       _("Too many migration parameters '%1$d' for limit '%2$d'"),
                        args->params.params_len, REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX);
         goto cleanup;
     }
@@ -5664,7 +5627,7 @@ remoteDispatchDomainMigratePerform3Params(virNetServer *server G_GNUC_UNUSED,
 
     if (args->params.params_len > REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many migration parameters '%d' for limit '%d'"),
+                       _("Too many migration parameters '%1$d' for limit '%2$d'"),
                        args->params.params_len, REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX);
         goto cleanup;
     }
@@ -5721,7 +5684,7 @@ remoteDispatchDomainMigrateFinish3Params(virNetServer *server G_GNUC_UNUSED,
 
     if (args->params.params_len > REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many migration parameters '%d' for limit '%d'"),
+                       _("Too many migration parameters '%1$d' for limit '%2$d'"),
                        args->params.params_len, REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX);
         goto cleanup;
     }
@@ -5775,7 +5738,7 @@ remoteDispatchDomainMigrateConfirm3Params(virNetServer *server G_GNUC_UNUSED,
 
     if (args->params.params_len > REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many migration parameters '%d' for limit '%d'"),
+                       _("Too many migration parameters '%1$d' for limit '%2$d'"),
                        args->params.params_len, REMOTE_DOMAIN_MIGRATE_PARAM_LIST_MAX);
         goto cleanup;
     }
@@ -5828,7 +5791,7 @@ remoteDispatchConnectGetCPUModelNames(virNetServer *server G_GNUC_UNUSED,
 
     if (len > REMOTE_CONNECT_CPU_MODELS_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many CPU models '%d' for limit '%d'"),
+                       _("Too many CPU models '%1$d' for limit '%2$d'"),
                        len, REMOTE_CONNECT_CPU_MODELS_MAX);
         goto cleanup;
     }
@@ -5971,7 +5934,7 @@ remoteDispatchConnectNetworkEventRegisterAny(virNetServer *server G_GNUC_UNUSED,
 
     if (args->eventID >= VIR_NETWORK_EVENT_ID_LAST || args->eventID < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unsupported network event ID %d"), args->eventID);
+                       _("unsupported network event ID %1$d"), args->eventID);
         goto cleanup;
     }
 
@@ -6039,7 +6002,7 @@ remoteDispatchConnectNetworkEventDeregisterAny(virNetServer *server G_GNUC_UNUSE
     }
     if (i == priv->nnetworkEventCallbacks) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("network event callback %d not registered"),
+                       _("network event callback %1$d not registered"),
                        args->callbackID);
         goto cleanup;
     }
@@ -6084,7 +6047,7 @@ remoteDispatchConnectStoragePoolEventRegisterAny(virNetServer *server G_GNUC_UNU
 
     if (args->eventID >= VIR_STORAGE_POOL_EVENT_ID_LAST || args->eventID < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unsupported storage pool event ID %d"), args->eventID);
+                       _("unsupported storage pool event ID %1$d"), args->eventID);
         goto cleanup;
     }
 
@@ -6152,7 +6115,7 @@ remoteDispatchConnectStoragePoolEventDeregisterAny(virNetServer *server G_GNUC_U
     }
     if (i == priv->nstorageEventCallbacks) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("storage pool event callback %d not registered"),
+                       _("storage pool event callback %1$d not registered"),
                        args->callbackID);
         goto cleanup;
     }
@@ -6197,7 +6160,7 @@ remoteDispatchConnectNodeDeviceEventRegisterAny(virNetServer *server G_GNUC_UNUS
 
     if (args->eventID >= VIR_NODE_DEVICE_EVENT_ID_LAST || args->eventID < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unsupported node device event ID %d"), args->eventID);
+                       _("unsupported node device event ID %1$d"), args->eventID);
         goto cleanup;
     }
 
@@ -6264,7 +6227,7 @@ remoteDispatchConnectNodeDeviceEventDeregisterAny(virNetServer *server G_GNUC_UN
     }
     if (i == priv->nnodeDeviceEventCallbacks) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("node device event callback %d not registered"),
+                       _("node device event callback %1$d not registered"),
                        args->callbackID);
         goto cleanup;
     }
@@ -6309,7 +6272,7 @@ remoteDispatchConnectSecretEventRegisterAny(virNetServer *server G_GNUC_UNUSED,
 
     if (args->eventID >= VIR_SECRET_EVENT_ID_LAST || args->eventID < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unsupported secret event ID %d"), args->eventID);
+                       _("unsupported secret event ID %1$d"), args->eventID);
         goto cleanup;
     }
 
@@ -6376,7 +6339,7 @@ remoteDispatchConnectSecretEventDeregisterAny(virNetServer *server G_GNUC_UNUSED
     }
     if (i == priv->nsecretEventCallbacks) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("node device event callback %d not registered"),
+                       _("node device event callback %1$d not registered"),
                        args->callbackID);
         goto cleanup;
     }
@@ -6485,7 +6448,7 @@ qemuDispatchConnectDomainMonitorEventDeregister(virNetServer *server G_GNUC_UNUS
     }
     if (i == priv->nqemuEventCallbacks) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("qemu monitor event callback %d not registered"),
+                       _("qemu monitor event callback %1$d not registered"),
                        args->callbackID);
         goto cleanup;
     }
@@ -6645,7 +6608,7 @@ remoteDispatchNetworkGetDHCPLeases(virNetServer *server G_GNUC_UNUSED,
 
     if (nleases > REMOTE_NETWORK_DHCP_LEASES_MAX) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Number of leases is %d, which exceeds max limit: %d"),
+                       _("Number of leases is %1$d, which exceeds max limit: %2$d"),
                        nleases, REMOTE_NETWORK_DHCP_LEASES_MAX);
         goto cleanup;
     }
@@ -6722,8 +6685,7 @@ remoteDispatchConnectGetAllDomainStats(virNetServer *server G_GNUC_UNUSED,
     if (nrecords) {
         if (nrecords > REMOTE_DOMAIN_LIST_MAX) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Number of domain stats records is %d, "
-                             "which exceeds max limit: %d"),
+                           _("Number of domain stats records is %1$d, which exceeds max limit: %2$d"),
                            nrecords, REMOTE_DOMAIN_LIST_MAX);
             goto cleanup;
         }
@@ -6827,7 +6789,7 @@ remoteDispatchDomainGetFSInfo(virNetServer *server G_GNUC_UNUSED,
 
     if (ninfo > REMOTE_DOMAIN_FSINFO_MAX) {
         virReportError(VIR_ERR_RPC,
-                       _("Too many mountpoints in fsinfo: %d for limit %d"),
+                       _("Too many mountpoints in fsinfo: %1$d for limit %2$d"),
                        ninfo, REMOTE_DOMAIN_FSINFO_MAX);
         goto cleanup;
     }
@@ -6847,7 +6809,7 @@ remoteDispatchDomainGetFSInfo(virNetServer *server G_GNUC_UNUSED,
             ndisk = info[i]->ndevAlias;
             if (ndisk > REMOTE_DOMAIN_FSINFO_DISKS_MAX) {
                 virReportError(VIR_ERR_RPC,
-                               _("Too many disks in fsinfo: %zd for limit %d"),
+                               _("Too many disks in fsinfo: %1$zd for limit %2$d"),
                                ndisk, REMOTE_DOMAIN_FSINFO_DISKS_MAX);
                 goto cleanup;
             }
@@ -6910,7 +6872,7 @@ remoteSerializeDomainInterface(virDomainInterfacePtr *ifaces,
 
     if (ifaces_count > REMOTE_DOMAIN_INTERFACE_MAX) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Number of interfaces, %d exceeds the max limit: %d"),
+                       _("Number of interfaces, %1$d exceeds the max limit: %2$d"),
                        ifaces_count, REMOTE_DOMAIN_INTERFACE_MAX);
         return -1;
     }
@@ -6931,7 +6893,7 @@ remoteSerializeDomainInterface(virDomainInterfacePtr *ifaces,
 
         if (iface->naddrs > REMOTE_DOMAIN_IP_ADDR_MAX) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Number of interfaces, %d exceeds the max limit: %d"),
+                           _("Number of interfaces, %1$d exceeds the max limit: %2$d"),
                            iface->naddrs, REMOTE_DOMAIN_IP_ADDR_MAX);
             goto cleanup;
         }
@@ -7332,7 +7294,7 @@ remoteDispatchDomainAuthorizedSshKeysGet(virNetServer *server G_GNUC_UNUSED,
 
     if (nkeys > REMOTE_DOMAIN_AUTHORIZED_SSH_KEYS_MAX) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Number of keys %d, which exceeds max liit: %d"),
+                       _("Number of keys %1$d, which exceeds max limit: %2$d"),
                        nkeys, REMOTE_DOMAIN_AUTHORIZED_SSH_KEYS_MAX);
         goto cleanup;
     }
@@ -7369,7 +7331,7 @@ remoteDispatchDomainAuthorizedSshKeysSet(virNetServer *server G_GNUC_UNUSED,
 
     if (args->keys.keys_len > REMOTE_DOMAIN_AUTHORIZED_SSH_KEYS_MAX) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Number of keys %d, which exceeds max liit: %d"),
+                       _("Number of keys %1$d, which exceeds max limit: %2$d"),
                        args->keys.keys_len, REMOTE_DOMAIN_AUTHORIZED_SSH_KEYS_MAX);
         goto cleanup;
     }
@@ -7411,7 +7373,7 @@ remoteDispatchDomainGetMessages(virNetServer *server G_GNUC_UNUSED,
 
     if (nmsgs > REMOTE_DOMAIN_MESSAGES_MAX) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Number of msgs %d, which exceeds max limit: %d"),
+                       _("Number of msgs %1$d, which exceeds max limit: %2$d"),
                        nmsgs, REMOTE_DOMAIN_MESSAGES_MAX);
         goto cleanup;
     }

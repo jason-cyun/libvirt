@@ -96,7 +96,7 @@ vahDeinit(vahControl * ctl)
 static void
 vah_usage(void)
 {
-    printf(_("\n%s mode [options] [extra file] [< def.xml]\n\n"
+    printf(_("\n%1$s mode [options] [extra file] [< def.xml]\n\n"
             "  Modes:\n"
             "    -a | --add                     load profile\n"
             "    -c | --create                  create profile from template\n"
@@ -120,7 +120,7 @@ vah_usage(void)
 static void
 vah_error(vahControl * ctl, int doexit, const char *str)
 {
-    fprintf(stderr, _("%s: error: %s%c"), progname, str, '\n');
+    fprintf(stderr, _("%1$s: error: %2$s%3$c"), progname, str, '\n');
 
     if (doexit) {
         if (ctl != NULL)
@@ -132,13 +132,13 @@ vah_error(vahControl * ctl, int doexit, const char *str)
 static void
 vah_warning(const char *str)
 {
-    fprintf(stderr, _("%s: warning: %s%c"), progname, str, '\n');
+    fprintf(stderr, _("%1$s: warning: %2$s%3$c"), progname, str, '\n');
 }
 
 static void
 vah_info(const char *str)
 {
-    fprintf(stderr, _("%s:\n%s%c"), progname, str, '\n');
+    fprintf(stderr, _("%1$s:\n%2$s%3$c"), progname, str, '\n');
 }
 
 /*
@@ -1433,7 +1433,8 @@ vahParseArgv(vahControl * ctl, int argc, char **argv)
 int
 main(int argc, char **argv)
 {
-    vahControl _ctl, *ctl = &_ctl;
+    vahControl _ctl = { 0 };
+    vahControl *ctl = &_ctl;
     int rc = -1;
     char *profile = NULL;
     char *include_file = NULL;
@@ -1442,7 +1443,7 @@ main(int argc, char **argv)
 
     if (virGettextInitialize() < 0 ||
         virErrorInitialize() < 0) {
-        fprintf(stderr, _("%s: initialization failed\n"), argv[0]);
+        fprintf(stderr, _("%1$s: initialization failed\n"), argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -1465,8 +1466,6 @@ main(int argc, char **argv)
         progname = argv[0];
     else
         progname++;
-
-    memset(ctl, 0, sizeof(vahControl));
 
     if (vahParseArgv(ctl, argc, argv) != 0)
         vah_error(ctl, 1, _("could not parse arguments"));

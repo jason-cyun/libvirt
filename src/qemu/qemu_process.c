@@ -220,7 +220,7 @@ qemuConnectAgent(virQEMUDriver *driver, virDomainObj *vm)
     }
 
     if (qemuSecuritySetDaemonSocketLabel(driver->securityManager, vm->def) < 0) {
-        VIR_ERROR(_("Failed to set security context for agent for %s"),
+        VIR_ERROR(_("Failed to set security context for agent for %1$s"),
                   vm->def->name);
         goto cleanup;
     }
@@ -238,7 +238,7 @@ qemuConnectAgent(virQEMUDriver *driver, virDomainObj *vm)
     }
 
     if (qemuSecurityClearSocketLabel(driver->securityManager, vm->def) < 0) {
-        VIR_ERROR(_("Failed to clear security context for agent for %s"),
+        VIR_ERROR(_("Failed to clear security context for agent for %1$s"),
                   vm->def->name);
         qemuAgentClose(agent);
         goto cleanup;
@@ -395,7 +395,7 @@ qemuProcessFindDomainDiskByAliasOrQOM(virDomainObj *vm,
     }
 
     virReportError(VIR_ERR_INTERNAL_ERROR,
-                   _("no disk found with alias '%s' or id '%s'"),
+                   _("no disk found with alias '%1$s' or id '%2$s'"),
                    NULLSTR(alias), NULLSTR(qomid));
     return NULL;
 }
@@ -1601,11 +1601,11 @@ qemuProcessHandleDumpCompleted(qemuMonitor *mon G_GNUC_UNUSED,
               vm, vm->def->name, stats, NULLSTR(error));
 
     jobPriv = vm->job->privateData;
-    privJobCurrent = vm->job->current->privateData;
     if (vm->job->asyncJob == VIR_ASYNC_JOB_NONE) {
         VIR_DEBUG("got DUMP_COMPLETED event without a dump_completed job");
         goto cleanup;
     }
+    privJobCurrent = vm->job->current->privateData;
     jobPriv->dumpCompleted = true;
     privJobCurrent->stats.dump = *stats;
     vm->job->error = g_strdup(error);
@@ -1864,7 +1864,7 @@ qemuConnectMonitor(virQEMUDriver *driver,
     qemuMonitor *mon = NULL;
 
     if (qemuSecuritySetDaemonSocketLabel(driver->securityManager, vm->def) < 0) {
-        VIR_ERROR(_("Failed to set security context for monitor for %s"),
+        VIR_ERROR(_("Failed to set security context for monitor for %1$s"),
                   vm->def->name);
         return -1;
     }
@@ -1888,7 +1888,7 @@ qemuConnectMonitor(virQEMUDriver *driver,
     priv->mon = mon;
 
     if (qemuSecurityClearSocketLabel(driver->securityManager, vm->def) < 0) {
-        VIR_ERROR(_("Failed to clear security context for monitor for %s"),
+        VIR_ERROR(_("Failed to clear security context for monitor for %1$s"),
                   vm->def->name);
         return -1;
     }
@@ -2026,7 +2026,7 @@ qemuProcessLookupPTYs(virDomainChrDef **devices,
                      * pty path for this chardev, report an error
                      */
                     virReportError(VIR_ERR_INTERNAL_ERROR,
-                                   _("no assigned pty for device %s"), id);
+                                   _("no assigned pty for device %1$s"), id);
                     return -1;
                 } else {
                     /* 'info chardev' had no pty path for this chardev,
@@ -2155,7 +2155,7 @@ qemuProcessRefreshPRManagerState(virDomainObj *vm,
 
     if (!(prManagerInfo = virHashLookup(info, managedAlias))) {
         virReportError(VIR_ERR_OPERATION_FAILED,
-                       _("missing info on pr-manager %s"),
+                       _("missing info on pr-manager %1$s"),
                        managedAlias);
         return -1;
     }
@@ -2226,14 +2226,13 @@ qemuRefreshRTC(virDomainObj *vm)
 {
     qemuDomainObjPrivate *priv = vm->privateData;
     time_t now, then;
-    struct tm thenbits;
+    struct tm thenbits = { 0 };
     long localOffset;
     int rv;
 
     if (vm->def->clock.offset != VIR_DOMAIN_CLOCK_OFFSET_VARIABLE)
         return;
 
-    memset(&thenbits, 0, sizeof(thenbits));
     qemuDomainObjEnterMonitor(vm);
     now = time(NULL);
     rv = qemuMonitorGetRTCTime(priv->mon, &thenbits);
@@ -2360,8 +2359,7 @@ qemuProcessDetectIOThreadPIDs(virDomainObj *vm,
 
     if (niothreads != vm->def->niothreadids) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("got wrong number of IOThread pids from QEMU monitor. "
-                         "got %d, wanted %zu"),
+                       _("got wrong number of IOThread pids from QEMU monitor. got %1$d, wanted %2$zu"),
                        niothreads, vm->def->niothreadids);
         goto cleanup;
     }
@@ -2378,7 +2376,7 @@ qemuProcessDetectIOThreadPIDs(virDomainObj *vm,
         if (!(iothrid = virDomainIOThreadIDFind(vm->def,
                                                 iothreads[i]->iothread_id))) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("iothread %d not found"),
+                           _("iothread %1$d not found"),
                            iothreads[i]->iothread_id);
             goto cleanup;
         }
@@ -2518,7 +2516,7 @@ qemuProcessSetLinkStates(virDomainObj *vm,
                                     VIR_DOMAIN_NET_INTERFACE_LINK_STATE_DOWN);
             if (rv < 0) {
                 virReportError(VIR_ERR_OPERATION_FAILED,
-                               _("Couldn't set link state on interface: %s"),
+                               _("Couldn't set link state on interface: %1$s"),
                                def->nets[i]->info.alias);
                 goto cleanup;
             }
@@ -2554,6 +2552,7 @@ qemuProcessSetupPid(virDomainObj *vm,
                     virDomainThreadSchedParam *sched)
 {
     qemuDomainObjPrivate *priv = vm->privateData;
+    virDomainNuma *numatune = vm->def->numa;
     virDomainNumatuneMemMode mem_mode;
     virCgroup *cgroup = NULL;
     virBitmap *use_cpumask = NULL;
@@ -2571,13 +2570,8 @@ qemuProcessSetupPid(virDomainObj *vm,
     }
 
     /* Infer which cpumask shall be used. */
-    if (cpumask) {
-        use_cpumask = cpumask;
-    } else if (vm->def->placement_mode == VIR_DOMAIN_CPU_PLACEMENT_MODE_AUTO) {
-        use_cpumask = priv->autoCpuset;
-    } else if (vm->def->cpumask) {
-        use_cpumask = vm->def->cpumask;
-    } else {
+    if (!(use_cpumask = qemuDomainEvaluateCPUMask(vm->def,
+                                                  cpumask, priv->autoCpuset))) {
         /* You may think this is redundant, but we can't assume libvirtd
          * itself is running on all pCPUs, so we need to explicitly set
          * the spawned QEMU instance to all pCPUs if no map is given in
@@ -2595,20 +2589,23 @@ qemuProcessSetupPid(virDomainObj *vm,
     if (virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_CPU) ||
         virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_CPUSET)) {
 
-        if (virDomainNumatuneGetMode(vm->def->numa, -1, &mem_mode) == 0 &&
-            (mem_mode == VIR_DOMAIN_NUMATUNE_MEM_STRICT ||
-             mem_mode == VIR_DOMAIN_NUMATUNE_MEM_RESTRICTIVE) &&
-            virDomainNumatuneMaybeFormatNodeset(vm->def->numa,
-                                                priv->autoNodeset,
-                                                &mem_mask, -1) < 0)
-            goto cleanup;
+        if (virDomainNumatuneGetMode(numatune, -1, &mem_mode) == 0) {
+            /* QEMU allocates its memory from the emulator thread. Thus it
+             * needs to access union of all host nodes configured. */
+            if (mem_mode == VIR_DOMAIN_NUMATUNE_MEM_STRICT) {
+                qemuDomainNumatuneMaybeFormatNodesetUnion(vm, NULL, &mem_mask);
+            } else if (mem_mode == VIR_DOMAIN_NUMATUNE_MEM_RESTRICTIVE &&
+                       virDomainNumatuneMaybeFormatNodeset(numatune,
+                                                           priv->autoNodeset,
+                                                           &mem_mask, -1) < 0) {
+                goto cleanup;
+            }
+        }
 
         /* For restrictive numatune mode we need to set cpuset.mems for vCPU
          * threads based on the node they are in as there is nothing else uses
          * for such restriction (e.g. numa_set_membind). */
         if (nameval == VIR_CGROUP_THREAD_VCPU) {
-            virDomainNuma *numatune = vm->def->numa;
-
             /* Look for the guest NUMA node of this vCPU */
             for (i = 0; i < virDomainNumaGetNodeCount(numatune); i++) {
                 virBitmap *node_cpus = virDomainNumaGetNodeCpumask(numatune, i);
@@ -2636,6 +2633,11 @@ qemuProcessSetupPid(virDomainObj *vm,
         if (virCgroupNewThread(priv->cgroup, nameval, id, true, &cgroup) < 0)
             goto cleanup;
 
+        /* Move the thread to the sub dir before changing the settings so that
+         * all take effect even with cgroupv2. */
+        if (virCgroupAddThread(cgroup, pid) < 0)
+            goto cleanup;
+
         if (virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_CPUSET)) {
             if (use_cpumask &&
                 virDomainCgroupSetupCpusetCpus(cgroup, use_cpumask) < 0)
@@ -2648,11 +2650,6 @@ qemuProcessSetupPid(virDomainObj *vm,
 
         if (virDomainCgroupSetupVcpuBW(cgroup, period, quota) < 0)
             goto cleanup;
-
-        /* Move the thread to the sub dir */
-        if (virCgroupAddThread(cgroup, pid) < 0)
-            goto cleanup;
-
     }
 
     if (!affinity_cpumask)
@@ -2695,7 +2692,7 @@ qemuProcessSetupPid(virDomainObj *vm,
 }
 
 
-static int
+int
 qemuProcessSetupEmulator(virDomainObj *vm)
 {
     return qemuProcessSetupPid(vm, vm->pid, VIR_CGROUP_THREAD_EMULATOR,
@@ -2824,10 +2821,15 @@ qemuProcessStartPRDaemonHook(void *opaque)
 int
 qemuProcessStartManagedPRDaemon(virDomainObj *vm)
 {
+    const char *const prHelperDirs[] = {
+        "/usr/libexec",
+        NULL,
+    };
     qemuDomainObjPrivate *priv = vm->privateData;
     virQEMUDriver *driver = priv->driver;
     g_autoptr(virQEMUDriverConfig) cfg = NULL;
     int errfd = -1;
+    g_autofree char *prHelperPath = NULL;
     g_autofree char *pidfile = NULL;
     g_autofree char *socketPath = NULL;
     pid_t cpid = -1;
@@ -2838,11 +2840,15 @@ qemuProcessStartManagedPRDaemon(virDomainObj *vm)
 
     cfg = virQEMUDriverGetConfig(driver);
 
-    if (!virFileIsExecutable(cfg->prHelperName)) {
-        virReportSystemError(errno, _("'%s' is not a suitable pr helper"),
+    prHelperPath = virFindFileInPathFull(cfg->prHelperName, prHelperDirs);
+
+    if (!prHelperPath) {
+        virReportSystemError(errno, _("'%1$s' is not a suitable pr helper"),
                              cfg->prHelperName);
         goto cleanup;
     }
+
+    VIR_DEBUG("Using qemu-pr-helper: %s", prHelperPath);
 
     if (!(pidfile = qemuProcessBuildPRHelperPidfilePath(vm)))
         goto cleanup;
@@ -2854,12 +2860,12 @@ qemuProcessStartManagedPRDaemon(virDomainObj *vm)
     if (unlink(socketPath) < 0 &&
         errno != ENOENT) {
         virReportSystemError(errno,
-                             _("Unable to remove stale socket path: %s"),
+                             _("Unable to remove stale socket path: %1$s"),
                              socketPath);
         goto cleanup;
     }
 
-    if (!(cmd = virCommandNewArgList(cfg->prHelperName,
+    if (!(cmd = virCommandNewArgList(prHelperPath,
                                      "-k", socketPath,
                                      NULL)))
         goto cleanup;
@@ -2886,8 +2892,8 @@ qemuProcessStartManagedPRDaemon(virDomainObj *vm)
 
     if (virPidFileReadPath(pidfile, &cpid) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("pr helper %s didn't show up"),
-                       cfg->prHelperName);
+                       _("pr helper %1$s didn't show up"),
+                       prHelperPath);
         goto cleanup;
     }
 
@@ -2904,11 +2910,11 @@ qemuProcessStartManagedPRDaemon(virDomainObj *vm)
 
         if (saferead(errfd, errbuf, sizeof(errbuf) - 1) < 0) {
             virReportSystemError(errno,
-                                 _("pr helper %s died unexpectedly"),
-                                 cfg->prHelperName);
+                                 _("pr helper %1$s died unexpectedly"),
+                                 prHelperPath);
         } else {
             virReportError(VIR_ERR_OPERATION_FAILED,
-                           _("pr helper died and reported: %s"), errbuf);
+                           _("pr helper died and reported: %1$s"), errbuf);
         }
         goto cleanup;
     }
@@ -3052,9 +3058,16 @@ qemuProcessUpdateVideoRamSize(virQEMUDriver *driver,
                     goto error;
             }
             break;
+        case VIR_DOMAIN_VIDEO_TYPE_DEFAULT:
         case VIR_DOMAIN_VIDEO_TYPE_CIRRUS:
         case VIR_DOMAIN_VIDEO_TYPE_XEN:
         case VIR_DOMAIN_VIDEO_TYPE_VBOX:
+        case VIR_DOMAIN_VIDEO_TYPE_PARALLELS:
+        case VIR_DOMAIN_VIDEO_TYPE_VIRTIO:
+        case VIR_DOMAIN_VIDEO_TYPE_GOP:
+        case VIR_DOMAIN_VIDEO_TYPE_NONE:
+        case VIR_DOMAIN_VIDEO_TYPE_BOCHS:
+        case VIR_DOMAIN_VIDEO_TYPE_RAMFB:
         case VIR_DOMAIN_VIDEO_TYPE_LAST:
             break;
         }
@@ -4031,7 +4044,7 @@ qemuProcessBuildDestroyMemoryPathsImpl(virQEMUDriver *driver,
 
         if (g_mkdir_with_parents(path, 0700) < 0) {
             virReportSystemError(errno,
-                                 _("Unable to create %s"),
+                                 _("Unable to create %1$s"),
                                  path);
             return -1;
         }
@@ -4111,7 +4124,7 @@ qemuProcessDestroyMemoryBackingPath(virQEMUDriver *driver,
 
     if (unlink(path) < 0 &&
         errno != ENOENT) {
-        virReportSystemError(errno, _("Unable to remove %s"), path);
+        virReportSystemError(errno, _("Unable to remove %1$s"), path);
         return -1;
     }
 
@@ -4272,7 +4285,7 @@ qemuProcessVerifyHypervFeatures(virDomainDef *def,
                     continue;
 
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("host doesn't support hyperv stimer '%s' feature"),
+                               _("host doesn't support hyperv stimer '%1$s' feature"),
                                "direct");
                 return -1;
             }
@@ -4298,7 +4311,7 @@ qemuProcessVerifyHypervFeatures(virDomainDef *def,
         case VIR_DOMAIN_HYPERV_EVMCS:
         case VIR_DOMAIN_HYPERV_AVIC:
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("host doesn't support hyperv '%s' feature"),
+                           _("host doesn't support hyperv '%1$s' feature"),
                            virDomainHypervTypeToString(i));
             return -1;
 
@@ -4570,14 +4583,14 @@ qemuPrepareNVRAMHelper(int dstFD,
 
         if ((r = saferead(data->srcFD, buf, sizeof(buf))) < 0) {
             virReportSystemError(errno,
-                                 _("Unable to read from file '%s'"),
+                                 _("Unable to read from file '%1$s'"),
                                  data->srcPath);
             return -2;
         }
 
         if (safewrite(dstFD, buf, r) < 0) {
             virReportSystemError(errno,
-                                 _("Unable to write to file '%s'"),
+                                 _("Unable to write to file '%1$s'"),
                                  dstPath);
             return -1;
         }
@@ -4615,15 +4628,15 @@ qemuPrepareNVRAM(virQEMUDriver *driver,
 
     if (!loader->nvramTemplate) {
         virReportError(VIR_ERR_OPERATION_FAILED,
-                       _("unable to find any master var store for "
-                         "loader: %s"), loader->path);
+                       _("unable to find any master var store for loader: %1$s"),
+                       loader->path);
         return -1;
     }
 
     if ((srcFD = virFileOpenAs(loader->nvramTemplate, O_RDONLY,
                                0, -1, -1, 0)) < 0) {
         virReportSystemError(-srcFD,
-                             _("Failed to open file '%s'"),
+                             _("Failed to open file '%1$s'"),
                              loader->nvramTemplate);
         return -1;
     }
@@ -4917,7 +4930,7 @@ qemuProcessGetNetworkAddress(const char *netname,
         ipdef = virNetworkDefGetIPByIndex(netdef, AF_UNSPEC, 0);
         if (!ipdef) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("network '%s' doesn't have an IP address"),
+                           _("network '%1$s' doesn't have an IP address"),
                            netdef->name);
             return -1;
         }
@@ -4941,7 +4954,7 @@ qemuProcessGetNetworkAddress(const char *netname,
 
         if (!dev_name) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("network '%s' has no associated interface or bridge"),
+                           _("network '%1$s' has no associated interface or bridge"),
                            netdef->name);
             return -1;
         }
@@ -5055,7 +5068,7 @@ qemuProcessGraphicsSetupListen(virQEMUDriver *driver,
                  * *_auto_unix_socket set we should use unix socket as
                  * default instead of tcp listen. */
                 if (useSocket) {
-                    memset(glisten, 0, sizeof(virDomainGraphicsListenDef));
+                    memset(glisten, 0, sizeof(*glisten));
                     glisten->socket = g_strdup_printf("%s/%s.sock", priv->libDir,
                                                       type);
                     glisten->fromConfig = true;
@@ -5264,7 +5277,7 @@ qemuProcessMakeDir(virQEMUDriver *driver,
                    const char *path)
 {
     if (g_mkdir_with_parents(path, 0750) < 0) {
-        virReportSystemError(errno, _("Cannot create directory '%s'"), path);
+        virReportSystemError(errno, _("Cannot create directory '%1$s'"), path);
         return -1;
     }
 
@@ -5368,7 +5381,7 @@ qemuProcessStartValidateShmem(virDomainObj *vm)
 
         if (strchr(shmem->name, '/')) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("shmem name '%s' must not contain '/'"),
+                           _("shmem name '%1$s' must not contain '/'"),
                            shmem->name);
             return -1;
         }
@@ -5481,9 +5494,7 @@ qemuProcessStartValidateTSC(virQEMUDriver *driver,
     }
 
     virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                   _("Requested TSC frequency %llu Hz is outside tolerance "
-                     "range ([%llu, %llu] Hz) around host frequency %llu Hz "
-                     "and TSC scaling is not supported by the host CPU"),
+                   _("Requested TSC frequency %1$llu Hz is outside tolerance range ([%2$llu, %3$llu] Hz) around host frequency %4$llu Hz and TSC scaling is not supported by the host CPU"),
                    freq, minFreq, maxFreq, tsc->frequency);
     return -1;
 }
@@ -5555,8 +5566,7 @@ qemuProcessStartValidate(virQEMUDriver *driver,
 
                 str = g_strjoinv(", ", features);
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("Some features cannot be reliably used "
-                                 "with this QEMU: %s"), str);
+                               _("Some features cannot be reliably used with this QEMU: %1$s"), str);
                 return -1;
             }
         }
@@ -5589,7 +5599,7 @@ qemuProcessStartUpdateCustomCaps(virDomainObj *vm)
         for (next = cfg->capabilityfilters; *next; next++) {
             if ((tmp = virQEMUCapsTypeFromString(*next)) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
-                               _("invalid capability_filters capability '%s'"),
+                               _("invalid capability_filters capability '%1$s'"),
                                *next);
                 return -1;
             }
@@ -5602,7 +5612,7 @@ qemuProcessStartUpdateCustomCaps(virDomainObj *vm)
         for (next = nsdef->capsadd; next && *next; next++) {
             if ((tmp = virQEMUCapsTypeFromString(*next)) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
-                               _("invalid qemu namespace capability '%s'"),
+                               _("invalid qemu namespace capability '%1$s'"),
                                *next);
                 return -1;
             }
@@ -5613,7 +5623,7 @@ qemuProcessStartUpdateCustomCaps(virDomainObj *vm)
         for (next = nsdef->capsdel; next && *next; next++) {
             if ((tmp = virQEMUCapsTypeFromString(*next)) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
-                               _("invalid qemu namespace capability '%s'"),
+                               _("invalid qemu namespace capability '%1$s'"),
                                *next);
                 return -1;
             }
@@ -5807,14 +5817,19 @@ qemuProcessNetworkPrepareDevices(virQEMUDriver *driver,
 
             if (virDomainHostdevFind(def, hostdev, NULL) >= 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
-                               _("PCI device %04x:%02x:%02x.%x "
-                                 "allocated from network %s is already "
-                                 "in use by domain %s"),
+                               _("PCI device %1$04x:%2$02x:%3$02x.%4$x allocated from network %5$s is already in use by domain %6$s"),
                                pcisrc->addr.domain, pcisrc->addr.bus,
                                pcisrc->addr.slot, pcisrc->addr.function,
                                net->data.network.name, def->name);
                 return -1;
             }
+
+            /* For hostdev present in qemuProcessPrepareDomain() phase this was
+             * done already, but this code runs after that, so we have to call
+             * it ourselves. */
+            if (qemuDomainPrepareHostdev(hostdev, priv) < 0)
+                return -1;
+
             if (virDomainHostdevInsert(def, hostdev) < 0)
                 return -1;
         } else if (actualType == VIR_DOMAIN_NET_TYPE_USER &&
@@ -5843,14 +5858,14 @@ qemuProcessSetupVcpuSchedCoreHelper(pid_t ppid G_GNUC_UNUSED,
 
     if (virProcessSchedCoreShareFrom(data->dummypid) < 0) {
         virReportSystemError(errno,
-                             _("unable to share scheduling cookie from %lld"),
+                             _("unable to share scheduling cookie from %1$lld"),
                              (long long) data->dummypid);
         return -1;
     }
 
     if (virProcessSchedCoreShareTo(data->vcpupid) < 0) {
         virReportSystemError(errno,
-                             _("unable to share scheduling cookie to %lld"),
+                             _("unable to share scheduling cookie to %1$lld"),
                              (long long) data->vcpupid);
         return -1;
     }
@@ -5967,7 +5982,7 @@ qemuProcessSetupAllVcpusSchedCoreHelper(pid_t ppid G_GNUC_UNUSED,
         if (vcpupid > 0 &&
             virProcessSchedCoreShareTo(vcpupid) < 0) {
             virReportSystemError(errno,
-                                 _("unable to share scheduling cookie to %lld"),
+                                 _("unable to share scheduling cookie to %1$lld"),
                                  (long long) vcpupid);
             return -1;
         }
@@ -6089,13 +6104,13 @@ qemuProcessValidateHotpluggableVcpus(virDomainDef *def)
         if (vcpu->order != 0) {
             if (virBitmapIsBitSet(ordermap, vcpu->order)) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("duplicate vcpu order '%u'"), vcpu->order);
+                               _("duplicate vcpu order '%1$u'"), vcpu->order);
                 return -1;
             }
 
             if (virBitmapSetBit(ordermap, vcpu->order)) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("vcpu order '%u' exceeds vcpu count"),
+                               _("vcpu order '%1$u' exceeds vcpu count"),
                                vcpu->order);
                 return -1;
             }
@@ -6107,8 +6122,8 @@ qemuProcessValidateHotpluggableVcpus(virDomainDef *def)
                 subvcpu->online != vcpu->online ||
                 subvcpu->order != vcpu->order) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("vcpus '%zu' and '%zu' are in the same hotplug "
-                                 "group but differ in configuration"), i, j);
+                               _("vcpus '%1$zu' and '%2$zu' are in the same hotplug group but differ in configuration"),
+                               i, j);
                 return -1;
             }
         }
@@ -6118,7 +6133,7 @@ qemuProcessValidateHotpluggableVcpus(virDomainDef *def)
                  vcpupriv->thread_id == -1 && vcpupriv->node_id == -1) ||
                 !vcpupriv->type) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("vcpu '%zu' is missing hotplug data"), i);
+                               _("vcpu '%1$zu' is missing hotplug data"), i);
                 return -1;
             }
         }
@@ -6268,8 +6283,7 @@ qemuProcessUpdateGuestCPU(virDomainDef *def,
     if (!virQEMUCapsIsCPUModeSupported(qemuCaps, hostarch, def->virtType,
                                        def->cpu->mode, def->os.machine)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("CPU mode '%s' for %s %s domain on %s host is not "
-                         "supported by hypervisor"),
+                       _("CPU mode '%1$s' for %2$s %3$s domain on %4$s host is not supported by hypervisor"),
                        virCPUModeTypeToString(def->cpu->mode),
                        virArchToString(def->os.arch),
                        virDomainVirtTypeToString(def->virtType),
@@ -6514,59 +6528,6 @@ qemuProcessPrepareDomainHostdevs(virDomainObj *vm,
 }
 
 
-int
-qemuProcessPrepareHostHostdev(virDomainHostdevDef *hostdev)
-{
-    if (virHostdevIsSCSIDevice(hostdev)) {
-        virDomainHostdevSubsysSCSI *scsisrc = &hostdev->source.subsys.u.scsi;
-
-        switch ((virDomainHostdevSCSIProtocolType) scsisrc->protocol) {
-        case VIR_DOMAIN_HOSTDEV_SCSI_PROTOCOL_TYPE_NONE: {
-            virDomainHostdevSubsysSCSIHost *scsihostsrc = &scsisrc->u.host;
-            virStorageSource *src = scsisrc->u.host.src;
-            g_autofree char *devstr = NULL;
-
-            if (!(devstr = virSCSIDeviceGetSgName(NULL,
-                                                  scsihostsrc->adapter,
-                                                  scsihostsrc->bus,
-                                                  scsihostsrc->target,
-                                                  scsihostsrc->unit)))
-                return -1;
-
-            src->path = g_strdup_printf("/dev/%s", devstr);
-            break;
-        }
-
-        case VIR_DOMAIN_HOSTDEV_SCSI_PROTOCOL_TYPE_ISCSI:
-            break;
-
-        case VIR_DOMAIN_HOSTDEV_SCSI_PROTOCOL_TYPE_LAST:
-        default:
-            virReportEnumRangeError(virDomainHostdevSCSIProtocolType, scsisrc->protocol);
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-
-static int
-qemuProcessPrepareHostHostdevs(virDomainObj *vm)
-{
-    size_t i;
-
-    for (i = 0; i < vm->def->nhostdevs; i++) {
-        virDomainHostdevDef *hostdev = vm->def->hostdevs[i];
-
-        if (qemuProcessPrepareHostHostdev(hostdev) < 0)
-            return -1;
-    }
-
-    return 0;
-}
-
-
 /**
  * qemuProcessRebootAllowed:
  * @def: domain definition
@@ -6744,7 +6705,7 @@ qemuProcessPrepareDomain(virQEMUDriver *driver,
         return -1;
 
     VIR_DEBUG("Prepare bios/uefi paths");
-    if (qemuFirmwareFillDomain(driver, vm->def) < 0)
+    if (qemuFirmwareFillDomain(driver, vm->def, false) < 0)
         return -1;
     if (qemuDomainInitializePflashStorageSource(vm, cfg) < 0)
         return -1;
@@ -6808,7 +6769,7 @@ qemuProcessSEVCreateFile(virDomainObj *vm,
         return -1;
 
     if (virFileRewriteStr(configFile, S_IRUSR | S_IWUSR, data) < 0) {
-        virReportSystemError(errno, _("failed to write data to config '%s'"),
+        virReportSystemError(errno, _("failed to write data to config '%1$s'"),
                              configFile);
         return -1;
     }
@@ -7082,7 +7043,7 @@ qemuProcessPrepareHostBackendChardevOne(virDomainDeviceDef *dev,
     case VIR_DOMAIN_CHR_TYPE_LAST:
     default:
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("unsupported chardev '%s'"),
+                       _("unsupported chardev '%1$s'"),
                        virDomainChrTypeToString(chardev->type));
         return -1;
     }
@@ -7222,8 +7183,7 @@ qemuProcessPrepareHost(virQEMUDriver *driver,
         hostdev_flags |= VIR_HOSTDEV_STRICT_ACS_CHECK;
     if (flags & VIR_QEMU_PROCESS_START_NEW)
         hostdev_flags |= VIR_HOSTDEV_COLD_BOOT;
-    if (qemuHostdevPrepareDomainDevices(driver, vm->def, priv->qemuCaps,
-                                        hostdev_flags) < 0)
+    if (qemuHostdevPrepareDomainDevices(driver, vm->def, hostdev_flags) < 0)
         return -1;
 
     VIR_DEBUG("Preparing chr device backends");
@@ -7240,7 +7200,7 @@ qemuProcessPrepareHost(virQEMUDriver *driver,
 
     if (g_mkdir_with_parents(cfg->logDir, 0777) < 0) {
         virReportSystemError(errno,
-                             _("cannot create log directory %s"),
+                             _("cannot create log directory %1$s"),
                              cfg->logDir);
         return -1;
     }
@@ -7255,7 +7215,7 @@ qemuProcessPrepareHost(virQEMUDriver *driver,
     if (unlink(priv->pidfile) < 0 &&
         errno != ENOENT) {
         virReportSystemError(errno,
-                             _("Cannot remove stale PID file %s"),
+                             _("Cannot remove stale PID file %1$s"),
                              priv->pidfile);
         return -1;
     }
@@ -7266,10 +7226,6 @@ qemuProcessPrepareHost(virQEMUDriver *driver,
 
     VIR_DEBUG("Preparing disks (host)");
     if (qemuProcessPrepareHostStorage(driver, vm, flags) < 0)
-        return -1;
-
-    VIR_DEBUG("Preparing hostdevs (host-side)");
-    if (qemuProcessPrepareHostHostdevs(vm) < 0)
         return -1;
 
     VIR_DEBUG("Preparing external devices");
@@ -7338,13 +7294,6 @@ qemuProcessSetupDiskThrottling(virDomainObj *vm,
 
     for (i = 0; i < vm->def->ndisks; i++) {
         virDomainDiskDef *disk = vm->def->disks[i];
-        qemuDomainDiskPrivate *diskPriv = QEMU_DOMAIN_DISK_PRIVATE(disk);
-        g_autofree char *drivealias = NULL;
-
-        if (!QEMU_DOMAIN_DISK_PRIVATE(disk)->qomName) {
-            if (!(drivealias = qemuAliasDiskDriveFromDisk(disk)))
-                goto cleanup;
-        }
 
         /* Setting throttling for empty drives fails */
         if (virStorageSourceIsEmpty(disk->src))
@@ -7353,8 +7302,9 @@ qemuProcessSetupDiskThrottling(virDomainObj *vm,
         if (!qemuDiskConfigBlkdeviotuneEnabled(disk))
             continue;
 
-        if (qemuMonitorSetBlockIoThrottle(qemuDomainGetMonitor(vm), drivealias,
-                                          diskPriv->qomName, &disk->blkdeviotune) < 0)
+        if (qemuMonitorSetBlockIoThrottle(qemuDomainGetMonitor(vm),
+                                          QEMU_DOMAIN_DISK_PRIVATE(disk)->qomName,
+                                          &disk->blkdeviotune) < 0)
             goto cleanup;
     }
 
@@ -7719,7 +7669,7 @@ qemuProcessLaunch(virConnectPtr conn,
 
     /* In some situations, eg. VFIO passthrough, QEMU might need to lock a
      * significant amount of memory, so we need to set the limit accordingly */
-    maxMemLock = qemuDomainGetMemLockLimitBytes(vm->def, false);
+    maxMemLock = qemuDomainGetMemLockLimitBytes(vm->def);
 
     /* For all these settings, zero indicates that the limit should
      * not be set explicitly and the default/inherited limit should
@@ -7740,7 +7690,7 @@ qemuProcessLaunch(virConnectPtr conn,
 
     VIR_DEBUG("Setting up security labelling");
     if (qemuSecuritySetChildProcessLabel(driver->securityManager,
-                                         vm->def, cmd) < 0)
+                                         vm->def, false, cmd) < 0)
         goto cleanup;
 
     virCommandSetOutputFD(cmd, &logfile);
@@ -7759,7 +7709,7 @@ qemuProcessLaunch(virConnectPtr conn,
     if (rv == 0) {
         if ((rv = virPidFileReadPath(priv->pidfile, &vm->pid)) < 0) {
             virReportSystemError(-rv,
-                                 _("Domain %s didn't show up"),
+                                 _("Domain %1$s didn't show up"),
                                  vm->def->name);
             goto cleanup;
         }
@@ -7840,7 +7790,7 @@ qemuProcessLaunch(virConnectPtr conn,
 
         if (fstat(incoming->fd, &stdin_sb) < 0) {
             virReportSystemError(errno,
-                                 _("cannot stat fd %d"), incoming->fd);
+                                 _("cannot stat fd %1$d"), incoming->fd);
             goto cleanup;
         }
         if (S_ISFIFO(stdin_sb.st_mode) &&
@@ -8678,6 +8628,29 @@ qemuProcessAutoDestroy(virDomainObj *dom,
 }
 
 
+void
+qemuProcessRefreshDiskProps(virDomainDiskDef *disk,
+                            struct qemuDomainDiskInfo *info)
+{
+    qemuDomainDiskPrivate *diskpriv = QEMU_DOMAIN_DISK_PRIVATE(disk);
+
+    if (info->removable) {
+        if (info->empty)
+            virDomainDiskEmptySource(disk);
+
+        if (info->tray) {
+            if (info->tray_open)
+                disk->tray_status = VIR_DOMAIN_DISK_TRAY_OPEN;
+            else
+                disk->tray_status = VIR_DOMAIN_DISK_TRAY_CLOSED;
+        }
+    }
+
+    diskpriv->removable = info->removable;
+    diskpriv->tray = info->tray;
+}
+
+
 int
 qemuProcessRefreshDisks(virDomainObj *vm,
                         virDomainAsyncJob asyncJob)
@@ -8700,6 +8673,7 @@ qemuProcessRefreshDisks(virDomainObj *vm,
         qemuDomainDiskPrivate *diskpriv = QEMU_DOMAIN_DISK_PRIVATE(disk);
         struct qemuDomainDiskInfo *info;
         const char *entryname = disk->info.alias;
+        virDomainDiskTray old_tray_status = disk->tray_status;
 
         if (diskpriv->qomName)
             entryname = diskpriv->qomName;
@@ -8707,32 +8681,19 @@ qemuProcessRefreshDisks(virDomainObj *vm,
         if (!(info = virHashLookup(table, entryname)))
             continue;
 
-        if (info->removable) {
-            bool emitEvent = info->tray_open != disk->tray_status;
-            int reason;
+        qemuProcessRefreshDiskProps(disk, info);
 
-            if (info->empty)
-                virDomainDiskEmptySource(disk);
+        if (diskpriv->tray &&
+            old_tray_status != disk->tray_status) {
+            virDomainEventTrayChangeReason reason = VIR_DOMAIN_EVENT_TRAY_CHANGE_OPEN;
+            virObjectEvent *event;
 
-            if (info->tray) {
-                if (info->tray_open) {
-                    reason = VIR_DOMAIN_EVENT_TRAY_CHANGE_OPEN;
-                    disk->tray_status = VIR_DOMAIN_DISK_TRAY_OPEN;
-                } else {
-                    reason = VIR_DOMAIN_EVENT_TRAY_CHANGE_CLOSE;
-                    disk->tray_status = VIR_DOMAIN_DISK_TRAY_CLOSED;
-                }
+            if (disk->tray_status == VIR_DOMAIN_DISK_TRAY_CLOSED)
+                reason = VIR_DOMAIN_EVENT_TRAY_CHANGE_CLOSE;
 
-                if (emitEvent) {
-                    virObjectEvent *event = virDomainEventTrayChangeNewFromObj(vm, disk->info.alias, reason);
-                    virObjectEventStateQueue(driver->domainEventState, event);
-                }
-            }
+            event = virDomainEventTrayChangeNewFromObj(vm, disk->info.alias, reason);
+            virObjectEventStateQueue(driver->domainEventState, event);
         }
-
-        /* fill in additional data */
-        diskpriv->removable = info->removable;
-        diskpriv->tray = info->tray;
     }
 
     return 0;
@@ -8981,7 +8942,7 @@ qemuProcessReconnect(void *opaque)
 
     if (!priv->qemuCaps) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("domain '%s' has no capabilities recorded"),
+                       _("domain '%1$s' has no capabilities recorded"),
                        obj->def->name);
         goto error;
     }
@@ -9345,7 +9306,7 @@ qemuProcessQEMULabelUniqPath(qemuProcessQMP *proc)
     /* We cannot use the security driver here, but we should not need to. */
     if (chown(proc->uniqDir, proc->runUid, -1) < 0) {
         virReportSystemError(errno,
-                             _("Cannot chown uniq path: %s"),
+                             _("Cannot chown uniq path: %1$s"),
                              proc->uniqDir);
         return -1;
     }
@@ -9365,8 +9326,7 @@ qemuProcessQMPInit(qemuProcessQMP *proc)
 
     if (!(proc->uniqDir = g_mkdtemp(template))) {
         virReportSystemError(errno,
-                             _("Failed to create unique directory with "
-                               "template '%s' for probing QEMU"),
+                             _("Failed to create unique directory with template '%1$s' for probing QEMU"),
                              template);
         return -1;
     }
@@ -9454,14 +9414,14 @@ qemuProcessQMPLaunch(qemuProcessQMP *proc)
     if (status != 0) {
         VIR_DEBUG("QEMU %s exited with status %d", proc->binary, status);
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to start QEMU binary %s for probing: %s"),
+                       _("Failed to start QEMU binary %1$s for probing: %2$s"),
                        proc->binary,
                        proc->stdErr ? proc->stdErr : _("unknown error"));
         return -1;
     }
 
     if ((rc = virPidFileReadPath(proc->pidfile, &proc->pid)) < 0) {
-        virReportSystemError(-rc, _("Failed to read pidfile %s"), proc->pidfile);
+        virReportSystemError(-rc, _("Failed to read pidfile %1$s"), proc->pidfile);
         return -1;
     }
 

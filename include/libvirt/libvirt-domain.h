@@ -148,6 +148,7 @@ typedef enum {
     VIR_DOMAIN_PAUSED_STARTING_UP = 11, /* the domain is being started (Since: 1.2.14) */
     VIR_DOMAIN_PAUSED_POSTCOPY = 12,    /* paused for post-copy migration (Since: 1.3.3) */
     VIR_DOMAIN_PAUSED_POSTCOPY_FAILED = 13, /* paused after failed post-copy (Since: 1.3.3) */
+    VIR_DOMAIN_PAUSED_API_ERROR = 14,   /* Some APIs (e.g., migration, snapshot) internally need to suspend a domain. This paused state reason is used when resume operation at the end of such API fails. (Since: 9.2.0) */
 
 # ifdef VIR_ENUM_SENTINELS
     VIR_DOMAIN_PAUSED_LAST /* (Since: 0.9.10) */
@@ -708,7 +709,8 @@ typedef virDomainInterfaceStatsStruct *virDomainInterfaceStatsPtr;
 /**
  * virDomainMemoryStatTags:
  *
- * Memory Statistics Tags:
+ * These represent values from inside of the guest (e.g. the same value would
+ * be read from '/proc/meminfo' and/or other files from inside the guest).
  *
  * Since: 0.7.5
  */
@@ -1269,9 +1271,11 @@ typedef enum {
  * VIR_MIGRATE_PARAM_COMPRESSION:
  *
  * virDomainMigrate* params multiple field: name of the method used to
- * compress migration traffic. Supported compression methods: xbzrle, mt.
- * The parameter may be specified multiple times if more than one method
- * should be used.
+ * compress migration traffic. Supported compression methods: xbzrle, mt,
+ * zlib, zstd. The parameter may be specified multiple times if more than
+ * one method should be used. Not all combinations of compression methods
+ * and migration options may be allowed. Parallel migration of QEMU domains
+ * is only compatible with either zlib or zstd method.
  *
  * Since: 1.3.4
  */
@@ -1317,6 +1321,28 @@ typedef enum {
  * Since: 1.3.4
  */
 # define VIR_MIGRATE_PARAM_COMPRESSION_XBZRLE_CACHE "compression.xbzrle.cache"
+
+/**
+ * VIR_MIGRATE_PARAM_COMPRESSION_ZLIB_LEVEL:
+ *
+ * virDomainMigrate* params field: the level of compression for zlib as
+ * VIR_TYPED_PARAM_INT. Accepted values are in range 0-9. 0 is no compression,
+ * 1 is maximum speed and 9 is maximum compression.
+ *
+ * Since: 9.4.0
+ */
+# define VIR_MIGRATE_PARAM_COMPRESSION_ZLIB_LEVEL      "compression.zlib.level"
+
+/**
+ * VIR_MIGRATE_PARAM_COMPRESSION_ZSTD_LEVEL:
+ *
+ * virDomainMigrate* params field: the level of compression for zstd as
+ * VIR_TYPED_PARAM_INT. Accepted values are in range 0-20. 0 is no compression,
+ * 1 is maximum speed and 20 is maximum compression.
+ *
+ * Since: 9.4.0
+ */
+# define VIR_MIGRATE_PARAM_COMPRESSION_ZSTD_LEVEL      "compression.zstd.level"
 
 /**
  * VIR_MIGRATE_PARAM_AUTO_CONVERGE_INITIAL:
@@ -2481,7 +2507,7 @@ int                  virDomainDelIOThread(virDomainPtr domain,
  * poll_grow and poll_shrink parameters provided. A value set too large
  * will cause more CPU time to be allocated the guest. A value set too
  * small will not provide enough cycles for the guest to process data.
- * The polling interval is not available for statistical purposes.
+ * Accepted type is VIR_TYPED_PARAM_ULLONG.
  *
  * Since: 4.10.0
  */
@@ -2494,6 +2520,7 @@ int                  virDomainDelIOThread(virDomainPtr domain,
  * use to grow its polling interval up to the poll_max_ns value. A value
  * of 0 (zero) allows the hypervisor to choose its own value. The algorithm
  * to use for adjustment is hypervisor specific.
+ * Accepted type is VIR_TYPED_PARAM_UINT or since 9.3.0 VIR_TYPED_PARAM_ULLONG.
  *
  * Since: 4.10.0
  */
@@ -2507,6 +2534,7 @@ int                  virDomainDelIOThread(virDomainPtr domain,
  * the poll_max_ns value. A value of 0 (zero) allows the hypervisor to
  * choose its own value. The algorithm to use for adjustment is hypervisor
  * specific.
+ * Accepted type is VIR_TYPED_PARAM_UINT or since 9.3.0 VIR_TYPED_PARAM_ULLONG.
  *
  * Since: 4.10.0
  */
@@ -3823,7 +3851,7 @@ typedef enum {
     VIR_DOMAIN_EVENT_SUSPENDED_WATCHDOG = 3,  /* Suspended due to a watchdog firing (Since: 0.8.0) */
     VIR_DOMAIN_EVENT_SUSPENDED_RESTORED = 4,  /* Restored from paused state file (Since: 0.9.5) */
     VIR_DOMAIN_EVENT_SUSPENDED_FROM_SNAPSHOT = 5, /* Restored from paused snapshot (Since: 0.9.5) */
-    VIR_DOMAIN_EVENT_SUSPENDED_API_ERROR = 6, /* suspended after failure during libvirt API call (Since: 1.0.1) */
+    VIR_DOMAIN_EVENT_SUSPENDED_API_ERROR = 6, /* Some APIs (e.g., migration, snapshot) internally need to suspend a domain. This event detail is used when resume operation at the end of such API fails. (Since: 1.0.1) */
     VIR_DOMAIN_EVENT_SUSPENDED_POSTCOPY = 7, /* suspended for post-copy migration (Since: 1.3.3) */
     VIR_DOMAIN_EVENT_SUSPENDED_POSTCOPY_FAILED = 8, /* suspended after failed post-copy (Since: 1.3.3) */
 

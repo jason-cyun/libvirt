@@ -740,7 +740,9 @@ host/guest with many LUNs. :since:`Since 1.2.8 (QEMU only)`
        <iothread id="2"/>
        <iothread id="4"/>
        <iothread id="6"/>
-       <iothread id="8" thread_pool_min="2" thread_pool_max="32"/>
+       <iothread id="8" thread_pool_min="2" thread_pool_max="32">
+         <poll max='123' grow='456' shrink='789'/>
+       </iothread>
      </iothreadids>
      <defaultiothread thread_pool_min="8" thread_pool_max="16"/>
      ...
@@ -766,6 +768,13 @@ host/guest with many LUNs. :since:`Since 1.2.8 (QEMU only)`
    ``thread_pool_max`` which allow setting lower and upper boundary for number
    of worker threads for given IOThread. While the former can be value of zero,
    the latter can't. :since:`Since 8.5.0`
+   :since:`Since 9.4.0` an optional sub-element ``poll`` with can be used to
+   override the hypervisor-default interval of polling for the iothread before
+   it switches back to events. The optional attribute ``max`` sets the maximum
+   time polling should be used in nanoseconds. Setting ``max`` to ``0`` disables
+   polling. Attributes ``grow`` and ``shrink`` override (or disable when set to
+   ``0`` the default steps for increasing/decreasing the polling interval if
+   the set interval is deemed insufficient or extensive.
 ``defaultiothread``
    This element represents the default event loop within hypervisor, where I/O
    requests from devices not assigned to a specific IOThread are processed.
@@ -1117,7 +1126,9 @@ influence how virtual memory pages are backed by host pages.
    Using the optional ``mode`` attribute, specify when to allocate the memory by
    supplying either "immediate" or "ondemand". :since:`Since 8.2.0` it is
    possible to set the number of threads that hypervisor uses to allocate
-   memory via ``threads`` attribute.
+   memory via ``threads`` attribute. To speed allocation process up, when
+   pinning emulator thread it's recommended to include CPUs from desired NUMA
+   nodes so that allocation threads can have their affinity set.
 ``discard``
    When set and supported by hypervisor the memory content is discarded just
    before guest shuts down (or when DIMM module is unplugged). Please note that
@@ -1205,7 +1216,10 @@ NUMA Node Tuning
    'restrictive', defaults to 'strict'. The value 'restrictive' specifies
    using system default policy and only cgroups is used to restrict the
    memory nodes, and it requires setting mode to 'restrictive' in ``memnode``
-   elements. Attribute ``nodeset`` specifies the NUMA nodes, using the same
+   elements (see quirk below).  This exists solely for the purpose of being able
+   to request movement of such memory for a running domain using ``virsh
+   numatune`` or ``virDomainSetNumaParameters`` and is not guaranteed to happen.
+   Attribute ``nodeset`` specifies the NUMA nodes, using the same
    syntax as attribute ``cpuset`` of element ``vcpu``. Attribute ``placement`` (
    :since:`since 0.9.12` ) can be used to indicate the memory placement mode for
    domain process, its value can be either "static" or "auto", defaults to
@@ -1225,6 +1239,12 @@ NUMA Node Tuning
    addresses guest NUMA node for which the settings are applied. Attributes
    ``mode`` and ``nodeset`` have the same meaning and syntax as in ``memory``
    element. This setting is not compatible with automatic placement.
+   Note that for ``memnode`` this will only guide the memory access for the vCPU
+   threads or similar mechanism and is very hypervisor-specific.  This does not
+   guarantee the placement of the node's memory allocation.  For proper
+   restriction other means should be used (e.g. different mode, preallocated
+   hugepages).
+
    :since:`QEMU Since 1.2.7`
 
 
@@ -1363,7 +1383,7 @@ following collection of elements. :since:`Since 0.7.5`
 
    <cpu mode='host-passthrough' migratable='off'>
      <cache mode='passthrough'/>
-     <maxphysaddr mode='passthrough'/>
+     <maxphysaddr mode='passthrough' limit='39'/>
      <feature policy='disable' name='lahf_lm'/>
    ...
 
@@ -1625,13 +1645,19 @@ In case no restrictions need to be put on CPU model and its features, a simpler
          passed through to the virtual CPUs
       ``emulate``
          The hypervisor will define a specific value for the number of bits
-         of physical addresses via the ``bits`` attribute, which is mandatory.
+         of physical addresses via the ``bits`` attribute, (optional
+         :since:`since 9.2.0`)
 	 The number of bits cannot exceed the number of physical address bits
 	 supported by the hypervisor.
 
    ``bits``
       The ``bits`` attribute is mandatory if the ``mode`` attribute is set to
       ``emulate`` and specifies the virtual CPU address size in bits.
+
+   ``limit``
+     The ``limit`` attribute can be used to restrict the maximum value of
+     address bits for ``passthrough`` mode, i.e. in case the host CPU reports
+     more bits than that, ``limit`` is used. :since:`Since 9.3.0`
 
 Guest NUMA topology can be specified using the ``numa`` element. :since:`Since
 0.9.8`
@@ -1974,6 +2000,7 @@ Hypervisors may allow certain CPU / machine features to be toggled on/off.
      <tcg>
        <tb-cache unit='MiB'>128</tb-cache>
      </tcg>
+     <async-teardown enabled='yes'/>
    </features>
    ...
 
@@ -2203,6 +2230,11 @@ are:
    =========== ============================================== =================================================== ==============
    tb-cache    The size of translation block cache size       an integer (a multiple of MiB)                      :since:`8.0.0`
    =========== ============================================== =================================================== ==============
+
+``async-teardown``
+   Depending on the ``enabled`` attribute (values ``yes``, ``no``) enable or
+   disable QEMU asynchronous teardown to improve memory reclaiming on a guest.
+   :since:`Since 9.6.0` (QEMU only)
 
 Time keeping
 ------------
@@ -2956,13 +2988,20 @@ paravirtualized driver is specified via the ``disk`` element.
       are intended to be default, then the entire element may be omitted.
    ``reconnect``
       For disk type ``vhostuser`` configures reconnect timeout if the connection
-      is lost. It has two mandatory attributes:
+      is lost. This is set with the two mandatory attributes ``enabled`` and
+      ``timeout``.
+      For disk type ``network`` and protocol ``nbd`` the QEMU NBD reconnect delay
+      can be set via attribute ``delay``:
 
       ``enabled``
          If the reconnect feature is enabled, accepts ``yes`` and ``no``
       ``timeout``
          The amount of seconds after which hypervisor tries to reconnect.
-
+      ``delay``
+         Only for NBD hosts. The amount of seconds during which all requests are
+         paused and will be rerun after a successful reconnect. After that time, any
+         delayed requests and all future requests before a successful reconnect
+         will immediately fail. If not set the default QEMU value is 0.
 
    For a "file" or "volume" disk type which represents a cdrom or floppy (the
    ``device`` attribute), it is possible to define policy what to do with the
@@ -3061,7 +3100,7 @@ paravirtualized driver is specified via the ``disk`` element.
    CDROM or Floppy disk), the value can be either "open" or "closed", defaults
    to "closed". NB, the value of ``tray`` could be updated while the domain is
    running. The optional attribute ``removable`` sets the removable flag for USB
-   disks, and its value can be either "on" or "off", defaulting to "off".
+   or SCSI disks, and its value can be either "on" or "off", defaulting to "off".
    The optional attribute ``rotation_rate`` sets the rotation rate of the
    storage for disks on a SCSI, IDE, or SATA bus. Values in the range 1025 to
    65534 are used to indicate rotational media speed in revolutions per minute.
@@ -3236,9 +3275,10 @@ paravirtualized driver is specified via the ``disk`` element.
       "virtio" ``bus`` and "pci" or "ccw" ``address`` types. :since:`Since 1.2.8
       (QEMU 2.1)`
    -  The optional ``queues`` attribute specifies the number of virt queues for
-      virtio-blk. ( :since:`Since 3.9.0` )
+      virtio-blk ( :since:`Since 3.9.0` ) or vhost-user-blk
+      ( :since `Since 7.1.0` )
    -  The optional ``queue_size`` attribute specifies the size of each virt
-      queue for virtio-blk. ( :since:`Since 7.8.0` )
+      queue for virtio-blk or vhost-user-blk. ( :since:`Since 7.8.0` )
    -  For virtio disks, `Virtio-related options`_ can also
       be set. ( :since:`Since 3.5.0` )
    -  The optional ``metadata_cache`` subelement controls aspects related to the
@@ -3251,34 +3291,40 @@ paravirtualized driver is specified via the ``disk`` element.
       format driver of the ``qemu`` hypervisor can be controlled via the
       ``max_size`` subelement (see example below).
 
+      The optional ``discard_no_unref`` attribute can be set to control the way
+      the ``qemu`` hypervisor handles guest discard commands inside the qcow2
+      image. When enabled, a discard request from within the guest will mark the
+      qcow2 cluster as zero, but will keep the reference/offset of that cluster.
+      But it will still pass the discard further to the lower layer.
+      This will resolve fragmentation within the qcow2 image. :since:`Since 9.5.0
+      (QEMU 8.1)`
+
       In the majority of cases the default configuration used by the hypervisor
       is sufficient so modifying this setting should not be necessary. For
       specifics on how the metadata cache of ``qcow2`` in ``qemu`` behaves refer
       to the ``qemu``
       `qcow2 cache docs <https://git.qemu.org/?p=qemu.git;a=blob;f=docs/qcow2-cache.txt>`__
 
-      **Example:**
+      **Example**::
 
-::
-
-   <disk type='file' device='disk'>
-     <driver name='qemu' type='qcow2'>
-       <metadata_cache>
-         <max_size unit='bytes'>1234</max_size>
-       </metadata_cache>
-     </driver>
-     <source file='/var/lib/libvirt/images/domain.qcow'/>
-     <backingStore type='file'>
-       <format type='qcow2'>
-         <metadata_cache>
-           <max_size unit='bytes'>1234</max_size>
-         </metadata_cache>
-       </format>
-       <source file='/var/lib/libvirt/images/snapshot.qcow'/>
-       <backingStore/>
-     </backingStore>
-     <target dev='vdd' bus='virtio'/>
-   </disk>
+        <disk type='file' device='disk'>
+          <driver name='qemu' type='qcow2'>
+            <metadata_cache>
+              <max_size unit='bytes'>1234</max_size>
+            </metadata_cache>
+          </driver>
+          <source file='/var/lib/libvirt/images/domain.qcow'/>
+          <backingStore type='file'>
+            <format type='qcow2'>
+              <metadata_cache>
+                <max_size unit='bytes'>1234</max_size>
+              </metadata_cache>
+            </format>
+            <source file='/var/lib/libvirt/images/snapshot.qcow'/>
+            <backingStore/>
+          </backingStore>
+          <target dev='vdd' bus='virtio'/>
+        </disk>
 
 ``backenddomain``
    The optional ``backenddomain`` element allows specifying a backend domain
@@ -4865,7 +4911,7 @@ ports **with the exception of some subset**.
    <devices>
      ...
      <interface type='user'>
-       <backend type='passt' logFile='/var/log/passt.log'/>
+       <backend type='passt' logFile='/tmp/passt.log'/>
        <mac address="00:11:22:33:44:55"/>
        <source dev='eth0'/>
        <ip family='ipv4' address='172.17.2.4' prefix='24'/>
@@ -5400,6 +5446,7 @@ Typical values for QEMU and KVM include: ne2k_isa i82551 i82557b i82559er
 ne2k_pci pcnet rtl8139 e1000 virtio. :since:`Since 5.2.0` ,
 ``virtio-transitional`` and ``virtio-non-transitional`` values are supported.
 See `Virtio transitional devices`_ for more details.
+:since:`Since 9.3.0` igb is also supported.
 
 Setting NIC driver-specific options
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -6437,6 +6484,13 @@ A video device.
    :since:`since 1.3.3` ) extends secondary bar and makes it addressable as
    64bit memory.
 
+   :since:`Since 9.2.0` (QEMU driver only), devices with type "virtio" have an
+   optional ``blob`` attribute that can be set to "on" or "off". Setting
+   ``blob`` to "on" will enable the use of blob resources in the device. This
+   can accelerate the display path by reducing or eliminating copying of pixel
+   data between the guest and host. Note that blob resource support requires
+   QEMU version 6.1 or newer.
+
    :since:`Since 5.9.0` , the ``model`` element may also have an optional
    ``resolution`` sub-element. The ``resolution`` element has attributes ``x``
    and ``y`` to set the minimum resolution for the video device. This
@@ -6585,10 +6639,11 @@ Serial port
        <target port='0'/>
      </serial>
      <!-- Debug port for SeaBIOS / EDK II -->
-     <serial type='pty'>
+     <serial type='file'>
        <target type='isa-debug'/>
        <address type='isa' iobase='0x402'/>
-     </console>
+       <source path='/tmp/DOMAIN-ovmf.log'/>
+     </serial>
 
    </devices>
    ...
@@ -7170,9 +7225,9 @@ A virtual sound card can be attached to the host via the ``sound`` element.
 ``sound``
    The ``sound`` element has one mandatory attribute, ``model``, which specifies
    what real sound device is emulated. Valid values are specific to the
-   underlying hypervisor, though typical choices are 'sb16', 'es1370', 'pcspk',
-   'ac97' (:since:`Since 0.6.0`), 'ich6' (:since:`Since 0.8.8`), 'ich9'
-   (:since:`Since 1.1.3`), 'usb' (:since:`Since 1.2.8`) and 'ich7'
+   underlying hypervisor, though typical choices are ``sb16``, ``es1370``,
+   ``pcspk``, ``ac97`` (:since:`Since 0.6.0`), ``ich6`` (:since:`Since 0.8.8`),
+   ``ich9`` (:since:`Since 1.1.3`), ``usb`` (:since:`Since 1.2.8`) and ``ich7``
    (:since:`Since 6.7.0`, bhyve only).
 
 :since:`Since 0.9.13` , a sound element with ``ich6`` or ``ich9`` models can have
@@ -7182,9 +7237,9 @@ and recording.
 
 Valid values are:
 
--  'duplex' - advertise a line-in and a line-out
--  'micro' - advertise a speaker and a microphone
--  'output' - advertise a line-out :since:`Since 4.4.0`
+-  ``duplex`` - advertise a line-in and a line-out
+-  ``micro`` - advertise a speaker and a microphone
+-  ``output`` - advertise a line-out :since:`Since 4.4.0`
 
 ::
 
@@ -7195,6 +7250,11 @@ Valid values are:
      </sound>
    </devices>
    ...
+
+:since:`Since 9.4.0` the ``usb`` sound device can be optionally switched into
+multi-channel mode by using the ``multichannel`` attribute::
+
+  <sound model='usb' multichannel='yes'/>
 
 Each ``sound`` element has an optional sub-element ``<address>`` which can tie
 the device to a particular PCI slot. See `Device Addresses`_.
@@ -7225,8 +7285,8 @@ to the guest sound device.
 
 ``type``
    The required ``type`` attribute specifies audio backend type.
-   Currently, the supported values are 'none', 'alsa', 'coreaudio',
-   'dbus', jack', 'oss', 'pulseaudio', 'sdl', 'spice', 'file'.
+   Currently, the supported values are ``none``, ``alsa``, ``coreaudio``,
+   ``dbus``, ``jack``, ``oss``, ``pulseaudio``, ``sdl``, ``spice``, ``file``.
 
 ``id``
    Integer id of the audio device. Must be greater than 0.
@@ -7300,22 +7360,22 @@ is permitted with the following attributes.
 
 Note:
 If no ``<audio/>`` element is defined, and the ``graphics`` element is set to
-either 'vnc' or 'sdl', the libvirtd or virtqemud process will honor the following
-environment variables:
+either ``vnc`` or ``sdl``, the libvirtd or virtqemud process will honor the
+following environment variables:
 
 * ``SDL_AUDIODRIVER``
 
-  Valid values are 'pulseaudio', 'esd', 'alsa' or 'arts'.
+  Valid values are ``pulseaudio``, ``esd``, ``alsa`` or ``arts``.
 
 * ``QEMU_AUDIO_DRV``
 
-  Valid values are 'pa', 'none', 'alsa', 'coreaudio', 'jack', 'oss',
-  'sdl', 'spice' or 'wav'.
+  Valid values are ``pa``, ``none``, ``alsa``, ``coreaudio``, ``jack``, ``oss``,
+  ``sdl``, ``spice`` or ``wav``.
 
 None audio backend
 ^^^^^^^^^^^^^^^^^^
 
-The 'none' audio backend is a dummy backend that does not connect to
+The ``none`` audio backend is a dummy backend that does not connect to
 any host audio framework. It still allows a remote desktop server
 like VNC to send and receive audio though. This is the default backend
 when VNC graphics are enabled in QEMU.
@@ -7325,7 +7385,7 @@ when VNC graphics are enabled in QEMU.
 ALSA audio backend
 ^^^^^^^^^^^^^^^^^^
 
-The 'alsa' audio type uses the ALSA host audio device framework.
+The ``alsa`` audio type uses the ALSA host audio device framework.
 
 The following additional attributes are permitted on the ``<input>``
 and ``<output>`` elements
@@ -7347,7 +7407,7 @@ and ``<output>`` elements
 Coreaudio audio backend
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-The 'coreaudio' audio backend delegates to a CoreAudio host audio framework
+The ``coreaudio`` audio backend delegates to a CoreAudio host audio framework
 for input and output on macOS.
 
 The following additional attributes are permitted on the ``<input>``
@@ -7370,7 +7430,7 @@ and ``<output>`` elements
 D-Bus audio backend
 ^^^^^^^^^^^^^^^^^^^
 
-The 'dbus' audio backend does not connect to any host audio framework. It
+The ``dbus`` audio backend does not connect to any host audio framework. It
 exports a D-Bus interface when associated with a D-Bus display.
 
 :since:`Since 8.4.0, qemu`
@@ -7378,7 +7438,7 @@ exports a D-Bus interface when associated with a D-Bus display.
 Jack audio backend
 ^^^^^^^^^^^^^^^^^^
 
-The 'jack' audio backend delegates to a Jack daemon for audio input
+The ``jack`` audio backend delegates to a Jack daemon for audio input
 and output.
 
 The following additional attributes are permitted on the ``<input>``
@@ -7414,7 +7474,7 @@ and ``<output>`` elements
 OSS audio backend
 ^^^^^^^^^^^^^^^^^
 
-The 'oss' audio type uses the OSS host audio device framework.
+The ``oss`` audio type uses the OSS host audio device framework.
 
 The following additional attributes are permitted on the ``<audio>``
 element
@@ -7462,7 +7522,7 @@ and ``<output>`` elements
 PulseAudio audio backend
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-The 'pulseaudio' audio backend delegates to a PulseAudio daemon audio input
+The ``pulseaudio`` audio backend delegates to a PulseAudio daemon audio input
 and output.
 
 The following additional attributes are permitted on the ``<audio>``
@@ -7499,7 +7559,7 @@ and ``<output>`` elements
 SDL audio backend
 ^^^^^^^^^^^^^^^^^
 
-The 'sdl' audio backend delegates to the SDL library for audio input
+The ``sdl`` audio backend delegates to the SDL library for audio input
 and output.
 
 The following additional attributes are permitted on the ``<audio>``
@@ -7508,7 +7568,7 @@ element
 * ``driver``
 
   SDL audio driver. The ``name`` attribute specifies SDL driver name,
-  one of 'esd', 'alsa', 'arts', 'pulseaudio'.
+  one of ``esd``, ``alsa``, ``arts``, ``pulseaudio``.
 
 The following additional attributes are permitted on the ``<input>``
 and ``<output>`` elements
@@ -7530,7 +7590,7 @@ and ``<output>`` elements
 Spice audio backend
 ^^^^^^^^^^^^^^^^^^^
 
-The 'spice' audio backend is similar to the 'none' backend in that
+The ``spice`` audio backend is similar to the ``none`` backend in that
 it does not connect to any host audio framework. It exclusively
 allows a SPICE server to send and receive audio. This is the default
 backend when SPICE graphics are enabled in QEMU.
@@ -7544,9 +7604,9 @@ backend when SPICE graphics are enabled in QEMU.
 File audio backend
 ^^^^^^^^^^^^^^^^^^
 
-The 'file' audio backend is an output only driver which records
+The ``file`` audio backend is an output only driver which records
 audio to a file. The file format is implementation defined, and
-defaults to 'WAV' with QEMU.
+defaults to ``WAV`` with QEMU.
 
 ::
 
@@ -7569,7 +7629,7 @@ feature is planned for a future version of libvirt.
 
 Having multiple watchdogs is usually not something very common, but be aware
 that this might happen, for example, when an implicit watchdog device is added
-as part of another device.  For example whe iTCO watchdog being part of the ich9
+as part of another device.  For example the iTCO watchdog being part of the ich9
 southbridge, which is used with the q35 machine type. :since:`Since 9.1.0`
 
 ::
@@ -8084,6 +8144,7 @@ Example: usage of the memory devices
        </source>
        <target>
          <size unit='KiB'>524288</size>
+         <address base='0x140000000'/>
        </target>
      </memory>
      <memory model='virtio-mem'>
@@ -8097,6 +8158,7 @@ Example: usage of the memory devices
          <block unit='KiB'>2048</block>
          <requested unit='KiB'>1048576</requested>
          <current unit='KiB'>524288</current>
+         <address base='0x150000000'/>
        </target>
      </memory>
      <memory model='sgx-epc'>
@@ -8239,6 +8301,11 @@ Example: usage of the memory devices
      reflects the current size of the corresponding virtio memory device. The
      element is formatted into live XML and never parsed, i.e. it is
      output-only element.
+
+   ``address``
+     For ``virtio-mem`` and ``virtio-pmem`` only.
+     The physical address in memory, where device is mapped. :since:`Since
+     9.4.0`
 
 
 IOMMU devices

@@ -284,7 +284,6 @@ struct _virDomainEventMemoryDeviceSizeChange {
     unsigned long long size;
 };
 typedef struct _virDomainEventMemoryDeviceSizeChange virDomainEventMemoryDeviceSizeChange;
-typedef virDomainEventMemoryDeviceSizeChange *virDomainEventMemoryDeviceSizeChangePtr;
 
 static int
 virDomainEventsOnceInit(void)
@@ -554,7 +553,7 @@ virDomainEventMemoryFailureDispose(void *obj)
 static void
 virDomainEventMemoryDeviceSizeChangeDispose(void *obj)
 {
-    virDomainEventMemoryDeviceSizeChangePtr event = obj;
+    virDomainEventMemoryDeviceSizeChange *event = obj;
     VIR_DEBUG("obj=%p", event);
 
     g_free(event->alias);
@@ -575,7 +574,7 @@ virDomainEventNew(virClass *klass,
 
     if (!virClassIsDerivedFrom(klass, virDomainEventClass)) {
         virReportInvalidArg(klass,
-                            _("Class %s must derive from virDomainEvent"),
+                            _("Class %1$s must derive from virDomainEvent"),
                             virClassName(klass));
         return NULL;
     }
@@ -1692,7 +1691,7 @@ virDomainEventMemoryDeviceSizeChangeNew(int id,
                                         const char *alias,
                                         unsigned long long size)
 {
-    virDomainEventMemoryDeviceSizeChangePtr ev;
+    virDomainEventMemoryDeviceSizeChange *ev;
 
     if (virDomainEventsInitialize() < 0)
         return NULL;
@@ -2033,9 +2032,9 @@ virDomainEventDispatchDefaultFunc(virConnectPtr conn,
 
     case VIR_DOMAIN_EVENT_ID_MEMORY_DEVICE_SIZE_CHANGE:
         {
-            virDomainEventMemoryDeviceSizeChangePtr memoryDeviceSizeChangeEvent;
+            virDomainEventMemoryDeviceSizeChange *memoryDeviceSizeChangeEvent;
 
-            memoryDeviceSizeChangeEvent = (virDomainEventMemoryDeviceSizeChangePtr)event;
+            memoryDeviceSizeChangeEvent = (virDomainEventMemoryDeviceSizeChange *)event;
             ((virConnectDomainEventMemoryDeviceSizeChangeCallback)cb)(conn, dom,
                                                                       memoryDeviceSizeChangeEvent->alias,
                                                                       memoryDeviceSizeChangeEvent->size,
@@ -2395,7 +2394,7 @@ virDomainQemuMonitorEventStateRegisterID(virConnectPtr conn,
             data->regex = g_regex_new(event, cflags, 0, &err);
             if (!data->regex) {
                 virReportError(VIR_ERR_INVALID_ARG,
-                               _("failed to compile regex '%s': %s"),
+                               _("failed to compile regex '%1$s': %2$s"),
                                event, err->message);
                 VIR_FREE(data);
                 return -1;

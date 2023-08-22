@@ -22,7 +22,9 @@
 #include <gio/gio.h>
 #include <libudev.h>
 #include <pciaccess.h>
-#include <scsi/scsi.h>
+#ifdef __linux__
+# include <scsi/scsi.h>
+#endif
 
 #include "node_device_conf.h"
 #include "node_device_event.h"
@@ -186,14 +188,14 @@ udevGetIntProperty(struct udev_device *udev_device,
     str = udevGetDeviceProperty(udev_device, property_key);
     if (!str) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Missing udev property '%s' on '%s'"),
+                       _("Missing udev property '%1$s' on '%2$s'"),
                        property_key, udev_device_get_sysname(udev_device));
         return -1;
     }
 
     if (virStrToLong_i(str, NULL, base, value) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to parse int '%s' from udev property '%s' on '%s'"),
+                       _("Failed to parse int '%1$s' from udev property '%2$s' on '%3$s'"),
                        str, property_key, udev_device_get_sysname(udev_device));
         return -1;
     }
@@ -212,14 +214,14 @@ udevGetUintProperty(struct udev_device *udev_device,
     str = udevGetDeviceProperty(udev_device, property_key);
     if (!str) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Missing udev property '%s' on '%s'"),
+                       _("Missing udev property '%1$s' on '%2$s'"),
                        property_key, udev_device_get_sysname(udev_device));
         return -1;
     }
 
     if (virStrToLong_ui(str, NULL, base, value) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to parse uint '%s' from udev property '%s' on '%s'"),
+                       _("Failed to parse uint '%1$s' from udev property '%2$s' on '%3$s'"),
                        str, property_key, udev_device_get_sysname(udev_device));
         return -1;
     }
@@ -271,7 +273,7 @@ udevGetIntSysfsAttr(struct udev_device *udev_device,
 
     if (str && virStrToLong_i(str, NULL, base, value) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to convert '%s' to int"), str);
+                       _("Failed to convert '%1$s' to int"), str);
         return -1;
     }
 
@@ -291,7 +293,7 @@ udevGetUintSysfsAttr(struct udev_device *udev_device,
 
     if (str && virStrToLong_ui(str, NULL, base, value) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to convert '%s' to unsigned int"), str);
+                       _("Failed to convert '%1$s' to unsigned int"), str);
         return -1;
     }
 
@@ -310,7 +312,7 @@ udevGetUint64SysfsAttr(struct udev_device *udev_device,
 
     if (str && virStrToLong_ull(str, NULL, 0, value) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to convert '%s' to unsigned long long"), str);
+                       _("Failed to convert '%1$s' to unsigned long long"), str);
         return -1;
     }
 
@@ -385,7 +387,7 @@ udevProcessPCI(struct udev_device *device,
         virStrToLong_ui(p + 1, &p, 16, &pci_dev->slot) < 0 || p == NULL ||
         virStrToLong_ui(p + 1, &p, 16, &pci_dev->function) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to parse the PCI address from sysfs path: '%s'"),
+                       _("failed to parse the PCI address from sysfs path: '%1$s'"),
                        def->sysfs_path);
         goto cleanup;
     }
@@ -469,7 +471,7 @@ udevProcessMdevParent(struct udev_device *device,
 
     if (virMediatedDeviceParentGetAddress(def->sysfs_path, &mdev_parent->address) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Unable to find address for mdev parent device '%s'"),
+                       _("Unable to find address for mdev parent device '%1$s'"),
                        def->name);
         return -1;
     }
@@ -636,7 +638,7 @@ udevProcessSCSIHost(struct udev_device *device G_GNUC_UNUSED,
     if (!(str = STRSKIP(filename, "host")) ||
         virStrToLong_ui(str, NULL, 0, &scsi_host->host) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to parse SCSI host '%s'"),
+                       _("failed to parse SCSI host '%1$s'"),
                        filename);
         return -1;
     }
@@ -678,6 +680,8 @@ udevGetSCSIType(virNodeDeviceDef *def G_GNUC_UNUSED,
 
     *typestring = NULL;
 
+#ifdef __linux__
+    /* These values are Linux specific. */
     switch (type) {
     case TYPE_DISK:
         *typestring = g_strdup("disk");
@@ -714,6 +718,10 @@ udevGetSCSIType(virNodeDeviceDef *def G_GNUC_UNUSED,
         foundtype = 0;
         break;
     }
+#else
+    /* Implement me. */
+    foundtype = 0;
+#endif
 
     if (*typestring == NULL) {
         if (foundtype == 1) {
@@ -745,7 +753,7 @@ udevProcessSCSIDevice(struct udev_device *device G_GNUC_UNUSED,
         virStrToLong_ui(p + 1, &p, 10, &scsi->target) < 0 || p == NULL ||
         virStrToLong_ui(p + 1, &p, 10, &scsi->lun) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to parse the SCSI address from filename: '%s'"),
+                       _("failed to parse the SCSI address from filename: '%1$s'"),
                        filename);
         return -1;
     }
@@ -765,7 +773,7 @@ udevProcessSCSIDevice(struct udev_device *device G_GNUC_UNUSED,
  cleanup:
     if (ret != 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Failed to process SCSI device with sysfs path '%s'"),
+                       _("Failed to process SCSI device with sysfs path '%1$s'"),
                        def->sysfs_path);
     }
     return ret;
@@ -1062,13 +1070,13 @@ udevProcessMediatedDevice(struct udev_device *dev,
 
     if (virFileWaitForExists(linkpath, 10, 100) < 0) {
         virReportSystemError(errno,
-                             _("failed to wait for file '%s' to appear"),
+                             _("failed to wait for file '%1$s' to appear"),
                              linkpath);
         return -1;
     }
 
     if (virFileResolveLink(linkpath, &canonicalpath) < 0) {
-        virReportSystemError(errno, _("failed to resolve '%s'"), linkpath);
+        virReportSystemError(errno, _("failed to resolve '%1$s'"), linkpath);
         return -1;
     }
 
@@ -1088,7 +1096,7 @@ udevProcessMediatedDevice(struct udev_device *dev,
 
     if (!data->parent_addr) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not get parent of '%s'"),
+                       _("Could not get parent of '%1$s'"),
                        udev_device_get_syspath(dev));
         return -1;
     }
@@ -1113,7 +1121,7 @@ udevGetCCWAddress(const char *sysfs_path,
                                            &data->ccw_dev.ssid,
                                            &data->ccw_dev.devno) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to parse the CCW address from sysfs path: '%s'"),
+                       _("failed to parse the CCW address from sysfs path: '%1$s'"),
                        sysfs_path);
         return -1;
     }
@@ -1188,7 +1196,7 @@ udevGetVDPACharDev(const char *sysfs_path,
 
             if (!virFileExists(chardev)) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
-                               _("vDPA chardev path '%s' does not exist"),
+                               _("vDPA chardev path '%1$s' does not exist"),
                                chardev);
                 return -1;
             }
@@ -1230,7 +1238,7 @@ udevProcessAPCard(struct udev_device *device,
         virStrToLong_ui(c + 1 + strlen("card"), NULL, 16,
                         &data->ap_card.ap_adapter) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to parse the AP Card from sysfs path: '%s'"),
+                       _("failed to parse the AP Card from sysfs path: '%1$s'"),
                        def->sysfs_path);
         return -1;
     }
@@ -1255,7 +1263,7 @@ udevProcessAPQueue(struct udev_device *device,
         virStrToLong_ui(c + 1, &c, 16, &data->ap_queue.ap_adapter) < 0 ||
         virStrToLong_ui(c + 1, &c, 16, &data->ap_queue.ap_domain) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("failed to parse the AP Queue from sysfs path: '%s'"),
+                       _("failed to parse the AP Queue from sysfs path: '%1$s'"),
                        def->sysfs_path);
         return -1;
     }
@@ -1443,6 +1451,9 @@ udevGetDeviceDetails(struct udev_device *device,
 }
 
 
+static void scheduleMdevctlUpdate(udevEventData *data, bool force);
+
+
 static int
 udevRemoveOneDeviceSysPath(const char *path)
 {
@@ -1475,8 +1486,7 @@ udevRemoveOneDeviceSysPath(const char *path)
     virNodeDeviceObjEndAPI(&obj);
 
     /* cannot check for mdev_types since they have already been removed */
-    if (nodeDeviceUpdateMediatedDevices() < 0)
-        VIR_WARN("mdevctl failed to update mediated devices");
+    scheduleMdevctlUpdate(driver->privateData, false);
 
     virObjectEventStateQueue(driver->nodeDeviceEventState, event);
     return 0;
@@ -1511,7 +1521,7 @@ udevSetParent(struct udev_device *device,
         parent_sysfs_path = udev_device_get_syspath(parent_device);
         if (parent_sysfs_path == NULL) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Could not get syspath for parent of '%s'"),
+                           _("Could not get syspath for parent of '%1$s'"),
                            udev_device_get_syspath(parent_device));
             return -1;
         }
@@ -1604,8 +1614,8 @@ udevAddOneDevice(struct udev_device *device)
     has_mdev_types = virNodeDeviceObjHasCap(obj, VIR_NODE_DEV_CAP_MDEV_TYPES);
     virNodeDeviceObjEndAPI(&obj);
 
-    if (has_mdev_types && nodeDeviceUpdateMediatedDevices() < 0)
-        VIR_WARN("mdevctl failed to update mediated devices");
+    if (has_mdev_types)
+        scheduleMdevctlUpdate(driver->privateData, false);
 
     ret = 0;
 
@@ -1757,12 +1767,19 @@ nodeStateCleanup(void)
 static int
 udevHandleOneDevice(struct udev_device *device)
 {
+    virNodeDevCapType dev_cap_type;
     const char *action = udev_device_get_action(device);
 
     VIR_DEBUG("udev action: '%s': %s", action, udev_device_get_syspath(device));
 
-    if (STREQ(action, "add") || STREQ(action, "change"))
-        return udevAddOneDevice(device);
+    if (STREQ(action, "add") || STREQ(action, "change")) {
+        int ret = udevAddOneDevice(device);
+        if (ret == 0 &&
+            udevGetDeviceType(device, &dev_cap_type) == 0 &&
+            dev_cap_type == VIR_NODE_DEV_CAP_MDEV)
+            scheduleMdevctlUpdate(driver->privateData, false);
+        return ret;
+    }
 
     if (STREQ(action, "remove"))
         return udevRemoveOneDevice(device);
@@ -1795,8 +1812,7 @@ udevEventMonitorSanityCheck(udevEventData *priv,
     rc = udev_monitor_get_fd(priv->udev_monitor);
     if (fd != rc) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("File descriptor returned by udev %d does not "
-                         "match node device file descriptor %d"),
+                       _("File descriptor returned by udev %1$d does not match node device file descriptor %2$d"),
                        fd, rc);
 
         /* this is a non-recoverable error, let's remove the handle, so that we
@@ -1934,7 +1950,7 @@ udevGetDMIData(virNodeDevCapSystem *syscap)
         device = udev_device_new_from_syspath(udev, DMI_DEVPATH);
         if (device == NULL) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Failed to get udev device for syspath '%s'"),
+                           _("Failed to get udev device for syspath '%1$s'"),
                            DMI_DEVPATH);
             return;
         }
@@ -2068,7 +2084,7 @@ udevPCITranslateInit(bool privileged G_GNUC_UNUSED)
 
 
 static void
-mdevctlHandlerThread(void *opaque G_GNUC_UNUSED)
+mdevctlUpdateThreadFunc(void *opaque G_GNUC_UNUSED)
 {
     udevEventData *priv = driver->privateData;
     VIR_LOCK_GUARD lock = virLockGuardLock(&priv->mdevctlLock);
@@ -2079,7 +2095,7 @@ mdevctlHandlerThread(void *opaque G_GNUC_UNUSED)
 
 
 static void
-scheduleMdevctlHandler(int timer G_GNUC_UNUSED, void *opaque)
+launchMdevctlUpdateThread(int timer G_GNUC_UNUSED, void *opaque)
 {
     udevEventData *priv = opaque;
     virThread thread;
@@ -2089,7 +2105,7 @@ scheduleMdevctlHandler(int timer G_GNUC_UNUSED, void *opaque)
         priv->mdevctlTimeout = -1;
     }
 
-    if (virThreadCreateFull(&thread, false, mdevctlHandlerThread,
+    if (virThreadCreateFull(&thread, false, mdevctlUpdateThreadFunc,
                             "mdevctl-thread", false, NULL) < 0) {
         virReportSystemError(errno, "%s",
                              _("failed to create mdevctl thread"));
@@ -2153,7 +2169,7 @@ monitorFileRecursively(udevEventData *udev,
  error:
     g_list_free_full(monitors, g_object_unref);
     virReportError(VIR_ERR_INTERNAL_ERROR,
-                   _("Unable to monitor directory: %s"), error->message);
+                   _("Unable to monitor directory: %1$s"), error->message);
     g_clear_error(&error);
     return NULL;
 }
@@ -2182,6 +2198,26 @@ mdevctlEnableMonitor(udevEventData *priv)
     }
 
     return 0;
+}
+
+
+/* Schedules an mdevctl update for 100ms in the future, canceling any existing
+ * timeout that may have been set. In this way, multiple update requests in
+ * quick succession can be collapsed into a single update. if @force is true,
+ * an update thread will be spawned immediately. */
+static void
+scheduleMdevctlUpdate(udevEventData *data,
+                      bool force)
+{
+    if (!force) {
+        if (data->mdevctlTimeout > 0)
+            virEventRemoveTimeout(data->mdevctlTimeout);
+        data->mdevctlTimeout = virEventAddTimeout(100, launchMdevctlUpdateThread,
+                                                  data, NULL);
+        return;
+    }
+
+    launchMdevctlUpdateThread(-1, data);
 }
 
 
@@ -2215,15 +2251,7 @@ mdevctlEventHandleCallback(GFileMonitor *monitor G_GNUC_UNUSED,
      * configuration change, try to coalesce these changes by waiting for the
      * CHANGES_DONE_HINT event. As a fallback,  add a timeout to trigger the
      * signal if that event never comes */
-    if (event_type != G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT) {
-        if (priv->mdevctlTimeout > 0)
-            virEventRemoveTimeout(priv->mdevctlTimeout);
-        priv->mdevctlTimeout = virEventAddTimeout(100, scheduleMdevctlHandler,
-                                                  priv, NULL);
-        return;
-    }
-
-    scheduleMdevctlHandler(-1, priv);
+    scheduleMdevctlUpdate(priv, (event_type == G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT));
 }
 
 
@@ -2272,13 +2300,13 @@ nodeStateInitialize(bool privileged,
     }
 
     if (g_mkdir_with_parents(driver->stateDir, S_IRWXU) < 0) {
-        virReportSystemError(errno, _("cannot create state directory '%s'"),
+        virReportSystemError(errno, _("cannot create state directory '%1$s'"),
                              driver->stateDir);
         goto cleanup;
     }
 
     if ((driver->lockFD =
-         virPidFileAcquire(driver->stateDir, "driver", false, getpid())) < 0)
+         virPidFileAcquire(driver->stateDir, "driver", getpid())) < 0)
         goto cleanup;
 
     if (!(driver->devs = virNodeDeviceObjListNew()) ||

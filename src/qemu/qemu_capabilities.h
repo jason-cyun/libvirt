@@ -191,8 +191,8 @@ typedef enum { /* virQEMUCapsFlags grouping marker for syntax-check */
     QEMU_CAPS_USB_REDIR_FILTER, /* usb-redir.filter */
 
     /* 105 */
-    QEMU_CAPS_IDE_DRIVE_WWN, /* Is ide-drive.wwn available? */
-    QEMU_CAPS_SCSI_DISK_WWN, /* Is scsi-disk.wwn available? */
+    X_QEMU_CAPS_IDE_DRIVE_WWN, /* Is ide-drive.wwn available? */
+    X_QEMU_CAPS_SCSI_DISK_WWN, /* Is scsi-disk.wwn available? */
     QEMU_CAPS_SECCOMP_SANDBOX, /* -sandbox */
     X_QEMU_CAPS_REBOOT_TIMEOUT, /* -boot reboot-timeout */
     X_QEMU_CAPS_DUMP_GUEST_CORE, /* dump-guest-core-parameter */
@@ -258,7 +258,7 @@ typedef enum { /* virQEMUCapsFlags grouping marker for syntax-check */
     X_QEMU_CAPS_I440FX_PCI_HOLE64_SIZE, /* i440FX-pcihost.pci-hole64-size */
     X_QEMU_CAPS_Q35_PCI_HOLE64_SIZE, /* q35-pcihost.pci-hole64-size */
     QEMU_CAPS_DEVICE_USB_STORAGE, /* -device usb-storage */
-    QEMU_CAPS_USB_STORAGE_REMOVABLE, /* usb-storage.removable */
+    X_QEMU_CAPS_USB_STORAGE_REMOVABLE, /* usb-storage.removable */
 
     /* 155 */
     QEMU_CAPS_DEVICE_VIRTIO_MMIO, /* -device virtio-mmio */
@@ -476,10 +476,10 @@ typedef enum { /* virQEMUCapsFlags grouping marker for syntax-check */
     QEMU_CAPS_DEVICE_MCH, /* Northbridge in q35 machine types */
     QEMU_CAPS_MCH_EXTENDED_TSEG_MBYTES, /* -global mch.extended-tseg-mbytes */
     QEMU_CAPS_SEV_GUEST, /* -object sev-guest,... */
-    QEMU_CAPS_MACHINE_PSERIES_CAP_HPT_MAX_PAGE_SIZE, /* -machine pseries.cap-hpt-max-page-size */
+    X_QEMU_CAPS_MACHINE_PSERIES_CAP_HPT_MAX_PAGE_SIZE, /* -machine pseries.cap-hpt-max-page-size */
 
     /* 310 */
-    QEMU_CAPS_MACHINE_PSERIES_CAP_HTM, /* -machine pseries.cap-htm */
+    X_QEMU_CAPS_MACHINE_PSERIES_CAP_HTM, /* -machine pseries.cap-htm */
     X_QEMU_CAPS_USB_STORAGE_WERROR, /* -device usb-storage,werror=..,rerror=.. */
     QEMU_CAPS_EGL_HEADLESS, /* -display egl-headless */
     QEMU_CAPS_VFIO_PCI_DISPLAY, /* -device vfio-pci.display */
@@ -493,7 +493,7 @@ typedef enum { /* virQEMUCapsFlags grouping marker for syntax-check */
     X_QEMU_CAPS_IOTHREAD_POLLING, /* -object iothread.poll-max-ns */
 
     /* 320 */
-    QEMU_CAPS_MACHINE_PSERIES_CAP_NESTED_HV, /* -machine pseries.cap-nested-hv */
+    X_QEMU_CAPS_MACHINE_PSERIES_CAP_NESTED_HV, /* -machine pseries.cap-nested-hv */
     QEMU_CAPS_EGL_HEADLESS_RENDERNODE, /* -display egl-headless,rendernode= */
     X_QEMU_CAPS_OBJECT_MEMORY_FILE_ALIGN, /* -object memory-backend-file,align= */
     QEMU_CAPS_OBJECT_MEMORY_FILE_PMEM, /* -object memory-backend-file,pmem= */
@@ -525,7 +525,7 @@ typedef enum { /* virQEMUCapsFlags grouping marker for syntax-check */
     QEMU_CAPS_QUERY_CPU_MODEL_BASELINE, /* qmp query-cpu-model-baseline */
     QEMU_CAPS_QUERY_CPU_MODEL_COMPARISON, /* qmp query-cpu-model-comparison */
     QEMU_CAPS_DEVICE_RAMFB, /* -device ramfb */
-    QEMU_CAPS_MACHINE_PSERIES_CAP_CCF_ASSIST, /* -machine pseries.cap-ccf-assist */
+    X_QEMU_CAPS_MACHINE_PSERIES_CAP_CCF_ASSIST, /* -machine pseries.cap-ccf-assist */
 
     /* 345 */
     QEMU_CAPS_ARM_MAX_CPU, /* max-arm-cpu type exists */
@@ -553,11 +553,11 @@ typedef enum { /* virQEMUCapsFlags grouping marker for syntax-check */
     X_QEMU_CAPS_VIRTIO_PACKED_QUEUES, /* virtio.packed */
     QEMU_CAPS_PCIE_ROOT_PORT_HOTPLUG, /* pcie-root-port.hotplug */
     QEMU_CAPS_AIO_IO_URING, /* -blockdev {...,"aio":"io_uring",...} */
-    QEMU_CAPS_MACHINE_PSERIES_CAP_CFPC, /* -machine pseries.cap-cfpc */
+    X_QEMU_CAPS_MACHINE_PSERIES_CAP_CFPC, /* -machine pseries.cap-cfpc */
 
     /* 365 */
-    QEMU_CAPS_MACHINE_PSERIES_CAP_SBBC, /* -machine pseries.cap-sbbc */
-    QEMU_CAPS_MACHINE_PSERIES_CAP_IBS, /* -machine pseries.cap-ibs */
+    X_QEMU_CAPS_MACHINE_PSERIES_CAP_SBBC, /* -machine pseries.cap-sbbc */
+    X_QEMU_CAPS_MACHINE_PSERIES_CAP_IBS, /* -machine pseries.cap-ibs */
     QEMU_CAPS_TCG, /* QEMU does support TCG */
     QEMU_CAPS_VIRTIO_BLK_SCSI_DEFAULT_DISABLED, /* virtio-blk-pci.scsi disabled by default */
     QEMU_CAPS_SCSI_PVSCSI, /* -device pvscsi */
@@ -669,6 +669,13 @@ typedef enum { /* virQEMUCapsFlags grouping marker for syntax-check */
 
     /* 445 */
     QEMU_CAPS_NETDEV_STREAM_RECONNECT, /* -netdev stream supports reconnect */
+    QEMU_CAPS_VIRTIO_GPU_BLOB, /* -device virtio-gpu-*.blob= */
+    QEMU_CAPS_RBD_ENCRYPTION_LAYERING, /* layered encryption support for Ceph RBD */
+    QEMU_CAPS_RBD_ENCRYPTION_LUKS_ANY, /* luks-any (LUKS and LUKS2) encryption format for Ceph RBD */
+    QEMU_CAPS_QCOW2_DISCARD_NO_UNREF, /* qcow2 block driver allows discards without unrefing the sector */
+
+    /* 450 */
+    QEMU_CAPS_RUN_WITH_ASYNC_TEARDOWN, /* asynchronous teardown -run-with async-teardown=on|off */
 
     QEMU_CAPS_LAST /* this must always be the last item */
 } virQEMUCapsFlags;
@@ -701,7 +708,6 @@ virArch virQEMUCapsGetArch(virQEMUCaps *qemuCaps);
 unsigned int virQEMUCapsGetVersion(virQEMUCaps *qemuCaps);
 const char *virQEMUCapsGetPackage(virQEMUCaps *qemuCaps);
 
-unsigned int virQEMUCapsGetKVMVersion(virQEMUCaps *qemuCaps);
 int virQEMUCapsAddCPUDefinitions(virQEMUCaps *qemuCaps,
                                  virDomainVirtType type,
                                  const char **name,
@@ -817,10 +823,10 @@ bool virQEMUCapsSupportsGICVersion(virQEMUCaps *qemuCaps,
 const char *virQEMUCapsGetPreferredMachine(virQEMUCaps *qemuCaps,
                                            virDomainVirtType virtType);
 
-int virQEMUCapsInitGuestFromBinary(virCaps *caps,
-                                   const char *binary,
-                                   virQEMUCaps *qemuCaps,
-                                   virArch guestarch);
+void virQEMUCapsInitGuestFromBinary(virCaps *caps,
+                                    const char *binary,
+                                    virQEMUCaps *qemuCaps,
+                                    virArch guestarch);
 
 int virQEMUCapsFillDomainCaps(virQEMUCaps *qemuCaps,
                               virArch hostarch,
@@ -884,7 +890,8 @@ virQEMUCapsGetSGXCapabilities(virQEMUCaps *qemuCaps);
 bool
 virQEMUCapsGetKVMSupportsSecureGuest(virQEMUCaps *qemuCaps) G_NO_INLINE;
 
-int virQEMUCapsProbeHVF(virQEMUCaps *qemuCaps) G_NO_INLINE;
+bool
+virQEMUCapsProbeHVF(virQEMUCaps *qemuCaps) G_NO_INLINE;
 
 virArch virQEMUCapsArchFromString(const char *arch);
 const char *virQEMUCapsArchToString(virArch arch);

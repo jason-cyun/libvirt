@@ -241,6 +241,7 @@ qemuInterfaceIsVnetCompatModel(const virDomainNetDef *net)
 {
     return (virDomainNetIsVirtioModel(net) ||
             net->model == VIR_DOMAIN_NET_MODEL_E1000E ||
+            net->model == VIR_DOMAIN_NET_MODEL_IGB ||
             net->model == VIR_DOMAIN_NET_MODEL_VMXNET3);
 }
 
@@ -326,7 +327,14 @@ qemuCreateInBridgePortWithHelper(virQEMUDriverConfig *cfg,
                                  int *tapfd,
                                  unsigned int flags)
 {
+    const char *const bridgeHelperDirs[] = {
+        "/usr/libexec",
+        "/usr/lib/qemu",
+        "/usr/lib",
+        NULL,
+    };
     g_autoptr(virCommand) cmd = NULL;
+    g_autofree char *bridgeHelperPath = NULL;
     char *errbuf = NULL, *cmdstr = NULL;
     int pair[2] = { -1, -1 };
 
@@ -338,13 +346,17 @@ qemuCreateInBridgePortWithHelper(virQEMUDriverConfig *cfg,
         return -1;
     }
 
-    if (!virFileIsExecutable(cfg->bridgeHelperName)) {
-        virReportSystemError(errno, _("'%s' is not a suitable bridge helper"),
+    bridgeHelperPath = virFindFileInPathFull(cfg->bridgeHelperName, bridgeHelperDirs);
+
+    if (!bridgeHelperPath) {
+        virReportSystemError(errno, _("'%1$s' is not a suitable bridge helper"),
                              cfg->bridgeHelperName);
         return -1;
     }
 
-    cmd = virCommandNew(cfg->bridgeHelperName);
+    VIR_DEBUG("Using qemu-bridge-helper: %s", bridgeHelperPath);
+
+    cmd = virCommandNew(bridgeHelperPath);
     if (flags & VIR_NETDEV_TAP_CREATE_VNET_HDR)
         virCommandAddArgFormat(cmd, "--use-vnet");
     virCommandAddArgFormat(cmd, "--br=%s", brname);
@@ -377,7 +389,7 @@ qemuCreateInBridgePortWithHelper(virQEMUDriverConfig *cfg,
             errstr = g_strdup_printf("stderr=%s", errbuf);
 
         virReportSystemError(errno,
-                             _("%s: failed to communicate with bridge helper: %s"),
+                             _("%1$s: failed to communicate with bridge helper: %2$s"),
                              cmdstr,
                              NULLSTR_EMPTY(errstr));
         VIR_FREE(errstr);
@@ -650,7 +662,7 @@ qemuInterfaceVDPAConnect(virDomainNetDef *net)
 
     if ((fd = open(net->data.vdpa.devicepath, O_RDWR)) < 0) {
         virReportSystemError(errno,
-                             _("Unable to open '%s' for vdpa device"),
+                             _("Unable to open '%1$s' for vdpa device"),
                              net->data.vdpa.devicepath);
         return -1;
     }

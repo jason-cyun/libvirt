@@ -73,6 +73,9 @@ Or
 
    $ systemctl start virtproxyd-tcp.socket
 
+**Note**: The TCP socket uses plain unencrypted TCP connection and thus is
+insecure and should not be used.
+
 
 Traditional service mode
 ------------------------
@@ -103,8 +106,8 @@ Use this name for the PID file, overriding the default value.
 
 ``-t``, ``--timeout *SECONDS*``
 
-Exit after timeout period (in seconds), provided there are neither any client
-connections nor any running domains.
+Exit after timeout period (in seconds), provided there are no client
+connections.
 
 ``-v``, ``--verbose``
 
@@ -252,4 +255,4 @@ SEE ALSO
 ========
 
 virsh(1), libvirtd(8),
-`https://www.libvirt.org/daemons.html <https://www.libvirt.org/daemons.html>`_,
+`https://libvirt.org/daemons.html <https://libvirt.org/daemons.html>`_,

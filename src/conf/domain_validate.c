@@ -76,7 +76,7 @@ virDomainDefResourceValidate(const virDomainDef *def)
         len = strlen(def->resource->appid);
         if (len < APPID_LEN_MIN || len > APPID_LEN_MAX) {
             virReportError(VIR_ERR_INVALID_ARG,
-                           _("Fibre Channel 'appid' string length must be between [%d, %d]"),
+                           _("Fibre Channel 'appid' string length must be between [%1$d, %2$d]"),
                            APPID_LEN_MIN, APPID_LEN_MAX);
             return -1;
         }
@@ -225,9 +225,16 @@ virDomainVideoDefValidate(const virDomainVideoDef *video,
         }
     }
 
-    if (video->type != VIR_DOMAIN_VIDEO_TYPE_VIRTIO &&
-        (virDomainCheckVirtioOptionsAreAbsent(video->virtio) < 0))
-        return -1;
+    if (video->type != VIR_DOMAIN_VIDEO_TYPE_VIRTIO) {
+        if (virDomainCheckVirtioOptionsAreAbsent(video->virtio) < 0)
+            return -1;
+        if (video->blob != VIR_TRISTATE_SWITCH_ABSENT) {
+            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                           _("video type '%1$s' does not support blob resources"),
+                           virDomainVideoTypeToString(video->type));
+            return -1;
+        }
+    }
 
     return 0;
 }
@@ -270,7 +277,7 @@ virDomainDiskAddressDiskBusCompatibility(virDomainDiskBus bus,
     }
 
     virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                   _("unexpected bus type '%d'"),
+                   _("unexpected bus type '%1$d'"),
                    bus);
     return true;
 }
@@ -501,7 +508,7 @@ virDomainDiskDefValidateSourceChainOne(const virStorageSource *src)
         case VIR_STORAGE_NET_PROTOCOL_VXHS:
         case VIR_STORAGE_NET_PROTOCOL_NFS:
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("authentication is not supported for protocol '%s'"),
+                           _("authentication is not supported for protocol '%1$s'"),
                            virStorageNetProtocolTypeToString(src->protocol));
             return -1;
 
@@ -512,7 +519,7 @@ virDomainDiskDefValidateSourceChainOne(const virStorageSource *src)
 
         if ((actUsage = virSecretUsageTypeFromString(authdef->secrettype)) < 0) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("unknown secret type '%s'"),
+                           _("unknown secret type '%1$s'"),
                            NULLSTR(authdef->secrettype));
             return -1;
         }
@@ -522,7 +529,7 @@ virDomainDiskDefValidateSourceChainOne(const virStorageSource *src)
             (src->protocol == VIR_STORAGE_NET_PROTOCOL_RBD &&
              actUsage != VIR_SECRET_USAGE_TYPE_CEPH)) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("invalid secret type '%s'"),
+                           _("invalid secret type '%1$s'"),
                            virSecretUsageTypeToString(actUsage));
             return -1;
         }
@@ -596,7 +603,7 @@ virDomainDiskDefSourceLUNValidate(const virStorageSource *src)
     if (virStorageSourceGetActualType(src) == VIR_STORAGE_TYPE_NETWORK) {
         if (src->protocol != VIR_STORAGE_NET_PROTOCOL_ISCSI) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("disk device='lun' is not supported for protocol='%s'"),
+                           _("disk device='lun' is not supported for protocol='%1$s'"),
                            virStorageNetProtocolTypeToString(src->protocol));
             return -1;
         }
@@ -642,7 +649,7 @@ virDomainDiskDefValidateStartupPolicy(const virDomainDiskDef *disk)
     if (virStorageSourceGetActualType(disk->src) != VIR_STORAGE_TYPE_VOLUME &&
         !virStorageSourceIsLocalStorage(disk->src)) {
         virReportError(VIR_ERR_XML_ERROR,
-                       _("disk startupPolicy '%s' is not allowed for disk of '%s' type"),
+                       _("disk startupPolicy '%1$s' is not allowed for disk of '%2$s' type"),
                        virDomainStartupPolicyTypeToString(disk->startupPolicy),
                        virStorageTypeToString(disk->src->type));
         return -1;
@@ -669,7 +676,7 @@ virDomainDiskDefValidate(const virDomainDef *def,
     /* disk target is used widely in other code so it must be validated first */
     if (!disk->dst) {
         if (disk->src->srcpool) {
-            virReportError(VIR_ERR_NO_TARGET, _("pool = '%s', volume = '%s'"),
+            virReportError(VIR_ERR_NO_TARGET, _("pool = '%1$s', volume = '%2$s'"),
                            disk->src->srcpool->pool,
                            disk->src->srcpool->volume);
         } else {
@@ -757,7 +764,7 @@ virDomainDiskDefValidate(const virDomainDef *def,
      */
     if (!virDomainDiskAddressDiskBusCompatibility(disk->bus, disk->info.type)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("Invalid address type '%s' for the disk '%s' with the bus type '%s'"),
+                       _("Invalid address type '%1$s' for the disk '%2$s' with the bus type '%3$s'"),
                        virDomainDeviceAddressTypeToString(disk->info.type),
                        disk->dst,
                        virDomainDiskBusTypeToString(disk->bus));
@@ -769,7 +776,7 @@ virDomainDiskDefValidate(const virDomainDef *def,
             disk->model == VIR_DOMAIN_DISK_MODEL_VIRTIO_TRANSITIONAL ||
             disk->model == VIR_DOMAIN_DISK_MODEL_VIRTIO_NON_TRANSITIONAL) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("disk model '%s' not supported for bus '%s'"),
+                           _("disk model '%1$s' not supported for bus '%2$s'"),
                            virDomainDiskModelTypeToString(disk->model),
                            virDomainDiskBusTypeToString(disk->bus));
             return -1;
@@ -777,7 +784,13 @@ virDomainDiskDefValidate(const virDomainDef *def,
 
         if (disk->queues) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
-                           _("queues attribute in disk driver element is only supported by virtio-blk"));
+                           _("queues attribute in disk driver element is only supported for virtio bus"));
+            return -1;
+        }
+
+        if (disk->queue_size) {
+            virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                           _("queue_size attribute in disk driver is only supported for virtio bus"));
             return -1;
         }
 
@@ -836,7 +849,7 @@ virDomainDiskDefValidate(const virDomainDef *def,
 
         if (strlen(disk->vendor) > VENDOR_LEN) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("disk vendor is more than %d characters"),
+                           _("disk vendor is more than %1$d characters"),
                            VENDOR_LEN);
             return -1;
         }
@@ -851,7 +864,7 @@ virDomainDiskDefValidate(const virDomainDef *def,
 
         if (strlen(disk->product) > PRODUCT_LEN) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("disk product is more than %d characters"),
+                           _("disk product is more than %1$d characters"),
                            PRODUCT_LEN);
             return -1;
         }
@@ -860,7 +873,7 @@ virDomainDiskDefValidate(const virDomainDef *def,
     if (disk->device == VIR_DOMAIN_DISK_DEVICE_FLOPPY &&
         disk->bus != VIR_DOMAIN_DISK_BUS_FDC) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Invalid bus type '%s' for floppy disk"),
+                       _("Invalid bus type '%1$s' for floppy disk"),
                        virDomainDiskBusTypeToString(disk->bus));
         return -1;
     }
@@ -868,15 +881,17 @@ virDomainDiskDefValidate(const virDomainDef *def,
     if (disk->device != VIR_DOMAIN_DISK_DEVICE_FLOPPY &&
         disk->bus == VIR_DOMAIN_DISK_BUS_FDC) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Invalid bus type '%s' for disk"),
+                       _("Invalid bus type '%1$s' for disk"),
                        virDomainDiskBusTypeToString(disk->bus));
         return -1;
     }
 
     if (disk->removable != VIR_TRISTATE_SWITCH_ABSENT &&
-        disk->bus != VIR_DOMAIN_DISK_BUS_USB) {
+        disk->bus != VIR_DOMAIN_DISK_BUS_USB &&
+        !(disk->bus == VIR_DOMAIN_DISK_BUS_SCSI &&
+          disk->device == VIR_DOMAIN_DISK_DEVICE_DISK)) {
         virReportError(VIR_ERR_XML_ERROR, "%s",
-                       _("removable is only valid for usb disks"));
+                       _("removable is only valid for usb or scsi disks"));
         return -1;
     }
 
@@ -894,14 +909,14 @@ virDomainDiskDefValidate(const virDomainDef *def,
         !STRPREFIX(disk->dst, "xvd") &&
         !STRPREFIX(disk->dst, "ubd")) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Invalid harddisk device name: %s"), disk->dst);
+                       _("Invalid harddisk device name: %1$s"), disk->dst);
         return -1;
     }
 
     if (disk->device == VIR_DOMAIN_DISK_DEVICE_FLOPPY &&
         !STRPREFIX(disk->dst, "fd")) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Invalid floppy device name: %s"), disk->dst);
+                       _("Invalid floppy device name: %1$s"), disk->dst);
         return -1;
     }
 
@@ -912,6 +927,20 @@ virDomainDiskDefValidate(const virDomainDef *def,
         disk->device == VIR_DOMAIN_DISK_DEVICE_DISK) {
         virReportError(VIR_ERR_NO_SOURCE, "%s", disk->dst);
         return -1;
+    }
+
+    if (disk->discard_no_unref == VIR_TRISTATE_SWITCH_ON) {
+        if (disk->src->format != VIR_STORAGE_FILE_QCOW2) {
+            virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                           _("'discard_no_unref' only works with qcow2 disk format"));
+            return -1;
+        }
+
+        if (disk->src->readonly) {
+            virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                           _("'discard_no_unref' is not compatible with read-only disk"));
+            return -1;
+        }
     }
 
     return 0;
@@ -1108,7 +1137,7 @@ virDomainDefTunablesValidate(const virDomainDef *def)
             if (STREQ(def->blkio.devices[j].path,
                       def->blkio.devices[i].path)) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("duplicate blkio device path '%s'"),
+                               _("duplicate blkio device path '%1$s'"),
                                def->blkio.devices[i].path);
                 return -1;
             }
@@ -1136,7 +1165,7 @@ virDomainControllerDefValidate(const virDomainControllerDef *controller)
 
         if (controller->idx > 255) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("PCI controller index %d too high, maximum is 255"),
+                           _("PCI controller index %1$d too high, maximum is 255"),
                            controller->idx);
             return -1;
         }
@@ -1146,7 +1175,7 @@ virDomainControllerDefValidate(const virDomainControllerDef *controller)
 
             if (opts->targetIndex < 0 || opts->targetIndex > 30) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("PCI controller target index '%d' out of range - must be 0-30"),
+                               _("PCI controller target index '%1$d' out of range - must be 0-30"),
                                opts->targetIndex);
                 return -1;
             }
@@ -1162,7 +1191,7 @@ virDomainControllerDefValidate(const virDomainControllerDef *controller)
         if (opts->chassisNr != -1) {
             if (opts->chassisNr < 1 || opts->chassisNr > 255) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("PCI controller chassisNr '%d' out of range - must be 1-255"),
+                               _("PCI controller chassisNr '%1$d' out of range - must be 1-255"),
                                opts->chassisNr);
                 return -1;
             }
@@ -1171,7 +1200,7 @@ virDomainControllerDefValidate(const virDomainControllerDef *controller)
         if (opts->chassis != -1) {
             if (opts->chassis < 0 || opts->chassis > 255) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("PCI controller chassis '%d' out of range - must be 0-255"),
+                               _("PCI controller chassis '%1$d' out of range - must be 0-255"),
                                opts->chassis);
                 return -1;
             }
@@ -1180,7 +1209,7 @@ virDomainControllerDefValidate(const virDomainControllerDef *controller)
         if (opts->port != -1) {
             if (opts->port < 0 || opts->port > 255) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("PCI controller port '%d' out of range - must be 0-255"),
+                               _("PCI controller port '%1$d' out of range - must be 0-255"),
                                opts->port);
                 return -1;
             }
@@ -1189,7 +1218,7 @@ virDomainControllerDefValidate(const virDomainControllerDef *controller)
         if (opts->busNr != -1) {
             if (opts->busNr < 1 || opts->busNr > 254) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("PCI controller busNr '%d' out of range - must be 1-254"),
+                               _("PCI controller busNr '%1$d' out of range - must be 1-254"),
                                opts->busNr);
                 return -1;
             }
@@ -1314,9 +1343,7 @@ virDomainDefDuplicateDriveAddressesValidate(const virDomainDef *def)
 
             if (virDomainDeviceInfoAddressIsEqual(disk_info_i, disk_info_j)) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("Found duplicate drive address for disk with "
-                                 "target name '%s' controller='%u' bus='%u' "
-                                 "target='%u' unit='%u'"),
+                               _("Found duplicate drive address for disk with target name '%1$s' controller='%2$u' bus='%3$u' target='%4$u' unit='%5$u'"),
                                disk_i->dst,
                                disk_info_i->addr.drive.controller,
                                disk_info_i->addr.drive.bus,
@@ -1356,9 +1383,7 @@ virDomainDefDuplicateDriveAddressesValidate(const virDomainDef *def)
 
             if (virDomainDeviceInfoAddressIsEqual(hdev_info_i, hdev_info_j)) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("SCSI host address controller='%u' "
-                                 "bus='%u' target='%u' unit='%u' in "
-                                 "use by another SCSI host device"),
+                               _("SCSI host address controller='%1$u' bus='%2$u' target='%3$u' unit='%4$u' in use by another SCSI host device"),
                                hdev_addr_i->bus,
                                hdev_addr_i->controller,
                                hdev_addr_i->target,
@@ -1370,9 +1395,7 @@ virDomainDefDuplicateDriveAddressesValidate(const virDomainDef *def)
         if (virDomainDriveAddressIsUsedByDisk(def, VIR_DOMAIN_DISK_BUS_SCSI,
                                               hdev_addr_i)) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("SCSI host address controller='%u' "
-                             "bus='%u' target='%u' unit='%u' in "
-                             "use by another SCSI disk"),
+                           _("SCSI host address controller='%1$u' bus='%2$u' target='%3$u' unit='%4$u' in use by another SCSI disk"),
                            hdev_addr_i->bus,
                            hdev_addr_i->controller,
                            hdev_addr_i->target,
@@ -1420,7 +1443,7 @@ virDomainDeviceDefValidateAliasesIterator(virDomainDef *def,
 
     if (virHashLookup(data->aliases, alias)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("non unique alias detected: %s"),
+                       _("non unique alias detected: %1$s"),
                        alias);
         return -1;
     }
@@ -1480,7 +1503,7 @@ virDomainDeviceValidateAliasImpl(const virDomainDef *def,
 
     if (virHashLookup(aliases, info->alias)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("non unique alias detected: %s"),
+                       _("non unique alias detected: %1$s"),
                        info->alias);
         return -1;
     }
@@ -1551,16 +1574,14 @@ virDomainDefMemtuneValidate(const virDomainDef *def)
                 virBitmapOverlaps(mem->hugepages[i].nodemask,
                                   mem->hugepages[j].nodemask)) {
                 virReportError(VIR_ERR_XML_DETAIL,
-                               _("nodeset attribute of hugepages "
-                                 "of sizes %llu and %llu intersect"),
+                               _("nodeset attribute of hugepages of sizes %1$llu and %2$llu intersect"),
                                mem->hugepages[i].size,
                                mem->hugepages[j].size);
                 return -1;
             } else if (!mem->hugepages[i].nodemask &&
                        !mem->hugepages[j].nodemask) {
                 virReportError(VIR_ERR_XML_DETAIL,
-                               _("two master hugepages detected: "
-                                 "%llu and %llu"),
+                               _("two master hugepages detected: %1$llu and %2$llu"),
                                mem->hugepages[i].size,
                                mem->hugepages[j].size);
                 return -1;
@@ -1576,7 +1597,7 @@ virDomainDefMemtuneValidate(const virDomainDef *def)
         nextBit = virBitmapNextSetBit(mem->hugepages[i].nodemask, pos);
         if (nextBit >= 0) {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("hugepages: node %zd not found"),
+                           _("hugepages: node %1$zd not found"),
                            nextBit);
             return -1;
         }
@@ -1599,50 +1620,20 @@ virDomainDefOSValidate(const virDomainDef *def,
             return -1;
         }
 
+        if (def->os.firmwareFeatures &&
+            def->os.firmwareFeatures[VIR_DOMAIN_OS_DEF_FIRMWARE_FEATURE_ENROLLED_KEYS] == VIR_TRISTATE_BOOL_YES &&
+            def->os.firmwareFeatures[VIR_DOMAIN_OS_DEF_FIRMWARE_FEATURE_SECURE_BOOT] == VIR_TRISTATE_BOOL_NO) {
+            virReportError(VIR_ERR_XML_DETAIL, "%s",
+                           _("firmware feature 'enrolled-keys' cannot be enabled when firmware feature 'secure-boot' is disabled"));
+            return -1;
+        }
+
         if (!loader)
             return 0;
 
-        if (loader->readonly) {
-            virReportError(VIR_ERR_XML_DETAIL, "%s",
-                           _("loader attribute 'readonly' cannot be specified "
-                             "when firmware autoselection is enabled"));
-            return -1;
-        }
-        if (loader->type) {
-            virReportError(VIR_ERR_XML_DETAIL, "%s",
-                           _("loader attribute 'type' cannot be specified "
-                             "when firmware autoselection is enabled"));
-            return -1;
-        }
-        if (loader->path) {
-            virReportError(VIR_ERR_XML_DETAIL, "%s",
-                           _("loader path cannot be specified "
-                             "when firmware autoselection is enabled"));
-            return -1;
-        }
-        if (loader->nvramTemplate) {
-            virReportError(VIR_ERR_XML_DETAIL, "%s",
-                           _("nvram attribute 'template' cannot be specified "
-                             "when firmware autoselection is enabled"));
-            return -1;
-        }
-
-        /* We need to accept 'yes' here because the initial implementation
-         * of firmware autoselection used it as a way to request a firmware
-         * with Secure Boot support, so the error message is technically
-         * incorrect; however, we want to discourage people from using this
-         * attribute at all, so it's fine to be a bit more aggressive than
-         * it would be strictly required :) */
-        if (loader->secure == VIR_TRISTATE_BOOL_NO) {
-            virReportError(VIR_ERR_XML_DETAIL, "%s",
-                           _("loader attribute 'secure' cannot be specified "
-                             "when firmware autoselection is enabled"));
-            return -1;
-        }
-
         if (loader->nvram && def->os.firmware != VIR_DOMAIN_OS_DEF_FIRMWARE_EFI) {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("firmware type '%s' does not support nvram"),
+                           _("firmware type '%1$s' does not support nvram"),
                            virDomainOsDefFirmwareTypeToString(def->os.firmware));
             return -1;
         }
@@ -1700,7 +1691,7 @@ virDomainDefOSValidate(const virDomainDef *def,
             (def->cputune.name < VIR_CGROUP_CPU_PERIOD_MIN || \
              def->cputune.name > VIR_CGROUP_CPU_PERIOD_MAX)) { \
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED, \
-                           _("Value of cputune '%s' must be in range [%llu, %llu]"), \
+                           _("Value of cputune '%1$s' must be in range [%2$llu, %3$llu]"), \
                            #name, \
                            VIR_CGROUP_CPU_PERIOD_MIN, \
                            VIR_CGROUP_CPU_PERIOD_MAX); \
@@ -1714,7 +1705,7 @@ virDomainDefOSValidate(const virDomainDef *def,
             (def->cputune.name < VIR_CGROUP_CPU_QUOTA_MIN || \
              def->cputune.name > VIR_CGROUP_CPU_QUOTA_MAX)) { \
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED, \
-                           _("Value of cputune '%s' must be in range [%llu, %llu]"), \
+                           _("Value of cputune '%1$s' must be in range [%2$llu, %3$llu]"), \
                            #name, \
                            VIR_CGROUP_CPU_QUOTA_MIN, \
                            VIR_CGROUP_CPU_QUOTA_MAX); \
@@ -1760,33 +1751,6 @@ virDomainDefIOMMUValidate(const virDomainDef *def)
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("IOMMU eim requires interrupt remapping to be enabled"));
         return -1;
-    }
-
-    return 0;
-}
-
-
-static int
-virDomainDefFSValidate(const virDomainDef *def)
-{
-    size_t i;
-    g_autoptr(GHashTable) dsts = virHashNew(NULL);
-
-    for (i = 0; i < def->nfss; i++) {
-        const virDomainFSDef *fs = def->fss[i];
-
-        if (fs->fsdriver != VIR_DOMAIN_FS_DRIVER_TYPE_VIRTIOFS)
-            continue;
-
-        if (virHashHasEntry(dsts, fs->dst)) {
-            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("filesystem target '%s' specified twice"),
-                           fs->dst);
-            return -1;
-        }
-
-        if (virHashAddEntry(dsts, fs->dst, (void *) 0x1) < 0)
-            return -1;
     }
 
     return 0;
@@ -1885,9 +1849,6 @@ virDomainDefValidateInternal(const virDomainDef *def,
         return -1;
 
     if (virDomainNumaDefValidate(def->numa) < 0)
-        return -1;
-
-    if (virDomainDefFSValidate(def) < 0)
         return -1;
 
     if (virDomainDefValidateIOThreads(def) < 0)
@@ -1991,7 +1952,7 @@ virDomainNetDefValidatePortOptions(const char *macstr,
         if (!(type == VIR_DOMAIN_NET_TYPE_NETWORK ||
               type == VIR_DOMAIN_NET_TYPE_BRIDGE)) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("interface %s - <port isolated='yes'/> is not supported for network interfaces with type='%s'"),
+                           _("interface %1$s - <port isolated='yes'/> is not supported for network interfaces with type='%2$s'"),
                            macstr, virDomainNetTypeToString(type));
             return -1;
         }
@@ -2001,7 +1962,7 @@ virDomainNetDefValidatePortOptions(const char *macstr,
          */
         if (vport && vport->virtPortType != VIR_NETDEV_VPORT_PROFILE_NONE) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("interface %s - <port isolated='yes'/> is not supported for network interfaces with virtualport type='%s'"),
+                           _("interface %1$s - <port isolated='yes'/> is not supported for network interfaces with virtualport type='%2$s'"),
                            macstr, virNetDevVPortTypeToString(vport->virtPortType));
             return -1;
         }
@@ -2045,7 +2006,7 @@ virDomainActualNetDefValidate(const virDomainNetDef *net)
               (actualType == VIR_DOMAIN_NET_TYPE_BRIDGE &&
                vport  && vport->virtPortType == VIR_NETDEV_VPORT_PROFILE_OPENVSWITCH))) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("interface %s - vlan tag not supported for this connection type"),
+                           _("interface %1$s - vlan tag not supported for this connection type"),
                            macstr);
             return -1;
         }
@@ -2056,8 +2017,7 @@ virDomainActualNetDefValidate(const virDomainNetDef *net)
      */
     if (bandwidth && actualType == VIR_DOMAIN_NET_TYPE_HOSTDEV) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("interface %s - bandwidth settings are not supported "
-                         "for hostdev interfaces"),
+                       _("interface %1$s - bandwidth settings are not supported for hostdev interfaces"),
                        macstr);
         return -1;
     }
@@ -2081,18 +2041,15 @@ virDomainNetDefValidate(const virDomainNetDef *net)
     if ((net->hostIP.nroutes || net->hostIP.nips) &&
         net->type != VIR_DOMAIN_NET_TYPE_ETHERNET) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("Invalid attempt to set network interface "
-                         "host-side IP route and/or address info on "
-                         "interface of type '%s'. This is only supported "
-                         "on interfaces of type 'ethernet'"),
+                       _("Invalid attempt to set network interface host-side IP route and/or address info on interface of type '%1$s'. "
+                         "This is only supported on interfaces of type 'ethernet'"),
                        virDomainNetTypeToString(net->type));
         return -1;
     }
     if (net->managed_tap == VIR_TRISTATE_BOOL_NO &&
         net->type != VIR_DOMAIN_NET_TYPE_ETHERNET) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("unmanaged target dev is not supported on "
-                         "interfaces of type '%s'"),
+                       _("unmanaged target dev is not supported on interfaces of type '%1$s'"),
                        virDomainNetTypeToString(net->type));
         return -1;
     }
@@ -2107,7 +2064,7 @@ virDomainNetDefValidate(const virDomainNetDef *net)
         } else {
             if (net->teaming->persistent) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("teaming persistent attribute not allowed if teaming type is '%s'"),
+                               _("teaming persistent attribute not allowed if teaming type is '%1$s'"),
                                virDomainNetTeamingTypeToString(net->teaming->type));
                 return -1;
             }
@@ -2130,6 +2087,15 @@ virDomainNetDefValidate(const virDomainNetDef *net)
                            _("The 'passt' backend can only be used with interface type='user'"));
             return -1;
         }
+    }
+
+    if (net->nPortForwards > 0 &&
+        (net->type != VIR_DOMAIN_NET_TYPE_USER ||
+         (net->type == VIR_DOMAIN_NET_TYPE_USER &&
+          net->backend.type != VIR_DOMAIN_NET_BACKEND_PASST))) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("The <portForward> element can only be used with <interface type='user'> and its 'passt' backend"));
+        return -1;
     }
 
     switch (net->type) {
@@ -2285,7 +2251,7 @@ virDomainMemoryDefValidate(const virDomainMemoryDef *mem,
 
         if (mem->targetNode >= nodeCount) {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("can't add memory backend for guest node '%d' as the guest has only '%zu' NUMA nodes configured"),
+                           _("can't add memory backend for guest node '%1$d' as the guest has only '%2$zu' NUMA nodes configured"),
                            mem->targetNode, nodeCount);
             return -1;
         }
@@ -2322,14 +2288,14 @@ virDomainMemoryDefValidate(const virDomainMemoryDef *mem,
     case VIR_DOMAIN_MEMORY_MODEL_VIRTIO_PMEM:
         if (!mem->nvdimmPath) {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("path is required for model '%s'"),
+                           _("path is required for model '%1$s'"),
                            virDomainMemoryModelTypeToString(mem->model));
             return -1;
         }
 
         if (mem->discard == VIR_TRISTATE_BOOL_YES) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("discard is not supported for model '%s'"),
+                           _("discard is not supported for model '%1$s'"),
                            virDomainMemoryModelTypeToString(mem->model));
             return -1;
         }
@@ -2350,7 +2316,7 @@ virDomainMemoryDefValidate(const virDomainMemoryDef *mem,
     case VIR_DOMAIN_MEMORY_MODEL_VIRTIO_MEM:
         if (mem->requestedsize > mem->size) {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("requested size must be smaller than or equal to @size (%lluKiB)"),
+                           _("requested size must be smaller than or equal to @size (%1$lluKiB)"),
                            mem->size);
             return -1;
         }
@@ -2371,7 +2337,7 @@ virDomainMemoryDefValidate(const virDomainMemoryDef *mem,
 
         if (mem->blocksize < thpSize) {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("block size too small, must be at least %lluKiB"),
+                           _("block size too small, must be at least %1$lluKiB"),
                            thpSize);
             return -1;
         }
@@ -2379,6 +2345,12 @@ virDomainMemoryDefValidate(const virDomainMemoryDef *mem,
         if (mem->requestedsize % mem->blocksize != 0) {
             virReportError(VIR_ERR_XML_DETAIL, "%s",
                            _("requested size must be an integer multiple of block size"));
+            return -1;
+        }
+
+        if (mem->address % mem->blocksize != 0) {
+            virReportError(VIR_ERR_XML_DETAIL, "%s",
+                           _("memory device address must be aligned to blocksize"));
             return -1;
         }
         break;
@@ -2389,7 +2361,7 @@ virDomainMemoryDefValidate(const virDomainMemoryDef *mem,
     case VIR_DOMAIN_MEMORY_MODEL_SGX_EPC:
         if (mem->info.type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_NONE) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("memory device address is not supported for model '%s'"),
+                           _("memory device address is not supported for model '%1$s'"),
                            virDomainMemoryModelTypeToString(mem->model));
             return -1;
         }
@@ -2457,13 +2429,13 @@ virDomainInputDefValidate(const virDomainInputDef *input,
             input->type != VIR_DOMAIN_INPUT_TYPE_MOUSE &&
             input->type != VIR_DOMAIN_INPUT_TYPE_KBD) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("ps2 bus does not support %s input device"),
+                           _("ps2 bus does not support %1$s input device"),
                            virDomainInputTypeToString(input->type));
             return -1;
         }
         if (input->bus == VIR_DOMAIN_INPUT_BUS_XEN) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("unsupported input bus %s"),
+                           _("unsupported input bus %1$s"),
                            virDomainInputBusTypeToString(input->bus));
             return -1;
         }
@@ -2473,14 +2445,14 @@ virDomainInputDefValidate(const virDomainInputDef *input,
     case VIR_DOMAIN_OSTYPE_XENPVH:
         if (input->bus != VIR_DOMAIN_INPUT_BUS_XEN) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("unsupported input bus %s"),
+                           _("unsupported input bus %1$s"),
                            virDomainInputBusTypeToString(input->bus));
             return -1;
         }
         if (input->type != VIR_DOMAIN_INPUT_TYPE_MOUSE &&
             input->type != VIR_DOMAIN_INPUT_TYPE_KBD) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("xen bus does not support %s input device"),
+                           _("xen bus does not support %1$s input device"),
                            virDomainInputTypeToString(input->type));
             return -1;
         }
@@ -2491,7 +2463,7 @@ virDomainInputDefValidate(const virDomainInputDef *input,
             def->virtType == VIR_DOMAIN_VIRT_PARALLELS) {
             if (input->bus != VIR_DOMAIN_INPUT_BUS_PARALLELS) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
-                               _("parallels containers don't support input bus %s"),
+                               _("parallels containers don't support input bus %1$s"),
                                virDomainInputBusTypeToString(input->bus));
                 return -1;
             }
@@ -2499,7 +2471,7 @@ virDomainInputDefValidate(const virDomainInputDef *input,
             if (input->type != VIR_DOMAIN_INPUT_TYPE_MOUSE &&
                 input->type != VIR_DOMAIN_INPUT_TYPE_KBD) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
-                               _("parallels bus does not support %s input device"),
+                               _("parallels bus does not support %1$s input device"),
                                virDomainInputTypeToString(input->type));
                 return -1;
             }
@@ -2549,7 +2521,7 @@ virDomainInputDefValidate(const virDomainInputDef *input,
     case VIR_DOMAIN_INPUT_MODEL_VIRTIO_NON_TRANSITIONAL:
         if (input->bus != VIR_DOMAIN_INPUT_BUS_VIRTIO) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("only bus 'virtio' is supported for input model '%s'"),
+                           _("only bus 'virtio' is supported for input model '%1$s'"),
                            virDomainInputModelTypeToString(input->model));
             return -1;
         }
@@ -2593,8 +2565,13 @@ virDomainShmemDefValidate(const virDomainShmemDef *shmem)
 }
 
 static int
-virDomainFSDefValidate(const virDomainFSDef *fs)
+virDomainFSDefValidate(const virDomainDef *def,
+                       const virDomainFSDef *fs)
 {
+    g_autoptr(GHashTable) dsts = virHashNew(NULL);
+    const virDomainFSDef *lookup;
+    size_t i;
+
     if (fs->dst == NULL) {
         const char *source = fs->src->path;
         if (!source)
@@ -2609,6 +2586,31 @@ virDomainFSDefValidate(const virDomainFSDef *fs)
         fs->fsdriver != VIR_DOMAIN_FS_DRIVER_TYPE_VIRTIOFS) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("boot order is only supported for virtiofs"));
+        return -1;
+    }
+
+    for (i = 0; i < def->nfss; i++) {
+        const virDomainFSDef *iter = def->fss[i];
+
+        if (iter->fsdriver != VIR_DOMAIN_FS_DRIVER_TYPE_VIRTIOFS)
+            continue;
+
+        if (virHashHasEntry(dsts, iter->dst)) {
+            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                           _("filesystem target '%1$s' specified twice"),
+                           iter->dst);
+            return -1;
+        }
+
+        if (virHashAddEntry(dsts, iter->dst, (void *) iter) < 0)
+            return -1;
+    }
+
+    lookup = g_hash_table_lookup(dsts, fs->dst);
+    if (lookup && lookup != fs) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                       _("filesystem target '%1$s' specified twice"),
+                       fs->dst);
         return -1;
     }
 
@@ -2630,7 +2632,7 @@ virDomainEnsureAudioID(const virDomainDef *def,
     }
 
     virReportError(VIR_ERR_XML_ERROR,
-                   _("no audio device with ID %u"),
+                   _("no audio device with ID %1$u"),
                    id);
     return -1;
 }
@@ -2653,7 +2655,7 @@ virDomainAudioDefValidate(const virDomainDef *def,
             continue;
         if (def->audios[i]->id == audio->id) {
             virReportError(VIR_ERR_XML_ERROR,
-                           _("audio ID %u is used multiple times"),
+                           _("audio ID %1$u is used multiple times"),
                            audio->id);
             return -1;
         }
@@ -2666,14 +2668,38 @@ static int
 virDomainGraphicsDefListensValidate(const virDomainGraphicsDef *def)
 {
     size_t i;
+    const char *graphicsType = virDomainGraphicsTypeToString(def->type);
 
     for (i = 0; i < def->nListens; i++) {
-        if (def->listens[i].type == VIR_DOMAIN_GRAPHICS_LISTEN_TYPE_NETWORK &&
-            !def->listens[i].network) {
-            virReportError(VIR_ERR_XML_ERROR, "%s",
-                           _("'network' attribute is required for "
-                             "listen type 'network'"));
-            return -1;
+        switch (def->listens[i].type) {
+        case VIR_DOMAIN_GRAPHICS_LISTEN_TYPE_NETWORK:
+            if (!def->listens[i].network) {
+                virReportError(VIR_ERR_XML_ERROR, "%s",
+                               _("'network' attribute is required for listen type 'network'"));
+                return -1;
+            }
+            break;
+        case VIR_DOMAIN_GRAPHICS_LISTEN_TYPE_SOCKET:
+            if (def->type != VIR_DOMAIN_GRAPHICS_TYPE_VNC &&
+                def->type != VIR_DOMAIN_GRAPHICS_TYPE_SPICE) {
+                virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                               _("listen type 'socket' is not available for graphics type '%1$s'"),
+                               graphicsType);
+                return -1;
+            }
+            break;
+        case VIR_DOMAIN_GRAPHICS_LISTEN_TYPE_NONE:
+            if (def->type != VIR_DOMAIN_GRAPHICS_TYPE_SPICE &&
+                def->type != VIR_DOMAIN_GRAPHICS_TYPE_VNC) {
+                virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                               _("listen type 'none' is not available for graphics type '%1$s'"),
+                               graphicsType);
+                return -1;
+            }
+            break;
+        case VIR_DOMAIN_GRAPHICS_LISTEN_TYPE_ADDRESS:
+        case VIR_DOMAIN_GRAPHICS_LISTEN_TYPE_LAST:
+            break;
         }
     }
 
@@ -2716,7 +2742,7 @@ virDomainIOMMUDefValidate(const virDomainIOMMUDef *iommu)
             iommu->iotlb != VIR_TRISTATE_SWITCH_ABSENT ||
             iommu->aw_bits != 0) {
             virReportError(VIR_ERR_XML_ERROR,
-                           _("iommu model '%s' doesn't support additional attributes"),
+                           _("iommu model '%1$s' doesn't support additional attributes"),
                            virDomainIOMMUModelTypeToString(iommu->model));
             return -1;
         }
@@ -2732,7 +2758,7 @@ virDomainIOMMUDefValidate(const virDomainIOMMUDef *iommu)
     case VIR_DOMAIN_IOMMU_MODEL_INTEL:
         if (iommu->info.type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_NONE) {
             virReportError(VIR_ERR_XML_ERROR,
-                           _("iommu model '%s' can't have address"),
+                           _("iommu model '%1$s' can't have address"),
                            virDomainIOMMUModelTypeToString(iommu->model));
             return -1;
         }
@@ -2755,7 +2781,7 @@ virDomainTPMDevValidate(const virDomainTPMDef *tpm)
         if (tpm->data.emulator.activePcrBanks &&
             tpm->data.emulator.version != VIR_DOMAIN_TPM_VERSION_2_0) {
             virReportError(VIR_ERR_XML_ERROR,
-                           _("<active_pcr_banks/> requires TPM version '%s'"),
+                           _("<active_pcr_banks/> requires TPM version '%1$s'"),
                            virDomainTPMVersionTypeToString(VIR_DOMAIN_TPM_VERSION_2_0));
             return -1;
         }
@@ -2815,7 +2841,7 @@ virDomainDeviceInfoValidate(const virDomainDeviceDef *dev)
     case VIR_DOMAIN_DEVICE_ADDRESS_TYPE_UNASSIGNED:
         if (dev->type != VIR_DOMAIN_DEVICE_HOSTDEV) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("address of type '%s' is supported only for hostdevs"),
+                           _("address of type '%1$s' is supported only for hostdevs"),
                            virDomainDeviceAddressTypeToString(info->type));
             return -1;
         }
@@ -2881,7 +2907,7 @@ virDomainDeviceDefValidateInternal(const virDomainDeviceDef *dev,
         return virDomainShmemDefValidate(dev->data.shmem);
 
     case VIR_DOMAIN_DEVICE_FS:
-        return virDomainFSDefValidate(dev->data.fs);
+        return virDomainFSDefValidate(def, dev->data.fs);
 
     case VIR_DOMAIN_DEVICE_AUDIO:
         return virDomainAudioDefValidate(def, dev->data.audio);

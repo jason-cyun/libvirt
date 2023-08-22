@@ -226,12 +226,11 @@ daemonStreamEvent(virStreamPtr st, int events, void *opaque)
         (events & (VIR_STREAM_EVENT_ERROR | VIR_STREAM_EVENT_HANGUP))) {
         int ret;
         virNetMessage *msg;
-        virNetMessageError rerr;
+        virNetMessageError rerr = { 0 };
         virErrorPtr origErr;
 
         virErrorPreserveLast(&origErr);
 
-        memset(&rerr, 0, sizeof(rerr));
         stream->closed = true;
         virStreamEventRemoveCallback(stream->st);
         virStreamAbort(stream->st);
@@ -318,8 +317,8 @@ daemonStreamFilter(virNetServerClient *client,
         msg->header.serial != stream->serial)
         goto cleanup;
 
-    VIR_DEBUG("Incoming client=%p, rx=%p, serial=%u, proc=%d, status=%d",
-              client, stream->rx, msg->header.proc,
+    VIR_DEBUG("Incoming client=%p, rx=%p, msg=%p, serial=%u, proc=%d, status=%d",
+              client, stream->rx, msg, msg->header.proc,
               msg->header.serial, msg->header.status);
 
     virNetMessageQueuePush(&stream->rx, msg);
@@ -565,12 +564,10 @@ daemonStreamHandleWriteData(virNetServerClient *client,
         /* Blocking, so indicate we have more todo later */
         return 1;
     } else if (ret < 0) {
-        virNetMessageError rerr;
+        virNetMessageError rerr = { 0 };
         virErrorPtr err;
 
         virErrorPreserveLast(&err);
-
-        memset(&rerr, 0, sizeof(rerr));
 
         VIR_INFO("Stream send failed");
         stream->closed = true;
@@ -613,8 +610,8 @@ daemonStreamHandleFinish(virNetServerClient *client,
     ret = virStreamFinish(stream->st);
 
     if (ret < 0) {
-        virNetMessageError rerr;
-        memset(&rerr, 0, sizeof(rerr));
+        virNetMessageError rerr = { 0 };
+
         return virNetServerProgramSendReplyError(stream->prog,
                                                  client,
                                                  msg,
@@ -657,14 +654,14 @@ daemonStreamHandleAbort(virNetServerClient *client,
         raise_error = (ret < 0);
     } else {
         virReportError(VIR_ERR_RPC,
-                       _("stream aborted with unexpected status %d"),
+                       _("stream aborted with unexpected status %1$d"),
                        msg->header.status);
         raise_error = true;
     }
 
     if (raise_error) {
-        virNetMessageError rerr;
-        memset(&rerr, 0, sizeof(rerr));
+        virNetMessageError rerr = { 0 };
+
         return virNetServerProgramSendReplyError(stream->prog,
                                                  client,
                                                  msg,
@@ -709,9 +706,7 @@ daemonStreamHandleHole(virNetServerClient *client,
     ret = virStreamSendHole(stream->st, data.length, data.flags);
 
     if (ret < 0) {
-        virNetMessageError rerr;
-
-        memset(&rerr, 0, sizeof(rerr));
+        virNetMessageError rerr = { 0 };
 
         VIR_INFO("Stream send hole failed");
         stream->closed = true;
@@ -740,10 +735,11 @@ static int
 daemonStreamHandleWrite(virNetServerClient *client,
                         daemonClientStream *stream)
 {
+    virNetMessageStatus status = VIR_NET_OK;
     VIR_DEBUG("client=%p, stream=%p", client, stream);
 
     while (stream->rx && !stream->closed) {
-        virNetMessage *msg = stream->rx;
+        virNetMessage *msg = virNetMessageQueueServe(&stream->rx);
         int ret;
 
         if (msg->header.type == VIR_NET_STREAM_HOLE) {
@@ -752,7 +748,8 @@ daemonStreamHandleWrite(virNetServerClient *client,
              * data. */
             ret = daemonStreamHandleHole(client, stream, msg);
         } else if (msg->header.type == VIR_NET_STREAM) {
-            switch (msg->header.status) {
+            status = msg->header.status;
+            switch (status) {
             case VIR_NET_OK:
                 ret = daemonStreamHandleFinish(client, stream, msg);
                 break;
@@ -768,15 +765,18 @@ daemonStreamHandleWrite(virNetServerClient *client,
             }
         } else {
             virReportError(VIR_ERR_RPC,
-                           _("Unexpected message type: %d"),
+                           _("Unexpected message type: %1$d"),
                            msg->header.type);
             ret = -1;
         }
 
-        if (ret > 0)
-            break;  /* still processing data from msg */
+        if (ret > 0) {
+            /* still processing data from msg, put it back into queue */
+            msg->next = stream->rx;
+            stream->rx = msg;
+            break;
+        }
 
-        virNetMessageQueueServe(&stream->rx);
         if (ret < 0) {
             virNetMessageFree(msg);
             virNetServerClientImmediateClose(client);
@@ -789,7 +789,7 @@ daemonStreamHandleWrite(virNetServerClient *client,
          * onto the wire, but this causes the client to reset
          * its active request count / throttling
          */
-        if (msg->header.status == VIR_NET_CONTINUE) {
+        if (status == VIR_NET_CONTINUE) {
             virNetMessageClear(msg);
             msg->header.type = VIR_NET_REPLY;
             if (virNetServerClientSendMessage(client, msg) < 0) {
@@ -820,7 +820,7 @@ daemonStreamHandleRead(virNetServerClient *client,
                        daemonClientStream *stream)
 {
     virNetMessage *msg = NULL;
-    virNetMessageError rerr;
+    virNetMessageError rerr = { 0 };
     char *buffer;
     size_t bufferLen = VIR_NET_MESSAGE_LEGACY_PAYLOAD_MAX;
     int ret = -1;
@@ -842,8 +842,6 @@ daemonStreamHandleRead(virNetServerClient *client,
      * transmit, but doesn't hurt to check */
     if (!stream->tx)
         return 0;
-
-    memset(&rerr, 0, sizeof(rerr));
 
     buffer = g_new0(char, bufferLen);
 

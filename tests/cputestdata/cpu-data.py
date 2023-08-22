@@ -10,7 +10,6 @@ import subprocess
 import sys
 import xml.etree.ElementTree
 
-
 _KEYS = {
     "cpuid": ["eax_in", "ecx_in"],
     "msr": ["index"],
@@ -107,11 +106,14 @@ def gather_cpuid_leaves_kcpuid(output):
 
 def gather_cpuid_leaves(args):
     def mask(regs, eax_in, ecx_in, eax_mask, ebx_mask, ecx_mask, edx_mask):
-        if regs["eax_in"] == eax_in and regs["ecx_in"] == ecx_in:
-            regs["eax"] &= eax_mask
-            regs["ebx"] &= ebx_mask
-            regs["ecx"] &= ecx_mask
-            regs["edx"] &= edx_mask
+        if eax_in != regs["eax_in"]:
+            return
+        if ecx_in != regs["ecx_in"] and ecx_in is not None:
+            return
+        regs["eax"] &= eax_mask
+        regs["ebx"] &= ebx_mask
+        regs["ecx"] &= ecx_mask
+        regs["edx"] &= edx_mask
 
     cpuid = args.path_to_cpuid or "cpuid"
     try:
@@ -132,8 +134,8 @@ def gather_cpuid_leaves(args):
     for regs in reglist:
         # local apic id. Pretend to always run on logical processor #0.
         mask(regs, 0x01, 0x00, 0xffffffff, 0x00ffffff, 0xffffffff, 0xffffffff)
-        mask(regs, 0x0b, 0x00, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffff00)
-        mask(regs, 0x0b, 0x01, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffff00)
+        mask(regs, 0x0b, None, 0xffffffff, 0xffffffff, 0xffffffff, 0x00000000)
+        mask(regs, 0x1f, None, 0xffffffff, 0xffffffff, 0xffffffff, 0x00000000)
 
         yield regs
 

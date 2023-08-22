@@ -51,22 +51,22 @@ x86_64-almalinux-8-clang-local-env:
     RPM: skip
 
 
-x86_64-alpine-315-prebuilt-env:
+x86_64-alpine-317-prebuilt-env:
   extends: .native_build_job_prebuilt_env
   needs:
-    - job: x86_64-alpine-315-container
+    - job: x86_64-alpine-317-container
       optional: true
   allow_failure: false
   variables:
-    NAME: alpine-315
+    NAME: alpine-317
 
-x86_64-alpine-315-local-env:
+x86_64-alpine-317-local-env:
   extends: .native_build_job_local_env
   needs: []
   allow_failure: false
   variables:
-    IMAGE: docker.io/library/alpine:3.15
-    NAME: alpine-315
+    IMAGE: docker.io/library/alpine:3.17
+    NAME: alpine-317
 
 
 x86_64-alpine-edge-prebuilt-env:
@@ -146,6 +146,7 @@ x86_64-debian-11-prebuilt-env:
       optional: true
   allow_failure: false
   variables:
+    JOB_OPTIONAL: 1
     NAME: debian-11
 
 x86_64-debian-11-local-env:
@@ -154,6 +155,7 @@ x86_64-debian-11-local-env:
   allow_failure: false
   variables:
     IMAGE: docker.io/library/debian:11-slim
+    JOB_OPTIONAL: 1
     NAME: debian-11
 
 
@@ -164,6 +166,7 @@ x86_64-debian-11-clang-prebuilt-env:
       optional: true
   allow_failure: false
   variables:
+    JOB_OPTIONAL: 1
     NAME: debian-11
 
 x86_64-debian-11-clang-local-env:
@@ -172,7 +175,44 @@ x86_64-debian-11-clang-local-env:
   allow_failure: false
   variables:
     IMAGE: docker.io/library/debian:11-slim
+    JOB_OPTIONAL: 1
     NAME: debian-11
+
+
+x86_64-debian-12-prebuilt-env:
+  extends: .native_build_job_prebuilt_env
+  needs:
+    - job: x86_64-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    NAME: debian-12
+
+x86_64-debian-12-local-env:
+  extends: .native_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    IMAGE: docker.io/library/debian:12-slim
+    NAME: debian-12
+
+
+x86_64-debian-12-clang-prebuilt-env:
+  extends: .native_build_job_prebuilt_env
+  needs:
+    - job: x86_64-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    NAME: debian-12
+
+x86_64-debian-12-clang-local-env:
+  extends: .native_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    IMAGE: docker.io/library/debian:12-slim
+    NAME: debian-12
 
 
 x86_64-debian-sid-prebuilt-env:
@@ -191,32 +231,6 @@ x86_64-debian-sid-local-env:
   variables:
     IMAGE: docker.io/library/debian:sid-slim
     NAME: debian-sid
-
-
-x86_64-fedora-36-prebuilt-env:
-  extends: .native_build_job_prebuilt_env
-  needs:
-    - job: x86_64-fedora-36-container
-      optional: true
-  allow_failure: false
-  variables:
-    NAME: fedora-36
-  artifacts:
-    expire_in: 1 day
-    paths:
-      - libvirt-rpms
-
-x86_64-fedora-36-local-env:
-  extends: .native_build_job_local_env
-  needs: []
-  allow_failure: false
-  variables:
-    IMAGE: registry.fedoraproject.org/fedora:36
-    NAME: fedora-36
-  artifacts:
-    expire_in: 1 day
-    paths:
-      - libvirt-rpms
 
 
 x86_64-fedora-37-prebuilt-env:
@@ -239,6 +253,32 @@ x86_64-fedora-37-local-env:
   variables:
     IMAGE: registry.fedoraproject.org/fedora:37
     NAME: fedora-37
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - libvirt-rpms
+
+
+x86_64-fedora-38-prebuilt-env:
+  extends: .native_build_job_prebuilt_env
+  needs:
+    - job: x86_64-fedora-38-container
+      optional: true
+  allow_failure: false
+  variables:
+    NAME: fedora-38
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - libvirt-rpms
+
+x86_64-fedora-38-local-env:
+  extends: .native_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    IMAGE: registry.fedoraproject.org/fedora:38
+    NAME: fedora-38
   artifacts:
     expire_in: 1 day
     paths:
@@ -285,23 +325,23 @@ x86_64-fedora-rawhide-clang-local-env:
     RPM: skip
 
 
-x86_64-opensuse-leap-153-prebuilt-env:
+x86_64-opensuse-leap-15-prebuilt-env:
   extends: .native_build_job_prebuilt_env
   needs:
-    - job: x86_64-opensuse-leap-153-container
+    - job: x86_64-opensuse-leap-15-container
       optional: true
   allow_failure: false
   variables:
-    NAME: opensuse-leap-153
+    NAME: opensuse-leap-15
     RPM: skip
 
-x86_64-opensuse-leap-153-local-env:
+x86_64-opensuse-leap-15-local-env:
   extends: .native_build_job_local_env
   needs: []
   allow_failure: false
   variables:
-    IMAGE: registry.opensuse.org/opensuse/leap:15.3
-    NAME: opensuse-leap-153
+    IMAGE: registry.opensuse.org/opensuse/leap:15.5
+    NAME: opensuse-leap-15
     RPM: skip
 
 
@@ -448,6 +488,7 @@ armv7l-debian-11-prebuilt-env:
   allow_failure: false
   variables:
     CROSS: armv7l
+    JOB_OPTIONAL: 1
     NAME: debian-11
 
 armv7l-debian-11-local-env:
@@ -457,6 +498,7 @@ armv7l-debian-11-local-env:
   variables:
     CROSS: armv7l
     IMAGE: docker.io/library/debian:11-slim
+    JOB_OPTIONAL: 1
     NAME: debian-11
 
 
@@ -568,6 +610,180 @@ s390x-debian-11-local-env:
     IMAGE: docker.io/library/debian:11-slim
     JOB_OPTIONAL: 1
     NAME: debian-11
+
+
+aarch64-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: aarch64-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: aarch64
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+aarch64-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: aarch64
+    IMAGE: docker.io/library/debian:12-slim
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+
+armv6l-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: armv6l-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: armv6l
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+armv6l-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: armv6l
+    IMAGE: docker.io/library/debian:12-slim
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+
+armv7l-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: armv7l-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: armv7l
+    NAME: debian-12
+
+armv7l-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: armv7l
+    IMAGE: docker.io/library/debian:12-slim
+    NAME: debian-12
+
+
+i686-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: i686-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: i686
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+i686-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: i686
+    IMAGE: docker.io/library/debian:12-slim
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+
+mips64el-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: mips64el-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: mips64el
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+mips64el-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: mips64el
+    IMAGE: docker.io/library/debian:12-slim
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+
+mipsel-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: mipsel-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: mipsel
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+mipsel-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: mipsel
+    IMAGE: docker.io/library/debian:12-slim
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+
+ppc64le-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: ppc64le-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: ppc64le
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+ppc64le-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: ppc64le
+    IMAGE: docker.io/library/debian:12-slim
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+
+s390x-debian-12-prebuilt-env:
+  extends: .cross_build_job_prebuilt_env
+  needs:
+    - job: s390x-debian-12-container
+      optional: true
+  allow_failure: false
+  variables:
+    CROSS: s390x
+    JOB_OPTIONAL: 1
+    NAME: debian-12
+
+s390x-debian-12-local-env:
+  extends: .cross_build_job_local_env
+  needs: []
+  allow_failure: false
+  variables:
+    CROSS: s390x
+    IMAGE: docker.io/library/debian:12-slim
+    JOB_OPTIONAL: 1
+    NAME: debian-12
 
 
 aarch64-debian-sid-prebuilt-env:
@@ -746,46 +962,46 @@ s390x-debian-sid-local-env:
     NAME: debian-sid
 
 
-mingw32-fedora-37-prebuilt-env:
+mingw32-fedora-38-prebuilt-env:
   extends: .cross_build_job_prebuilt_env
   needs:
-    - job: mingw32-fedora-37-container
+    - job: mingw32-fedora-38-container
       optional: true
   allow_failure: false
   variables:
     CROSS: mingw32
     JOB_OPTIONAL: 1
-    NAME: fedora-37
+    NAME: fedora-38
 
-mingw32-fedora-37-local-env:
+mingw32-fedora-38-local-env:
   extends: .cross_build_job_local_env
   needs: []
   allow_failure: false
   variables:
     CROSS: mingw32
-    IMAGE: registry.fedoraproject.org/fedora:37
+    IMAGE: registry.fedoraproject.org/fedora:38
     JOB_OPTIONAL: 1
-    NAME: fedora-37
+    NAME: fedora-38
 
 
-mingw64-fedora-37-prebuilt-env:
+mingw64-fedora-38-prebuilt-env:
   extends: .cross_build_job_prebuilt_env
   needs:
-    - job: mingw64-fedora-37-container
+    - job: mingw64-fedora-38-container
       optional: true
   allow_failure: false
   variables:
     CROSS: mingw64
-    NAME: fedora-37
+    NAME: fedora-38
 
-mingw64-fedora-37-local-env:
+mingw64-fedora-38-local-env:
   extends: .cross_build_job_local_env
   needs: []
   allow_failure: false
   variables:
     CROSS: mingw64
-    IMAGE: registry.fedoraproject.org/fedora:37
-    NAME: fedora-37
+    IMAGE: registry.fedoraproject.org/fedora:38
+    NAME: fedora-38
 
 
 mingw32-fedora-rawhide-prebuilt-env:
@@ -837,7 +1053,7 @@ x86_64-freebsd-12:
   needs: []
   allow_failure: false
   variables:
-    CIRRUS_VM_IMAGE_NAME: freebsd-12-3
+    CIRRUS_VM_IMAGE_NAME: freebsd-12-4
     CIRRUS_VM_IMAGE_SELECTOR: image_family
     CIRRUS_VM_INSTANCE_TYPE: freebsd_instance
     INSTALL_COMMAND: pkg install -y
@@ -851,7 +1067,7 @@ x86_64-freebsd-13:
   needs: []
   allow_failure: false
   variables:
-    CIRRUS_VM_IMAGE_NAME: freebsd-13-1
+    CIRRUS_VM_IMAGE_NAME: freebsd-13-2
     CIRRUS_VM_IMAGE_SELECTOR: image_family
     CIRRUS_VM_INSTANCE_TYPE: freebsd_instance
     INSTALL_COMMAND: pkg install -y

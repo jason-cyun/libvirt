@@ -454,10 +454,15 @@ virStoragePoolObjListSearchCb(const void *payload,
     virStoragePoolObj *obj = (virStoragePoolObj *) payload;
     struct _virStoragePoolObjListSearchData *data =
         (struct _virStoragePoolObjListSearchData *)opaque;
-    VIR_LOCK_GUARD lock = virObjectLockGuard(obj);
 
+    virObjectLock(obj);
+
+    /* If we find the matching pool object we must return while the object is
+     * locked as the caller wants to return a locked object. */
     if (data->searcher(obj, data->opaque))
         return 1;
+
+    virObjectUnlock(obj);
 
     return 0;
 }
@@ -1037,7 +1042,7 @@ virStoragePoolObjIsDuplicate(virStoragePoolObjList *pools,
             char uuidstr[VIR_UUID_STRING_BUFLEN];
             virUUIDFormat(obj->def->uuid, uuidstr);
             virReportError(VIR_ERR_OPERATION_FAILED,
-                           _("pool '%s' is already defined with uuid %s"),
+                           _("pool '%1$s' is already defined with uuid %2$s"),
                            obj->def->name, uuidstr);
             goto cleanup;
         }
@@ -1046,14 +1051,14 @@ virStoragePoolObjIsDuplicate(virStoragePoolObjList *pools,
             /* UUID & name match, but if Pool is already active, refuse it */
             if (virStoragePoolObjIsActive(obj)) {
                 virReportError(VIR_ERR_OPERATION_INVALID,
-                               _("pool is already active as '%s'"),
+                               _("pool is already active as '%1$s'"),
                                obj->def->name);
                 goto cleanup;
             }
 
             if (virStoragePoolObjIsStarting(obj)) {
                 virReportError(VIR_ERR_OPERATION_INVALID,
-                               _("pool '%s' is starting up"),
+                               _("pool '%1$s' is starting up"),
                                obj->def->name);
                 goto cleanup;
             }
@@ -1071,7 +1076,7 @@ virStoragePoolObjIsDuplicate(virStoragePoolObjList *pools,
 
             virUUIDFormat(obj->def->uuid, uuidstr);
             virReportError(VIR_ERR_OPERATION_FAILED,
-                           _("pool '%s' already exists with uuid %s"),
+                           _("pool '%1$s' already exists with uuid %2$s"),
                            def->name, uuidstr);
             goto cleanup;
         }
@@ -1455,7 +1460,7 @@ virStoragePoolObjSourceFindDuplicate(virStoragePoolObjList *pools,
 
     if (obj) {
         virReportError(VIR_ERR_OPERATION_FAILED,
-                       _("Storage source conflict with pool: '%s'"),
+                       _("Storage source conflict with pool: '%1$s'"),
                        obj->def->name);
         return -1;
     }
@@ -1577,8 +1582,7 @@ virStoragePoolObjLoad(virStoragePoolObjList *pools,
 
     if (!virStringMatchesNameSuffix(file, def->name, ".xml")) {
         virReportError(VIR_ERR_XML_ERROR,
-                       _("Storage pool config filename '%s' does "
-                         "not match pool name '%s'"),
+                       _("Storage pool config filename '%1$s' does not match pool name '%2$s'"),
                        path, def->name);
         return NULL;
     }
@@ -1630,8 +1634,7 @@ virStoragePoolObjLoadState(virStoragePoolObjList *pools,
 
     if (STRNEQ(name, def->name)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Storage pool state file '%s' does not match "
-                         "pool name '%s'"),
+                       _("Storage pool state file '%1$s' does not match pool name '%2$s'"),
                        stateFile, def->name);
         return NULL;
     }
@@ -1715,7 +1718,7 @@ virStoragePoolObjSaveDef(virStorageDriverState *driver,
     if (!obj->configFile) {
         if (g_mkdir_with_parents(driver->configDir, 0777) < 0) {
             virReportSystemError(errno,
-                                 _("cannot create config directory %s"),
+                                 _("cannot create config directory %1$s"),
                                  driver->configDir);
             return -1;
         }
@@ -1741,13 +1744,13 @@ virStoragePoolObjDeleteDef(virStoragePoolObj *obj)
 {
     if (!obj->configFile) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("no config file for %s"), obj->def->name);
+                       _("no config file for %1$s"), obj->def->name);
         return -1;
     }
 
     if (unlink(obj->configFile) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("cannot remove config for %s"),
+                       _("cannot remove config for %1$s"),
                        obj->def->name);
         return -1;
     }

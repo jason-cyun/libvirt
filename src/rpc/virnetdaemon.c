@@ -33,6 +33,7 @@
 #include "virnetserver.h"
 #include "virgdbus.h"
 #include "virhash.h"
+#include "virprocess.h"
 #include "virsystemd.h"
 
 #define VIR_FROM_THIS VIR_FROM_RPC
@@ -133,7 +134,7 @@ virNetDaemonNew(void)
 {
     virNetDaemon *dmn;
 #ifndef WIN32
-    struct sigaction sig_action;
+    struct sigaction sig_action = { 0 };
 #endif /* !WIN32 */
 
     if (virNetDaemonInitialize() < 0)
@@ -151,13 +152,14 @@ virNetDaemonNew(void)
     dmn->privileged = geteuid() == 0;
     dmn->autoShutdownInhibitFd = -1;
 
+    virProcessActivateMaxFiles();
+
     if (virEventRegisterDefaultImpl() < 0)
         goto error;
 
     dmn->autoShutdownTimerID = -1;
 
 #ifndef WIN32
-    memset(&sig_action, 0, sizeof(sig_action));
     sig_action.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sig_action, NULL);
 #endif /* !WIN32 */
@@ -194,7 +196,7 @@ virNetDaemonGetServer(virNetDaemon *dmn,
 
     if (!srv) {
         virReportError(VIR_ERR_NO_SERVER,
-                       _("No server named '%s'"), serverName);
+                       _("No server named '%1$s'"), serverName);
     }
 
     return srv;
@@ -324,7 +326,7 @@ virNetDaemonNewPostExecRestart(virJSONValue *object,
         size_t n = virJSONValueArraySize(servers);
         if (n > nDefServerNames) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Server count %zd greater than default name count %zu"),
+                           _("Server count %1$zd greater than default name count %2$zu"),
                            n, nDefServerNames);
             goto error;
         }
@@ -596,12 +598,10 @@ virNetDaemonSignalHandler(int sig, siginfo_t * siginfo,
 {
     int origerrno;
     int r;
-    siginfo_t tmp;
+    siginfo_t tmp = { 0 };
 
     if (SA_SIGINFO)
         tmp = *siginfo;
-    else
-        memset(&tmp, 0, sizeof(tmp));
 
     /* set the sig num in the struct */
     tmp.si_signo = sig;
@@ -646,7 +646,7 @@ virNetDaemonSignalEvent(int watch,
     }
 
     virReportError(VIR_ERR_INTERNAL_ERROR,
-                   _("Unexpected signal received: %d"), siginfo.si_signo);
+                   _("Unexpected signal received: %1$d"), siginfo.si_signo);
 
  cleanup:
     virObjectUnlock(dmn);
@@ -692,7 +692,7 @@ virNetDaemonAddSignalHandler(virNetDaemon *dmn,
                              void *opaque)
 {
     g_autofree virNetDaemonSignal *sigdata = NULL;
-    struct sigaction sig_action;
+    struct sigaction sig_action = { 0 };
     VIR_LOCK_GUARD lock = virObjectLockGuard(dmn);
 
     if (virNetDaemonSignalSetup(dmn) < 0)
@@ -706,7 +706,6 @@ virNetDaemonAddSignalHandler(virNetDaemon *dmn,
     sigdata->func = func;
     sigdata->opaque = opaque;
 
-    memset(&sig_action, 0, sizeof(sig_action));
     sig_action.sa_sigaction = virNetDaemonSignalHandler;
     sig_action.sa_flags = SA_SIGINFO;
     sigemptyset(&sig_action.sa_mask);

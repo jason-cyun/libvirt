@@ -171,7 +171,7 @@ qemuSetupImagePathCgroup(virDomainObj *vm,
     if (virDevMapperGetTargets(path, &targetPaths) < 0 &&
         errno != ENOSYS) {
         virReportSystemError(errno,
-                             _("Unable to get devmapper targets for %s"),
+                             _("Unable to get devmapper targets for %1$s"),
                              path);
         return -1;
     }
@@ -629,16 +629,24 @@ qemuSetupVideoCgroup(virDomainObj *vm,
 {
     qemuDomainObjPrivate *priv = vm->privateData;
     virDomainVideoAccelDef *accel = def->accel;
+    int ret;
 
-    if (!accel)
+    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES))
         return 0;
 
-    if (!accel->rendernode ||
-        !virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES))
-        return 0;
-
-    return qemuCgroupAllowDevicePath(vm, accel->rendernode,
-                                     VIR_CGROUP_DEVICE_RW, false);
+    if (accel && accel->rendernode) {
+        ret = qemuCgroupAllowDevicePath(vm, accel->rendernode,
+                                        VIR_CGROUP_DEVICE_RW, false);
+        if (ret != 0)
+            return ret;
+    }
+    if (def->blob == VIR_TRISTATE_SWITCH_ON) {
+        ret = qemuCgroupAllowDevicePath(vm, QEMU_DEV_UDMABUF,
+                                        VIR_CGROUP_DEVICE_RW, false);
+        if (ret != 0)
+            return ret;
+    }
+    return 0;
 }
 
 static int
@@ -857,7 +865,7 @@ qemuSetupCgroupAppid(virDomainObj *vm)
 
     if (virFileWriteStr(path, appid, 0) < 0) {
         virReportSystemError(errno,
-                             _("Unable to write '%s' to '%s'"), appid, path);
+                             _("Unable to write '%1$s' to '%2$s'"), appid, path);
         return -1;
     }
 

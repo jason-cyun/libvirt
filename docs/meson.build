@@ -17,10 +17,6 @@ docs_assets = [
   'mstile-150x150.png',
 ]
 
-docs_html_in_files = [
-  'index',
-]
-
 docs_rst_files = [
   'aclpolkit',
   'advanced-tests',
@@ -36,6 +32,7 @@ docs_rst_files = [
   'ci',
   'ci-dashboard',
   'ci-runners',
+  'clangd',
   'coding-style',
   'committer-guidelines',
   'compiling',
@@ -84,8 +81,8 @@ docs_rst_files = [
   'governance',
   'hacking',
   'hooks',
+  'index',
   'issue-handling',
-  'java',
   'libvirt-go',
   'libvirt-go-xml',
   'logging',
@@ -95,7 +92,6 @@ docs_rst_files = [
   'nss',
   'pci-addresses',
   'pci-hotplug',
-  'php',
   'platforms',
   'programming-languages',
   'python',
@@ -124,7 +120,7 @@ aclperms_gen = custom_target(
   input: access_perm_h,
   output: 'aclperms.htmlinc',
   command: [
-    meson_python_prog, python3_prog, genaclperms_prog, '@INPUT@',
+    genaclperms_prog, '@INPUT@',
   ],
   capture: true,
 )
@@ -146,7 +142,7 @@ docs_api_generated = custom_target(
     'libvirt-admin-api.xml',
   ],
   command: [
-    meson_python_prog, python3_prog, apibuild_prog,
+    apibuild_prog,
     meson.current_source_dir(),
     meson.current_build_dir(),
   ],
@@ -215,7 +211,7 @@ endif
 docs_rst2html5_gen = generator(
   rst2html5_prog,
   output: '@BASENAME@.html.in',
-  arguments: [ '--stylesheet=', '--strict', '@INPUT@' ],
+  arguments: [ '--exit-status=1', '--stylesheet=', '--strict', '@INPUT@' ],
   capture: true,
 )
 
@@ -232,13 +228,6 @@ html_xslt_gen = []
 # source - source filename relative to repository root (optional, if there is no source)
 # depends - explicit dependency on other input (optional)
 
-foreach name : docs_html_in_files
-  html_xslt_gen += {
-    'name': name,
-    'source': 'docs' / name + '.html.in',
-  }
-endforeach
-
 foreach name : docs_rst_files
   rst_file = '@0@.rst'.format(name)
   html_xslt_gen += {
@@ -250,7 +239,8 @@ endforeach
 
 html_xslt_gen += {
   'name': 'acl',
-  'source': 'docs' / 'acl.html.in',
+  'file': docs_rst2html5_gen.process('acl.rst'),
+  'source': 'docs' / 'acl.rst',
   'depends': aclperms_gen,
 }
 
@@ -265,8 +255,6 @@ hvsupport_html_in = custom_target(
   'hvsupport.html.in',
   output: 'hvsupport.html.in',
   command: [
-    meson_python_prog,
-    python3_prog,
     hvsupport_prog,
     meson.project_source_root(),
     meson.project_build_root(),
@@ -345,7 +333,11 @@ subdir('manpages')
 foreach file : docs_assets
   # This hack enables us to view the web pages
   # from within the uninstalled build tree
-  configure_file(input: file, output: file, copy: true)
+  if meson.version().version_compare('>=0.64.0')
+    fs.copyfile(file)
+  else
+    configure_file(input: file, output: file, copy: true)
+  endif
 
   install_web_files += '@0@:@1@'.format(meson.current_source_dir() / file, docs_html_dir)
 endforeach
@@ -368,4 +360,5 @@ test(
     meson.project_build_root() / 'docs'
   ],
   env: runutf8,
+  suite: 'script'
 )

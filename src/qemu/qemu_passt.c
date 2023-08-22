@@ -169,7 +169,6 @@ qemuPasstStart(virDomainObj *vm,
     g_autofree char *passtSocketName = qemuPasstCreateSocketPath(vm, net);
     g_autoptr(virCommand) cmd = NULL;
     g_autofree char *pidfile = qemuPasstCreatePidFilename(vm, net);
-    char macaddr[VIR_MAC_STRING_BUFLEN];
     size_t i;
 
     cmd = virCommandNew(PASST);
@@ -179,7 +178,6 @@ qemuPasstStart(virDomainObj *vm,
     virCommandAddArgList(cmd,
                          "--one-off",
                          "--socket", passtSocketName,
-                         "--mac-addr", virMacAddrFormat(&net->mac, macaddr),
                          "--pid", pidfile,
                          NULL);
 
@@ -221,6 +219,7 @@ qemuPasstStart(virDomainObj *vm,
     for (i = 0; i < net->nPortForwards; i++) {
         virDomainNetPortForward *pf = net->portForwards[i];
         g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
+        bool emitsep = false;
 
         if (pf->proto == VIR_DOMAIN_NET_PROTO_TCP) {
             virCommandAddArg(cmd, "--tcp-ports");
@@ -229,7 +228,7 @@ qemuPasstStart(virDomainObj *vm,
         } else {
             /* validation guarantees this will never happen */
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Invalid portForward proto value %u"), pf->proto);
+                           _("Invalid portForward proto value %1$u"), pf->proto);
             return -1;
         }
 
@@ -240,12 +239,16 @@ qemuPasstStart(virDomainObj *vm,
                 return -1;
 
             virBufferAddStr(&buf, addr);
-
-            if (pf->dev)
-                virBufferAsprintf(&buf, "%%%s", pf->dev);
-
-            virBufferAddChar(&buf, '/');
+            emitsep = true;
         }
+
+        if (pf->dev) {
+            virBufferAsprintf(&buf, "%%%s", pf->dev);
+            emitsep = true;
+        }
+
+        if (emitsep)
+            virBufferAddChar(&buf, '/');
 
         if (!pf->nRanges) {
             virBufferAddLit(&buf, "all");
@@ -281,7 +284,7 @@ qemuPasstStart(virDomainObj *vm,
     if (qemuExtDeviceLogCommand(driver, vm, cmd, "passt") < 0)
         return -1;
 
-    if (qemuSecurityCommandRun(driver, vm, cmd, -1, -1, NULL) < 0)
+    if (qemuSecurityCommandRun(driver, vm, cmd, -1, -1, true, NULL) < 0)
         goto error;
 
     return 0;

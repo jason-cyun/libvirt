@@ -14,11 +14,11 @@ x86_64-almalinux-8-container:
     NAME: almalinux-8
 
 
-x86_64-alpine-315-container:
+x86_64-alpine-317-container:
   extends: .container_job
   allow_failure: false
   variables:
-    NAME: alpine-315
+    NAME: alpine-317
 
 
 x86_64-alpine-edge-container:
@@ -46,7 +46,15 @@ x86_64-debian-11-container:
   extends: .container_job
   allow_failure: false
   variables:
+    JOB_OPTIONAL: 1
     NAME: debian-11
+
+
+x86_64-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    NAME: debian-12
 
 
 x86_64-debian-sid-container:
@@ -56,18 +64,18 @@ x86_64-debian-sid-container:
     NAME: debian-sid
 
 
-x86_64-fedora-36-container:
-  extends: .container_job
-  allow_failure: false
-  variables:
-    NAME: fedora-36
-
-
 x86_64-fedora-37-container:
   extends: .container_job
   allow_failure: false
   variables:
     NAME: fedora-37
+
+
+x86_64-fedora-38-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    NAME: fedora-38
 
 
 x86_64-fedora-rawhide-container:
@@ -77,11 +85,11 @@ x86_64-fedora-rawhide-container:
     NAME: fedora-rawhide
 
 
-x86_64-opensuse-leap-153-container:
+x86_64-opensuse-leap-15-container:
   extends: .container_job
   allow_failure: false
   variables:
-    NAME: opensuse-leap-153
+    NAME: opensuse-leap-15
 
 
 x86_64-opensuse-tumbleweed-container:
@@ -128,6 +136,7 @@ armv7l-debian-11-container:
   extends: .container_job
   allow_failure: false
   variables:
+    JOB_OPTIONAL: 1
     NAME: debian-11-cross-armv7l
 
 
@@ -169,6 +178,69 @@ s390x-debian-11-container:
   variables:
     JOB_OPTIONAL: 1
     NAME: debian-11-cross-s390x
+
+
+aarch64-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    JOB_OPTIONAL: 1
+    NAME: debian-12-cross-aarch64
+
+
+armv6l-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    JOB_OPTIONAL: 1
+    NAME: debian-12-cross-armv6l
+
+
+armv7l-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    NAME: debian-12-cross-armv7l
+
+
+i686-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    JOB_OPTIONAL: 1
+    NAME: debian-12-cross-i686
+
+
+mips64el-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    JOB_OPTIONAL: 1
+    NAME: debian-12-cross-mips64el
+
+
+mipsel-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    JOB_OPTIONAL: 1
+    NAME: debian-12-cross-mipsel
+
+
+ppc64le-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    JOB_OPTIONAL: 1
+    NAME: debian-12-cross-ppc64le
+
+
+s390x-debian-12-container:
+  extends: .container_job
+  allow_failure: false
+  variables:
+    JOB_OPTIONAL: 1
+    NAME: debian-12-cross-s390x
 
 
 aarch64-debian-sid-container:
@@ -235,19 +307,19 @@ s390x-debian-sid-container:
     NAME: debian-sid-cross-s390x
 
 
-mingw32-fedora-37-container:
+mingw32-fedora-38-container:
   extends: .container_job
   allow_failure: false
   variables:
     JOB_OPTIONAL: 1
-    NAME: fedora-37-cross-mingw32
+    NAME: fedora-38-cross-mingw32
 
 
-mingw64-fedora-37-container:
+mingw64-fedora-38-container:
   extends: .container_job
   allow_failure: false
   variables:
-    NAME: fedora-37-cross-mingw64
+    NAME: fedora-38-cross-mingw64
 
 
 mingw32-fedora-rawhide-container:

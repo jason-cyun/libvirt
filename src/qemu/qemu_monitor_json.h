@@ -401,13 +401,11 @@ qemuMonitorJSONOpenGraphics(qemuMonitor *mon,
 
 int
 qemuMonitorJSONSetBlockIoThrottle(qemuMonitor *mon,
-                                  const char *drivealias,
                                   const char *qomid,
                                   virDomainBlockIoTuneInfo *info);
 
 int
 qemuMonitorJSONGetBlockIoThrottle(qemuMonitor *mon,
-                                  const char *drivealias,
                                   const char *qdevid,
                                   virDomainBlockIoTuneInfo *reply);
 
@@ -473,11 +471,6 @@ qemuMonitorJSONGetCPUModelComparison(qemuMonitor *mon,
                                      virCPUDef *cpu_b,
                                      char **result)
     ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(3);
-
-int
-qemuMonitorJSONGetCommands(qemuMonitor *mon,
-                           char ***commands)
-    ATTRIBUTE_NONNULL(2);
 
 GHashTable *
 qemuMonitorJSONGetCommandLineOptions(qemuMonitor *mon);

@@ -30,8 +30,8 @@ include:
     - meson dist -C build --no-tests
     - if test -x /usr/bin/rpmbuild && test "$RPM" != "skip";
       then
-        rpmbuild --clean --nodeps --define "_without_mingw 1" --define "_topdir $PWD/rpmbuild/" -ta build/meson-dist/libvirt-*.tar.xz;
-        mv rpmbuild/RPMS/x86_64/ libvirt-rpms/;
+        rpmbuild --clean --nodeps --define "_without_mingw 1" -ta build/meson-dist/libvirt-*.tar.xz;
+        mv "$HOME"/rpmbuild/RPMS/x86_64/ libvirt-rpms/;
       else
         meson compile -C build;
         meson test -C build --no-suite syntax-check --print-errorlogs;
@@ -76,7 +76,7 @@ include:
   script:
     - *script_variables
     - meson setup build --werror -Dsystem=true || (cat build/meson-logs/meson-log.txt && exit 1)
-    - DESTDIR=$(pwd)/install ninja -C build install-web
+    - DESTDIR=$(pwd)/install meson compile -C build install-web
     - mv install/usr/share/doc/libvirt/html/ website
   artifacts:
     expose_as: 'Website'
@@ -110,7 +110,7 @@ website_local_env:
   script:
     - *script_variables
     - meson setup build --werror || (cat build/meson-logs/meson-log.txt && exit 1)
-    - ninja -C build libvirt-pot-dep
+    - meson compile -C build libvirt-pot-dep
     - meson test -C build --suite syntax-check --no-rebuild --print-errorlogs
 
 codestyle_prebuilt_env:
@@ -118,18 +118,18 @@ codestyle_prebuilt_env:
     - .codestyle_job
     - .gitlab_native_build_job_prebuilt_env
   needs:
-    - job: x86_64-opensuse-leap-153-container
+    - job: x86_64-opensuse-leap-15-container
       optional: true
   variables:
-    NAME: opensuse-leap-153
+    NAME: opensuse-leap-15
 
 codestyle_local_env:
   extends:
     - .codestyle_job
     - .gitlab_native_build_job_local_env
   variables:
-    IMAGE: registry.opensuse.org/opensuse/leap:15.3
-    NAME: opensuse-leap-153
+    IMAGE: registry.opensuse.org/opensuse/leap:15.4
+    NAME: opensuse-leap-15
 
 
 # This artifact published by this job is downloaded to push to Weblate
@@ -153,8 +153,8 @@ potfile:
     - *script_variables
   script:
     - meson setup build --werror || (cat build/meson-logs/meson-log.txt && exit 1)
-    - ninja -C build libvirt-pot-dep
-    - ninja -C build libvirt-pot
+    - meson compile -C build libvirt-pot-dep
+    - meson compile -C build libvirt-pot
     - cp po/libvirt.pot libvirt.pot
   artifacts:
     expose_as: 'Potfile'

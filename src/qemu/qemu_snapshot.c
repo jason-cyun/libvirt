@@ -84,7 +84,7 @@ qemuSnapObjFromName(virDomainObj *vm,
     snap = virDomainSnapshotFindByName(vm->snapshots, name);
     if (!snap)
         virReportError(VIR_ERR_NO_DOMAIN_SNAPSHOT,
-                       _("no domain snapshot with matching name '%s'"),
+                       _("no domain snapshot with matching name '%1$s'"),
                        name);
 
     return snap;
@@ -326,6 +326,10 @@ qemuSnapshotCreateActiveInternal(virQEMUDriver *driver,
         event = virDomainEventLifecycleNewFromObj(vm,
                                          VIR_DOMAIN_EVENT_SUSPENDED,
                                          VIR_DOMAIN_EVENT_SUSPENDED_API_ERROR);
+        if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED) {
+            virDomainObjSetState(vm, VIR_DOMAIN_PAUSED,
+                                 VIR_DOMAIN_PAUSED_API_ERROR);
+        }
         if (virGetLastErrorCode() == VIR_ERR_OK) {
             virReportError(VIR_ERR_OPERATION_FAILED, "%s",
                            _("resuming after snapshot failed"));
@@ -347,8 +351,8 @@ qemuSnapshotPrepareDiskShared(virDomainSnapshotDiskDef *snapdisk,
 
     if (!qemuBlockStorageSourceSupportsConcurrentAccess(snapdisk->src)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("shared access for disk '%s' requires use of "
-                         "supported storage format"), domdisk->dst);
+                       _("shared access for disk '%1$s' requires use of supported storage format"),
+                       domdisk->dst);
         return -1;
     }
 
@@ -386,8 +390,7 @@ qemuSnapshotPrepareDiskExternalInactive(virDomainSnapshotDiskDef *snapdisk,
         case VIR_STORAGE_NET_PROTOCOL_NFS:
         case VIR_STORAGE_NET_PROTOCOL_LAST:
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("external inactive snapshots are not supported on "
-                             "'network' disks using '%s' protocol"),
+                           _("external inactive snapshots are not supported on 'network' disks using '%1$s' protocol"),
                            virStorageNetProtocolTypeToString(domdisk->src->protocol));
             return -1;
         }
@@ -400,8 +403,8 @@ qemuSnapshotPrepareDiskExternalInactive(virDomainSnapshotDiskDef *snapdisk,
     case VIR_STORAGE_TYPE_NONE:
     case VIR_STORAGE_TYPE_LAST:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("external inactive snapshots are not supported on "
-                         "'%s' disks"), virStorageTypeToString(domDiskType));
+                       _("external inactive snapshots are not supported on '%1$s' disks"),
+                       virStorageTypeToString(domDiskType));
         return -1;
     }
 
@@ -418,8 +421,8 @@ qemuSnapshotPrepareDiskExternalInactive(virDomainSnapshotDiskDef *snapdisk,
     case VIR_STORAGE_TYPE_NONE:
     case VIR_STORAGE_TYPE_LAST:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("external inactive snapshots are not supported on "
-                         "'%s' disks"), virStorageTypeToString(snapDiskType));
+                       _("external inactive snapshots are not supported on '%1$s' disks"),
+                       virStorageTypeToString(snapDiskType));
         return -1;
     }
 
@@ -462,8 +465,8 @@ qemuSnapshotPrepareDiskExternalActive(virDomainSnapshotDiskDef *snapdisk,
     case VIR_STORAGE_TYPE_NONE:
     case VIR_STORAGE_TYPE_LAST:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("external active snapshots are not supported on "
-                         "'%s' disks"), virStorageTypeToString(actualType));
+                       _("external active snapshots are not supported on '%1$s' disks"),
+                       virStorageTypeToString(actualType));
         return -1;
     }
 
@@ -510,21 +513,21 @@ qemuSnapshotPrepareDiskExternal(virDomainDiskDef *disk,
         if (rc < 0) {
             if (err != ENOENT) {
                 virReportSystemError(err,
-                                     _("unable to stat for disk %s: %s"),
+                                     _("unable to stat for disk %1$s: %2$s"),
                                      snapdisk->name, snapdisk->src->path);
                 return -1;
             }
 
             if (reuse) {
                 virReportSystemError(err,
-                                     _("missing existing file for disk %s: %s"),
+                                     _("missing existing file for disk %1$s: %2$s"),
                                      snapdisk->name, snapdisk->src->path);
                 return -1;
             }
 
             if (snapdisk->src->type == VIR_STORAGE_TYPE_BLOCK) {
                 virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
-                               _("block device snapshot target '%s' doesn't exist"),
+                               _("block device snapshot target '%1$s' doesn't exist"),
                                snapdisk->src->path);
                 return -1;
             }
@@ -533,7 +536,7 @@ qemuSnapshotPrepareDiskExternal(virDomainDiskDef *disk,
             if ((snapdisk->src->type == VIR_STORAGE_TYPE_BLOCK && !S_ISBLK(st.st_mode)) ||
                 (snapdisk->src->type == VIR_STORAGE_TYPE_FILE && !S_ISREG(st.st_mode))) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("mismatch between configured type for snapshot disk '%s' and the type of existing file '%s'"),
+                               _("mismatch between configured type for snapshot disk '%1$s' and the type of existing file '%2$s'"),
                                snapdisk->name, snapdisk->src->path);
                 return -1;
             }
@@ -542,7 +545,7 @@ qemuSnapshotPrepareDiskExternal(virDomainDiskDef *disk,
                 snapdisk->src->type == VIR_STORAGE_TYPE_FILE &&
                 st.st_size > 0) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("external snapshot file for disk %s already exists and is not a block device: %s"),
+                               _("external snapshot file for disk %1$s already exists and is not a block device: %2$s"),
                                snapdisk->name, snapdisk->src->path);
                 return -1;
             }
@@ -591,8 +594,7 @@ qemuSnapshotPrepareDiskInternal(virDomainDiskDef *disk,
         case VIR_STORAGE_NET_PROTOCOL_NFS:
         case VIR_STORAGE_NET_PROTOCOL_LAST:
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("internal inactive snapshots are not supported on "
-                             "'network' disks using '%s' protocol"),
+                           _("internal inactive snapshots are not supported on 'network' disks using '%1$s' protocol"),
                            virStorageNetProtocolTypeToString(disk->src->protocol));
             return -1;
         }
@@ -605,8 +607,8 @@ qemuSnapshotPrepareDiskInternal(virDomainDiskDef *disk,
     case VIR_STORAGE_TYPE_NONE:
     case VIR_STORAGE_TYPE_LAST:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("internal inactive snapshots are not supported on "
-                         "'%s' disks"), virStorageTypeToString(actualType));
+                       _("internal inactive snapshots are not supported on '%1$s' disks"),
+                       virStorageTypeToString(actualType));
         return -1;
     }
 
@@ -641,8 +643,7 @@ qemuSnapshotPrepare(virDomainObj *vm,
 
             if (def->state == VIR_DOMAIN_SNAPSHOT_DISK_SNAPSHOT && active) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("active qemu domains require external disk "
-                                 "snapshots; disk %s requested internal"),
+                               _("active qemu domains require external disk snapshots; disk %1$s requested internal"),
                                disk->name);
                 return -1;
             }
@@ -654,8 +655,7 @@ qemuSnapshotPrepare(virDomainObj *vm,
             if (dom_disk->src->format > 0 &&
                 dom_disk->src->format != VIR_STORAGE_FILE_QCOW2) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("internal snapshot for disk %s unsupported "
-                                 "for storage type %s"),
+                               _("internal snapshot for disk %1$s unsupported for storage type %2$s"),
                                disk->name,
                                virStorageFileFormatTypeToString(dom_disk->src->format));
                 return -1;
@@ -668,8 +668,7 @@ qemuSnapshotPrepare(virDomainObj *vm,
             } else if (disk->src->format != VIR_STORAGE_FILE_QCOW2 &&
                        disk->src->format != VIR_STORAGE_FILE_QED) {
                 virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                               _("external snapshot format for disk %s "
-                                 "is unsupported: %s"),
+                               _("external snapshot format for disk %1$s is unsupported: %2$s"),
                                disk->name,
                                virStorageFileFormatTypeToString(disk->src->format));
                 return -1;
@@ -750,11 +749,17 @@ qemuSnapshotPrepare(virDomainObj *vm,
      * - if the variable store is raw, the snapshot fails
      * - allowing a qcow2 image as the varstore would make it eligible to receive
      *   the vmstate dump, which would make it huge
-     * - offline snapshot would not snapshot the varstore at all
      *
-     * Avoid the issues by forbidding internal snapshot with pflash completely.
+     * While offline snapshot would not snapshot the varstore at all, this used
+     * to work as auto-detected UEFI firmware was not present in the offline
+     * definition. Since in most cases the varstore doesn't change it's usually
+     * not an issue. Allow this as there are existing users of this case.
+     *
+     * Avoid the issues by forbidding internal snapshot with pflash if the
+     * VM is active.
      */
-    if (found_internal &&
+    if (active &&
+        found_internal &&
         virDomainDefHasOldStyleUEFI(vm->def)) {
         virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
                        _("internal snapshots of a VM with pflash based "
@@ -1030,7 +1035,7 @@ qemuSnapshotDiskPrepareOne(qemuSnapshotDiskContext *snapctxt,
             /* pre-create the image file so that we can label it before handing it to qemu */
             if (dd->src->type != VIR_STORAGE_TYPE_BLOCK) {
                 if (virStorageSourceCreate(dd->src) < 0) {
-                    virReportSystemError(errno, _("failed to create image file '%s'"),
+                    virReportSystemError(errno, _("failed to create image file '%1$s'"),
                                          NULLSTR(dd->src->path));
                     return -1;
                 }
@@ -1112,7 +1117,7 @@ qemuSnapshotGetTransientDiskDef(virDomainDiskDef *domdisk,
 
     if (virFileExists(snapdisk->src->path)) {
         virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
-                       _("Overlay file '%s' for transient disk '%s' already exists"),
+                       _("Overlay file '%1$s' for transient disk '%2$s' already exists"),
                        snapdisk->src->path, domdisk->dst);
         return NULL;
     }
@@ -1398,6 +1403,10 @@ qemuSnapshotCreateActiveExternal(virQEMUDriver *driver,
                                          VIR_DOMAIN_EVENT_SUSPENDED,
                                          VIR_DOMAIN_EVENT_SUSPENDED_API_ERROR);
         virObjectEventStateQueue(driver->domainEventState, event);
+        if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED) {
+            virDomainObjSetState(vm, VIR_DOMAIN_PAUSED,
+                                 VIR_DOMAIN_PAUSED_API_ERROR);
+        }
         if (virGetLastErrorCode() == VIR_ERR_OK) {
             virReportError(VIR_ERR_OPERATION_FAILED, "%s",
                            _("resuming after snapshot failed"));
@@ -1461,16 +1470,14 @@ qemuSnapshotCreateXMLValidateDef(virDomainObj *vm,
     if (!(flags & VIR_DOMAIN_SNAPSHOT_CREATE_NO_METADATA)) {
         if (strchr(def->parent.name, '/')) {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("invalid snapshot name '%s': "
-                             "name can't contain '/'"),
+                           _("invalid snapshot name '%1$s': name can't contain '/'"),
                            def->parent.name);
             return -1;
         }
 
         if (def->parent.name[0] == '.') {
             virReportError(VIR_ERR_XML_DETAIL,
-                           _("invalid snapshot name '%s': "
-                             "name can't start with '.'"),
+                           _("invalid snapshot name '%1$s': name can't start with '.'"),
                            def->parent.name);
             return -1;
         }
@@ -1499,7 +1506,7 @@ qemuSnapshotCreateXMLValidateDef(virDomainObj *vm,
 
     case VIR_DOMAIN_SNAPSHOT_DISK_SNAPSHOT:
         if (!redefine) {
-            virReportError(VIR_ERR_INTERNAL_ERROR, _("Invalid domain state %s"),
+            virReportError(VIR_ERR_INTERNAL_ERROR, _("Invalid domain state %1$s"),
                            virDomainSnapshotStateTypeToString(state));
             return -1;
         }
@@ -1515,7 +1522,7 @@ qemuSnapshotCreateXMLValidateDef(virDomainObj *vm,
     case VIR_DOMAIN_SNAPSHOT_NOSTATE:
     case VIR_DOMAIN_SNAPSHOT_BLOCKED: /* invalid state, unused in qemu */
     case VIR_DOMAIN_SNAPSHOT_LAST:
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("Invalid domain state %s"),
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("Invalid domain state %1$s"),
                        virDomainSnapshotStateTypeToString(state));
         return -1;
     }
@@ -1595,7 +1602,7 @@ qemuSnapshotCreateWriteMetadata(virDomainObj *vm,
                                         driver->xmlopt,
                                         cfg->snapshotDir) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unable to save metadata for snapshot %s"),
+                       _("unable to save metadata for snapshot %1$s"),
                        snap->def->name);
         return -1;
     }
@@ -1821,7 +1828,7 @@ qemuSnapshotRevertValidate(virDomainObj *vm,
 
     if (!snap->def->dom) {
         virReportError(VIR_ERR_SNAPSHOT_REVERT_RISKY,
-                       _("snapshot '%s' lacks domain '%s' rollback info"),
+                       _("snapshot '%1$s' lacks domain '%2$s' rollback info"),
                        snap->def->name, vm->def->name);
         return -1;
     }
@@ -2219,8 +2226,7 @@ qemuSnapshotRevert(virDomainObj *vm,
     case VIR_DOMAIN_SNAPSHOT_BLOCKED:
     case VIR_DOMAIN_SNAPSHOT_LAST:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Invalid target domain state '%s'. Refusing "
-                         "snapshot reversion"),
+                       _("Invalid target domain state '%1$s'. Refusing snapshot reversion"),
                        virDomainSnapshotStateTypeToString(snapdef->state));
         goto endjob;
     }
@@ -2314,12 +2320,12 @@ qemuSnapshotDeleteExternalPrepare(virDomainObj *vm,
         g_autofree qemuSnapshotDeleteExternalData *data = NULL;
         virDomainSnapshotDiskDef *snapDisk = &(snapdef->disks[i]);
 
-        if (snapDisk->snapshot == VIR_DOMAIN_SNAPSHOT_LOCATION_NO)
+        if (snapDisk->snapshot != VIR_DOMAIN_SNAPSHOT_LOCATION_EXTERNAL)
             continue;
 
         if (snapDisk->snapshotDeleteInProgress) {
             virReportError(VIR_ERR_OPERATION_INVALID,
-                           _("snapshot disk '%s' was target of not completed snapshot delete"),
+                           _("snapshot disk '%1$s' was target of not completed snapshot delete"),
                            snapDisk->name);
             return -1;
         }
@@ -2331,28 +2337,28 @@ qemuSnapshotDeleteExternalPrepare(virDomainObj *vm,
         if (!data->domDisk)
             return -1;
 
-        data->diskSrc = virStorageSourceChainLookupBySource(data->domDisk->src,
-                                                            data->snapDisk->src,
-                                                            &data->prevDiskSrc);
-        if (!data->diskSrc)
-            return -1;
-
-        if (!virStorageSourceIsSameLocation(data->diskSrc, data->snapDisk->src)) {
-            virReportError(VIR_ERR_OPERATION_FAILED, "%s",
-                           _("VM disk source and snapshot disk source are not the same"));
-            return -1;
-        }
-
         data->parentDomDisk = virDomainDiskByTarget(snapdef->parent.dom,
                                                     data->snapDisk->name);
         if (!data->parentDomDisk) {
             virReportError(VIR_ERR_OPERATION_FAILED,
-                           _("failed to find disk '%s' in snapshot VM XML"),
+                           _("failed to find disk '%1$s' in snapshot VM XML"),
                            snapDisk->name);
             return -1;
         }
 
         if (virDomainObjIsActive(vm)) {
+            data->diskSrc = virStorageSourceChainLookupBySource(data->domDisk->src,
+                                                                data->snapDisk->src,
+                                                                &data->prevDiskSrc);
+            if (!data->diskSrc)
+                return -1;
+
+            if (!virStorageSourceIsSameLocation(data->diskSrc, data->snapDisk->src)) {
+                virReportError(VIR_ERR_OPERATION_FAILED, "%s",
+                               _("VM disk source and snapshot disk source are not the same"));
+                return -1;
+            }
+
             data->parentDiskSrc = data->diskSrc->backingStore;
             if (!virStorageSourceIsBacking(data->parentDiskSrc)) {
                 virReportError(VIR_ERR_OPERATION_FAILED, "%s",
@@ -2456,8 +2462,8 @@ qemuSnapshotUpdateDisksSingle(virDomainMomentObj *snap,
 {
     virDomainDiskDef *disk = NULL;
 
-    if (!(disk = qemuDomainDiskByName(def, snapDisk->name)))
-        return -1;
+    if (!(disk = virDomainDiskByName(def, snapDisk->name, true)))
+        return 0;
 
     if (virDomainSnapshotIsExternal(snap)) {
         virDomainDiskDef *parentDisk = NULL;
@@ -2727,7 +2733,7 @@ qemuSnapshotDiscardExternal(virDomainObj *vm,
 
         if (data->job->state == QEMU_BLOCKJOB_STATE_FAILED) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("block commit failed while deleting disk '%s' snapshot: '%s'"),
+                           _("block commit failed while deleting disk '%1$s' snapshot: '%2$s'"),
                            data->snapDisk->name, data->job->errmsg);
             goto error;
         }
@@ -2749,7 +2755,7 @@ qemuSnapshotDiscardExternal(virDomainObj *vm,
 
         if (data->job->state == QEMU_BLOCKJOB_STATE_FAILED) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("finishing block job failed while deleting disk '%s' snapshot: '%s'"),
+                           _("finishing block job failed while deleting disk '%1$s' snapshot: '%2$s'"),
                            data->snapDisk->name, data->job->errmsg);
             goto error;
         }
@@ -3079,7 +3085,7 @@ qemuSnapshotDeleteValidate(virDomainObj *vm,
 
             if (!virStorageSourceIsSameLocation(vmdisk->src, disk->src)) {
                 virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
-                               _("disk image '%s' for internal snapshot '%s' is not the same as disk image currently used by VM"),
+                               _("disk image '%1$s' for internal snapshot '%2$s' is not the same as disk image currently used by VM"),
                                snapDisk->name, snap->def->name);
                 return -1;
             }

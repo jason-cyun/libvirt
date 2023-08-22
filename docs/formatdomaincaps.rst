@@ -187,6 +187,7 @@ CPUs <formatdomain.html#cpu-model-and-topology>`__.
        <mode name='host-model' supported='yes'>
          <model fallback='allow'>Broadwell</model>
          <vendor>Intel</vendor>
+         <maxphysaddr mode="passthrough" limit="39"/>
          <feature policy='disable' name='aes'/>
          <feature policy='require' name='vmx'/>
        </mode>
@@ -218,7 +219,10 @@ more details about it:
    indicated by the ``fallback`` attribute of the ``model`` sub element:
    ``allow`` means not all specifics were accounted for and thus the CPU a guest
    will see may be different; ``forbid`` indicates that the CPU a guest will see
-   should match this CPU definition.
+   should match this CPU definition. The optional ``maxphysaddr`` element
+   reports physical address size of the host CPU if this value is available and
+   applicable for the requested domain type. This is useful for computing
+   baseline CPU definition which should be compatible with several hosts.
 ``custom``
    The ``mode`` element contains a list of supported CPU models, each described
    by a dedicated ``model`` element. The ``usable`` attribute specifies whether
@@ -643,6 +647,7 @@ capabilities. All features occur as children of the main ``features`` element.
        <genid supported='yes'/>
        <backingStoreInput supported='yes'/>
        <backup supported='yes'/>
+       <async-teardown supported='yes'/>
        <sev>
          <cbitpos>47</cbitpos>
          <reduced-phys-bits>1</reduced-phys-bits>
@@ -706,6 +711,11 @@ features. (``virDomainBackupBegin``, ``virDomainCheckpointCreateXML`` etc). The
 presence of the ``backup`` element even if ``supported='no'`` implies that the
 ``VIR_DOMAIN_UNDEFINE_CHECKPOINTS_METADATA`` flag for ``virDomainUndefine`` is
 supported.
+
+async-teardown
+^^^^^^^^^^^^^^
+
+Reports whether the asynchronous teardown feature can be enabled.
 
 s390-pv capability
 ^^^^^^^^^^^^^^^^^^

@@ -1,6 +1,6 @@
 project(
   'libvirt', 'c',
-  version: '9.2.0',
+  version: '9.7.0',
   license: 'LGPLv2+',
   meson_version: '>= 0.56.0',
   default_options: [
@@ -11,6 +11,9 @@ project(
   ],
 )
 
+if meson.version().version_compare('>=0.64.0')
+  fs = import('fs')
+endif
 
 # figure out if we are building from git
 
@@ -19,6 +22,11 @@ git = run_command('test', '-d', '.git', check: false).returncode() == 0
 if git and not get_option('no_git')
   run_command('git', 'submodule', 'update', '--init', check: true)
 endif
+
+
+# detect operating system
+
+os_release = run_command('grep', '-E', '^ID(_LIKE)*=', '/etc/os-release', check: false).stdout()
 
 
 # prepare build configuration data
@@ -71,6 +79,20 @@ endif
 runstatedir = get_option('runstatedir')
 if runstatedir == ''
   runstatedir = localstatedir / 'run'
+endif
+
+initconfdir = get_option('initconfdir')
+if initconfdir == ''
+  if (os_release.contains('alpine') or
+      os_release.contains('arch') or
+      os_release.contains('gentoo'))
+    initconfdir = sysconfdir / 'conf.d'
+  # Ubuntu has ID_LIKE=debian
+  elif os_release.contains('debian')
+    initconfdir = sysconfdir / 'default'
+  else
+    initconfdir = sysconfdir / 'sysconfig'
+  endif
 endif
 
 bindir = prefix / get_option('bindir')
@@ -404,6 +426,26 @@ cc_flags += [
   '-Wwrite-strings',
 ]
 
+if cc.get_id() == 'clang'
+    # Stop CLang from doing inter-procedural analysis of calls
+    # between functions in the same compilation unit. Such an
+    # optimization has been know to break the test suite by
+    # making assumptions that a return value is a constant.
+    # This makes it impossible to mock certain functions with
+    # replacement definitions via LD_PRELOAD that have different
+    # semantics.
+    #
+    # This is a bit of a big hammer, but alternatives don't work:
+    #
+    #  - 'weak' attribute - weak symbols get dropped from
+    #    when the .a libs are combined into the .so
+    #    see commit 407a281a8e2b6c5078ba1148535663ea64fd9314
+    #
+    #  - 'noipa' attribute - only available with GCC currently
+    #    https://reviews.llvm.org/D101011
+    cc_flags += [ '-fsemantic-interposition' ]
+endif
+
 supported_cc_flags = []
 if get_option('warning_level') == '2'
   supported_cc_flags = cc.get_supported_arguments(cc_flags)
@@ -514,12 +556,7 @@ elif host_machine.system() == 'darwin'
   # macOS libraries don't support symbol versioning
   version_script_flags = ''
 else
-  test_file = '@0@/src/libvirt_qemu.syms'.format(meson.project_source_root())
-  if cc.has_link_argument('-Wl,--version-script=@0@'.format(test_file))
-    version_script_flags = '-Wl,--version-script='
-  else
-    error('No supported version script link argument found.')
-  endif
+  version_script_flags = '-Wl,--version-script='
 endif
 
 libvirt_flat_namespace = []
@@ -618,14 +655,14 @@ if host_machine.system() == 'freebsd'
 endif
 
 foreach name : headers
-  if cc.has_header(name)
+  if cc.check_header(name)
     conf.set('WITH_@0@'.format(name.underscorify().to_upper()), 1)
   endif
 endforeach
 
 # check for kernel header required by src/util/virnetdevbridge.c
 if host_machine.system() == 'linux'
-  if not cc.has_header('linux/sockios.h')
+  if not cc.check_header('linux/sockios.h')
     error('You must install kernel-headers in order to compile libvirt with QEMU or LXC support')
   endif
 endif
@@ -727,11 +764,15 @@ conf.set('SIZEOF_LONG', cc.sizeof('long'))
 
 # Where we look for daemons and admin binaries during configure
 
-libvirt_sbin_path = [
-  '/sbin',
-  '/usr/sbin',
-  '/usr/local/sbin',
-]
+libvirt_sbin_path = []
+
+if host_machine.system() != 'windows'
+  libvirt_sbin_path += [
+    '/sbin',
+    '/usr/sbin',
+    '/usr/local/sbin',
+  ]
+endif
 
 
 # required programs check
@@ -830,8 +871,7 @@ endif
 
 # generic build dependencies
 
-# FIXME rewrite to use dependency()
-acl_dep = cc.find_library('acl', required: false)
+acl_dep = dependency('libacl', required: false)
 if acl_dep.found()
   conf.set('WITH_LIBACL', 1)
 endif
@@ -839,6 +879,9 @@ endif
 apparmor_dep = dependency('libapparmor', required: get_option('apparmor'))
 if apparmor_dep.found()
   conf.set('WITH_APPARMOR', 1)
+  if apparmor_dep.version().version_compare('>=3.0.0')
+    conf.set('WITH_APPARMOR_3', 1)
+  endif
   conf.set_quoted('APPARMOR_DIR', sysconfdir / 'apparmor.d')
   conf.set_quoted('APPARMOR_PROFILES_PATH', '/sys/kernel/security/apparmor/profiles')
 endif
@@ -898,7 +941,7 @@ endif
 dlopen_use = host_machine.system() != 'windows'
 dlopen_dep = cc.find_library('dl', required: dlopen_use)
 if dlopen_dep.found()
-  if not cc.has_header('dlfcn.h')
+  if not cc.check_header('dlfcn.h')
     error('Unable to find dlfcn.h')
   endif
   conf.set('WITH_DLFCN_H', 1)
@@ -1030,7 +1073,7 @@ if not get_option('nls').disabled()
     error('gettext() is required to build libvirt')
   endif
 
-  if cc.has_header('libintl.h')
+  if cc.check_header('libintl.h')
     conf.set('WITH_LIBINTL_H', 1)
   elif get_option('nls').enabled()
     error('libintl.h is required to build libvirt')
@@ -1056,8 +1099,7 @@ else
   intl_dep = dependency('', required: false)
 endif
 
-# FIXME rewrite to use dependency() once we can use 2.0.14
-numactl_dep = cc.find_library('numa', required: get_option('numactl'))
+numactl_dep = dependency('numa', required: get_option('numactl'))
 if numactl_dep.found()
   conf.set('WITH_NUMACTL', 1)
   if cc.has_function('numa_set_preferred_many', dependencies: numactl_dep)
@@ -1137,6 +1179,8 @@ if not get_option('sanlock').disabled()
       conf.set('WITH_SANLOCK_STRERROR', 1)
     endif
   endif
+else
+  sanlock_dep = dependency('', required: false)
 endif
 
 sasl_version = '2.1.26'
@@ -1253,7 +1297,7 @@ if wireshark_dep.found()
 
   # Wireshark is installing ws_version.h since v2.9.0, but some distributions
   # are not shipping it.
-  if cc.has_header('wireshark/ws_version.h')
+  if cc.check_header('wireshark/ws_version.h')
     conf.set('WITH_WS_VERSION', 1)
   endif
 endif
@@ -1448,7 +1492,7 @@ if not get_option('driver_libxl').disabled() and conf.has('WITH_LIBVIRTD')
     endif
 
     # If building with libxl, use the libxl utility header and lib too
-    if cc.has_header('libxlutil.h')
+    if cc.check_header('libxlutil.h')
       conf.set('WITH_LIBXLUTIL_H', 1)
     endif
     xl_util_dep = dependency('xlutil')
@@ -1591,21 +1635,18 @@ if not get_option('driver_qemu').disabled()
         qemu_user = 'root'
         qemu_group = 'wheel'
       else
-        os_release = run_command('grep', '-E', '^ID(_LIKE)*=', '/etc/os-release', check: false).stdout()
-        if os_release.contains('arch')
-          qemu_user = 'nobody'
-          qemu_group = 'nobody'
         # RHEL and CentOS both have ID_LIKE=fedora, SLES has ID_LIKE=suse
-        elif (os_release.contains('fedora') or
-              os_release.contains('gentoo') or
-              os_release.contains('suse'))
+        if (os_release.contains('fedora') or
+            os_release.contains('gentoo') or
+            os_release.contains('suse'))
           qemu_user = 'qemu'
           qemu_group = 'qemu'
         # Ubuntu has ID_LIKE=debian so we need to handle it first
         elif os_release.contains('ubuntu')
           qemu_user = 'libvirt-qemu'
           qemu_group = 'kvm'
-        elif os_release.contains('debian')
+        elif (os_release.contains('arch') or
+              os_release.contains('debian'))
           qemu_user = 'libvirt-qemu'
           qemu_group = 'libvirt-qemu'
         else
@@ -1616,30 +1657,6 @@ if not get_option('driver_qemu').disabled()
     endif
     conf.set_quoted('QEMU_USER', qemu_user)
     conf.set_quoted('QEMU_GROUP', qemu_group)
-
-    qemu_bridge_prog = find_program(
-      'qemu-bridge-helper',
-      dirs: [ '/usr/libexec', '/usr/lib/qemu', '/usr/lib' ],
-      required: false
-    )
-    if qemu_bridge_prog.found()
-      qemu_bridge_path = qemu_bridge_prog.full_path()
-    else
-      qemu_bridge_path = '/usr/libexec/qemu-bridge-helper'
-    endif
-    conf.set_quoted('QEMU_BRIDGE_HELPER', qemu_bridge_path)
-
-    qemu_pr_prog = find_program(
-      'qemu-pr-helper',
-      dirs: [ '/usr/bin', '/usr/libexec' ],
-      required: false
-    )
-    if qemu_pr_prog.found()
-      qemu_pr_path = qemu_pr_prog.full_path()
-    else
-      qemu_pr_path = '/usr/bin/qemu-pr-helper'
-    endif
-    conf.set_quoted('QEMU_PR_HELPER', qemu_pr_path)
 
     qemu_slirp_prog = find_program(
       'slirp-helper',
@@ -1652,18 +1669,6 @@ if not get_option('driver_qemu').disabled()
       qemu_slirp_path = '/usr/bin/slirp-helper'
     endif
     conf.set_quoted('QEMU_SLIRP_HELPER', qemu_slirp_path)
-
-    qemu_dbus_daemon_prog = find_program(
-      'dbus-daemon',
-      dirs: [ '/usr/bin', '/usr/libexec' ],
-      required: false
-    )
-    if qemu_dbus_daemon_prog.found()
-      qemu_dbus_daemon_path = qemu_dbus_daemon_prog.full_path()
-    else
-      qemu_dbus_daemon_path = '/usr/bin/dbus-daemon'
-    endif
-    conf.set_quoted('QEMU_DBUS_DAEMON', qemu_dbus_daemon_path)
   endif
 endif
 
@@ -1733,7 +1738,7 @@ if conf.has('WITH_LIBVIRTD')
       fs_enable = false
     endif
 
-    if fs_enable and not cc.has_header('mntent.h')
+    if fs_enable and not cc.check_header('mntent.h')
       if get_option('storage_fs').enabled()
         error('<mntent.h> is required for the FS storage driver')
       else
@@ -1940,7 +1945,7 @@ if not get_option('nss').disabled()
     endif
   endif
 
-  if use_nss and not cc.has_header('nss.h')
+  if use_nss and not cc.check_header('nss.h')
     if get_option('nss').enabled()
       error('Can\'t build nss plugin without nss.h')
     else
@@ -2009,6 +2014,7 @@ runutf8 = [ 'LC_ALL=', 'LANG=C', 'LC_CTYPE=en_US.UTF-8' ]
 
 top_inc_dir = include_directories('.')
 
+keycodemapdb = subproject('keycodemapdb')
 
 # include remaining subdirs
 
@@ -2020,8 +2026,18 @@ subdir('src')
 
 subdir('tools')
 
-build_tests = not get_option('tests').disabled()
-if build_tests
+build_tests = [ not get_option('tests').disabled() ]
+if build_tests[0] and \
+   cc.get_id() == 'clang' and \
+   not supported_cc_flags.contains('-fsemantic-interposition') \
+   and get_option('optimization') != '0'
+   # If CLang doesn't support -fsemantic-interposition then our
+   # mocking doesn't work. The best we can do is to not run the
+   # test suite.
+   build_tests = [ false, '!!! Forcibly disabling tests because CLang lacks -fsemantic-interposition. Update CLang or disable optimization !!!' ]
+endif
+
+if build_tests[0]
   subdir('tests')
 endif
 
@@ -2199,7 +2215,7 @@ libs_summary = {
   'libssh': libssh_dep.found(),
   'libssh2': libssh2_dep.found(),
   'libutil': libutil_dep.found(),
-  'netcf': conf.has('WITH_NETCF'),
+  'netcf': netcf_dep.found(),
   'NLS': have_gnu_gettext_tools,
   'numactl': numactl_dep.found(),
   'openwsman': openwsman_dep.found(),
@@ -2208,7 +2224,7 @@ libs_summary = {
   'polkit': conf.has('WITH_POLKIT'),
   'rbd': rbd_dep.found(),
   'readline': readline_dep.found(),
-  'sanlock': conf.has('WITH_SANLOCK'),
+  'sanlock': sanlock_dep.found(),
   'sasl': sasl_dep.found(),
   'selinux': selinux_dep.found(),
   'udev': udev_dep.found(),

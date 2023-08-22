@@ -4,14 +4,19 @@
   <memory unit='KiB'>1048576</memory>
   <currentMemory unit='KiB'>1048576</currentMemory>
   <vcpu placement='static'>1</vcpu>
-  <os>
+  <os firmware='efi'>
     <type arch='x86_64' machine='pc-q35-4.0'>hvm</type>
-    <loader readonly='yes' type='pflash' format='qcow2'>/usr/share/OVMF/OVMF_CODE.qcow2</loader>
-    <nvram template='/usr/share/OVMF/OVMF_VARS.qcow2' format='qcow2'>/var/lib/libvirt/qemu/nvram/guest_VARS.qcow2</nvram>
+    <firmware>
+      <feature enabled='yes' name='enrolled-keys'/>
+      <feature enabled='yes' name='secure-boot'/>
+    </firmware>
+    <loader readonly='yes' secure='yes' type='pflash' format='qcow2'>/usr/share/edk2/ovmf/OVMF_CODE_4M.secboot.qcow2</loader>
+    <nvram template='/usr/share/edk2/ovmf/OVMF_VARS_4M.secboot.qcow2' format='qcow2'>/var/lib/libvirt/qemu/nvram/guest_VARS.qcow2</nvram>
     <boot dev='hd'/>
   </os>
   <features>
     <acpi/>
+    <smm state='on'/>
   </features>
   <cpu mode='custom' match='exact' check='none'>
     <model fallback='forbid'>qemu64</model>

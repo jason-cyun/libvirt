@@ -77,6 +77,11 @@ xmlNodePtr
 virXMLNodeGetSubelement(xmlNodePtr node,
                         const char *name);
 
+size_t
+virXMLNodeGetSubelementList(xmlNodePtr node,
+                            const char *name,
+                            xmlNodePtr **list);
+
 xmlNodePtr
 virXPathNode(const char *xpath,
              xmlXPathContextPtr ctxt);
@@ -130,6 +135,15 @@ virXMLPropUInt(xmlNodePtr node,
                int base,
                virXMLPropFlags flags,
                unsigned int *result)
+    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(5);
+
+int
+virXMLPropUIntDefault(xmlNodePtr node,
+                      const char *name,
+                      int base,
+                      virXMLPropFlags flags,
+                      unsigned int *result,
+                      unsigned int defaultResult)
     ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(5);
 
 int

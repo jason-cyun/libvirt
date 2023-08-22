@@ -229,12 +229,11 @@ int virNetServerProgramUnknownError(virNetServerClient *client,
                                     virNetMessage *msg,
                                     struct virNetMessageHeader *req)
 {
-    virNetMessageError rerr;
+    virNetMessageError rerr = { 0 };
 
     virReportError(VIR_ERR_RPC,
-                   _("Cannot find program %d version %d"), req->prog, req->vers);
+                   _("Cannot find program %1$d version %2$d"), req->prog, req->vers);
 
-    memset(&rerr, 0, sizeof(rerr));
     return virNetServerProgramSendError(req->prog,
                                         req->vers,
                                         client,
@@ -273,9 +272,7 @@ int virNetServerProgramDispatch(virNetServerProgram *prog,
                                 virNetMessage *msg)
 {
     int ret = -1;
-    virNetMessageError rerr;
-
-    memset(&rerr, 0, sizeof(rerr));
+    virNetMessageError rerr = { 0 };
 
     VIR_DEBUG("prog=%d ver=%d type=%d status=%d serial=%u proc=%d",
               msg->header.prog, msg->header.vers, msg->header.type,
@@ -284,14 +281,14 @@ int virNetServerProgramDispatch(virNetServerProgram *prog,
     /* Check version, etc. */
     if (msg->header.prog != prog->program) {
         virReportError(VIR_ERR_RPC,
-                       _("program mismatch (actual %x, expected %x)"),
+                       _("program mismatch (actual %1$x, expected %2$x)"),
                        msg->header.prog, prog->program);
         goto error;
     }
 
     if (msg->header.vers != prog->version) {
         virReportError(VIR_ERR_RPC,
-                       _("version mismatch (actual %x, expected %x)"),
+                       _("version mismatch (actual %1$x, expected %2$x)"),
                        msg->header.vers, prog->version);
         goto error;
     }
@@ -323,7 +320,7 @@ int virNetServerProgramDispatch(virNetServerProgram *prog,
     case VIR_NET_STREAM_HOLE:
     default:
         virReportError(VIR_ERR_RPC,
-                       _("Unexpected message type %u"),
+                       _("Unexpected message type %1$u"),
                        msg->header.type);
         goto error;
     }
@@ -369,15 +366,13 @@ virNetServerProgramDispatchCall(virNetServerProgram *prog,
     g_autofree char *ret = NULL;
     int rv = -1;
     virNetServerProgramProc *dispatcher = NULL;
-    virNetMessageError rerr;
+    virNetMessageError rerr = { 0 };
     size_t i;
     g_autoptr(virIdentity) identity = NULL;
 
-    memset(&rerr, 0, sizeof(rerr));
-
     if (msg->header.status != VIR_NET_OK) {
         virReportError(VIR_ERR_RPC,
-                       _("Unexpected message status %u"),
+                       _("Unexpected message status %1$u"),
                        msg->header.status);
         goto error;
     }
@@ -386,7 +381,7 @@ virNetServerProgramDispatchCall(virNetServerProgram *prog,
 
     if (!dispatcher) {
         virReportError(VIR_ERR_RPC,
-                       _("unknown procedure: %d"),
+                       _("unknown procedure: %1$d"),
                        msg->header.proc);
         goto error;
     }
@@ -533,11 +528,10 @@ int virNetServerProgramSendStreamHole(virNetServerProgram *prog,
                                       long long length,
                                       unsigned int flags)
 {
-    virNetStreamHole data;
+    virNetStreamHole data = { 0 };
 
     VIR_DEBUG("client=%p msg=%p length=%lld", client, msg, length);
 
-    memset(&data, 0, sizeof(data));
     data.length = length;
     data.flags = flags;
 

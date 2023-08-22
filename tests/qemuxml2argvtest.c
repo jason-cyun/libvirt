@@ -31,8 +31,6 @@
 # define VIR_FROM_THIS VIR_FROM_QEMU
 
 static virQEMUDriver driver;
-static virCaps *linuxCaps;
-static virCaps *macOSCaps;
 
 static unsigned char *
 fakeSecretGetValue(virSecretPtr obj G_GNUC_UNUSED,
@@ -406,34 +404,6 @@ testCompareXMLToArgvCreateArgs(virQEMUDriver *drv,
             disk->src->hostcdrom = true;
     }
 
-    for (i = 0; i < vm->def->nhostdevs; i++) {
-        virDomainHostdevDef *hostdev = vm->def->hostdevs[i];
-
-        if (hostdev->mode == VIR_DOMAIN_HOSTDEV_MODE_SUBSYS &&
-            hostdev->source.subsys.type == VIR_DOMAIN_HOSTDEV_SUBSYS_TYPE_PCI &&
-            hostdev->source.subsys.u.pci.backend == VIR_DOMAIN_HOSTDEV_PCI_BACKEND_DEFAULT) {
-            hostdev->source.subsys.u.pci.backend = VIR_DOMAIN_HOSTDEV_PCI_BACKEND_VFIO;
-        }
-
-        if (virHostdevIsSCSIDevice(hostdev)) {
-            virDomainHostdevSubsysSCSI *scsisrc = &hostdev->source.subsys.u.scsi;
-
-            switch ((virDomainHostdevSCSIProtocolType) scsisrc->protocol) {
-            case VIR_DOMAIN_HOSTDEV_SCSI_PROTOCOL_TYPE_NONE:
-                scsisrc->u.host.src->path = g_strdup("/dev/sg0");
-                break;
-
-            case VIR_DOMAIN_HOSTDEV_SCSI_PROTOCOL_TYPE_ISCSI:
-                break;
-
-            case VIR_DOMAIN_HOSTDEV_SCSI_PROTOCOL_TYPE_LAST:
-            default:
-                virReportEnumRangeError(virDomainHostdevSCSIProtocolType, scsisrc->protocol);
-                return NULL;
-            }
-        }
-    }
-
     if (vm->def->vsock) {
         virDomainVsockDef *vsock = vm->def->vsock;
         qemuDomainVsockPrivate *vsockPriv =
@@ -551,32 +521,14 @@ testCompareXMLToArgvValidateSchema(virCommand *cmd,
                                    struct testQemuInfo *info)
 {
     g_auto(GStrv) args = NULL;
-    GHashTable *schema = NULL;
 
-    /* comment out with line comment to enable schema checking for non _CAPS tests
-    if (!info->schemafile)
-        info->schemafile =  testQemuGetLatestCapsForArch(virArchToString(info->arch), "replies");
-    // */
-
-    if (info->schemafile) {
-        /* lookup and insert into cache if not found */
-        if (!g_hash_table_lookup_extended(info->conf->qapiSchemaCache,
-                                          info->schemafile,
-                                          NULL, (void **) &schema)) {
-            schema = testQEMUSchemaLoad(info->schemafile);
-            g_hash_table_insert(info->conf->qapiSchemaCache,
-                                g_strdup(info->schemafile),
-                                schema);
-        }
-    }
-
-    if (!schema)
+    if (!info->qmpSchema)
         return 0;
 
     if (virCommandGetArgList(cmd, &args) < 0)
         return -1;
 
-    if (testCompareXMLToArgvValidateSchemaCommand(args, schema) < 0)
+    if (testCompareXMLToArgvValidateSchemaCommand(args, info->qmpSchema) < 0)
         return -1;
 
     return 0;
@@ -594,7 +546,7 @@ testCompareXMLToArgv(const void *data)
     unsigned int parseFlags = info->parseFlags;
     int ret = -1;
     virDomainObj *vm = NULL;
-    virDomainChrSourceDef monitor_chr;
+    virDomainChrSourceDef monitor_chr = { 0 };
     g_autoptr(virConnect) conn = NULL;
     virError *err = NULL;
     g_autofree char *log = NULL;
@@ -605,17 +557,9 @@ testCompareXMLToArgv(const void *data)
     g_autofree char *archstr = NULL;
     virArch arch = VIR_ARCH_NONE;
     g_autoptr(virIdentity) sysident = virIdentityGetSystem();
-    int rc;
-
-    memset(&monitor_chr, 0, sizeof(monitor_chr));
 
     if (testQemuInfoInitArgs((struct testQemuInfo *) info) < 0)
         goto cleanup;
-
-    if (info->args.hostOS == HOST_OS_MACOS)
-        driver.caps = macOSCaps;
-    else
-        driver.caps = linuxCaps;
 
     if (info->arch != VIR_ARCH_NONE && info->arch != VIR_ARCH_X86_64)
         qemuTestSetHostArch(&driver, info->arch);
@@ -664,11 +608,7 @@ testCompareXMLToArgv(const void *data)
 
     virFileCacheClear(driver.qemuCapsCache);
 
-    if (info->args.hostOS == HOST_OS_MACOS)
-        rc = qemuTestCapsCacheInsertMacOS(driver.qemuCapsCache, info->qemuCaps);
-    else
-        rc = qemuTestCapsCacheInsert(driver.qemuCapsCache, info->qemuCaps);
-    if (rc < 0)
+    if (qemuTestCapsCacheInsert(driver.qemuCapsCache, info->qemuCaps) < 0)
         goto cleanup;
 
     if (info->migrateFrom &&
@@ -823,13 +763,8 @@ mymain(void)
     if (qemuTestDriverInit(&driver) < 0)
         return EXIT_FAILURE;
 
-    /* By default, the driver gets a virCaps instance that's suitable for
-     * tests that expect Linux as the host OS. We create another one for
-     * macOS and keep around pointers to both: this allows us to later
-     * pick the appropriate one for each test case */
-    linuxCaps = driver.caps;
-    macOSCaps = testQemuCapsInitMacOS();
-
+    virFileWrapperAddPrefix("/sys/devices/system",
+                            abs_srcdir "/vircaps2xmldata/linux-basic/system");
     virFileWrapperAddPrefix(SYSCONFDIR "/qemu/firmware",
                             abs_srcdir "/qemufirmwaredata/etc/qemu/firmware");
     virFileWrapperAddPrefix(PREFIX "/share/qemu/firmware",
@@ -888,11 +823,19 @@ mymain(void)
 # define DO_TEST_CAPS_ARCH_LATEST(name, arch) \
     DO_TEST_CAPS_ARCH_LATEST_FULL(name, arch, ARG_END)
 
+# define DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE(name, arch) \
+    DO_TEST_CAPS_ARCH_LATEST_FULL(name, arch, \
+                                  ARG_PARSEFLAGS, VIR_DOMAIN_DEF_PARSE_ABI_UPDATE, \
+                                  ARG_END)
+
 # define DO_TEST_CAPS_ARCH_VER(name, arch, ver) \
     DO_TEST_CAPS_ARCH_VER_FULL(name, arch, ver, ARG_END)
 
 # define DO_TEST_CAPS_LATEST(name) \
     DO_TEST_CAPS_ARCH_LATEST(name, "x86_64")
+
+# define DO_TEST_CAPS_LATEST_ABI_UPDATE(name) \
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE(name, "x86_64")
 
 # define DO_TEST_CAPS_VER(name, ver) \
     DO_TEST_CAPS_ARCH_VER(name, "x86_64", ver)
@@ -913,12 +856,20 @@ mymain(void)
     DO_TEST_CAPS_ARCH_LATEST_FULL(name, arch, \
                                   ARG_FLAGS, FLAG_EXPECT_FAILURE)
 
+# define DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE_FAILURE(name, arch) \
+    DO_TEST_CAPS_ARCH_LATEST_FULL(name, arch, \
+                                  ARG_PARSEFLAGS, VIR_DOMAIN_DEF_PARSE_ABI_UPDATE, \
+                                  ARG_FLAGS, FLAG_EXPECT_FAILURE)
+
 # define DO_TEST_CAPS_ARCH_VER_FAILURE(name, arch, ver) \
     DO_TEST_CAPS_ARCH_VER_FULL(name, arch, ver, \
                                ARG_FLAGS, FLAG_EXPECT_FAILURE)
 
 # define DO_TEST_CAPS_LATEST_FAILURE(name) \
     DO_TEST_CAPS_ARCH_LATEST_FAILURE(name, "x86_64")
+
+# define DO_TEST_CAPS_LATEST_ABI_UPDATE_FAILURE(name) \
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE_FAILURE(name, "x86_64")
 
 # define DO_TEST_CAPS_VER_FAILURE(name, ver) \
     DO_TEST_CAPS_ARCH_VER_FAILURE(name, "x86_64", ver)
@@ -927,12 +878,20 @@ mymain(void)
     DO_TEST_CAPS_ARCH_LATEST_FULL(name, arch, \
                                   ARG_FLAGS, FLAG_EXPECT_PARSE_ERROR)
 
+# define DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE_PARSE_ERROR(name, arch) \
+    DO_TEST_CAPS_ARCH_LATEST_FULL(name, arch, \
+                                  ARG_PARSEFLAGS, VIR_DOMAIN_DEF_PARSE_ABI_UPDATE, \
+                                  ARG_FLAGS, FLAG_EXPECT_PARSE_ERROR)
+
 # define DO_TEST_CAPS_ARCH_VER_PARSE_ERROR(name, arch, ver) \
     DO_TEST_CAPS_ARCH_VER_FULL(name, arch, ver, \
                                ARG_FLAGS, FLAG_EXPECT_PARSE_ERROR)
 
 # define DO_TEST_CAPS_LATEST_PARSE_ERROR(name) \
     DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR(name, "x86_64")
+
+# define DO_TEST_CAPS_LATEST_ABI_UPDATE_PARSE_ERROR(name) \
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE_PARSE_ERROR(name, "x86_64")
 
 # define DO_TEST_CAPS_VER_PARSE_ERROR(name, ver) \
     DO_TEST_CAPS_ARCH_VER_PARSE_ERROR(name, "x86_64", ver)
@@ -945,14 +904,13 @@ mymain(void)
 # define DO_TEST_NOCAPS(name) \
     DO_TEST_FULL(name, "",  ARG_END)
 
-# define DO_TEST_GIC(name, gic, ...) \
+/* GIC tests use 'latest' capabilities */
+# define DO_TEST_GIC(name, gic) \
     DO_TEST_FULL(name, "", \
                  ARG_GIC, gic, \
-                 ARG_QEMU_CAPS, __VA_ARGS__, QEMU_CAPS_LAST, ARG_END)
-# define DO_TEST_MACOS(name, ...) \
-    DO_TEST_FULL(name, "", \
-                 ARG_HOST_OS, HOST_OS_MACOS, \
-                 ARG_QEMU_CAPS, __VA_ARGS__, QEMU_CAPS_LAST, ARG_END)
+                 ARG_CAPS_ARCH, "aarch64", \
+                 ARG_CAPS_VER, "latest", \
+                 ARG_END)
 
 # define DO_TEST_FAILURE(name, ...) \
     DO_TEST_FULL(name, "", \
@@ -1054,19 +1012,19 @@ mymain(void)
     /* Validate auto-creation of <audio> for legacy compat */
     g_setenv("QEMU_AUDIO_DRV", "sdl", TRUE);
     g_setenv("SDL_AUDIODRIVER", "esd", TRUE);
-    DO_TEST("audio-default-sdl", QEMU_CAPS_DEVICE_CIRRUS_VGA, QEMU_CAPS_SDL);
+    DO_TEST_CAPS_VER("audio-default-sdl", "4.2.0");
     DO_TEST_CAPS_LATEST("audio-default-sdl");
     g_unsetenv("QEMU_AUDIO_DRV");
     g_unsetenv("SDL_AUDIODRIVER");
 
     g_setenv("QEMU_AUDIO_DRV", "alsa", TRUE);
     driver.config->vncAllowHostAudio = true;
-    DO_TEST("audio-default-vnc",  QEMU_CAPS_VNC, QEMU_CAPS_DEVICE_CIRRUS_VGA);
+    DO_TEST_CAPS_VER("audio-default-vnc", "4.2.0");
     DO_TEST_CAPS_LATEST("audio-default-vnc");
     driver.config->vncAllowHostAudio = false;
     g_unsetenv("QEMU_AUDIO_DRV");
 
-    DO_TEST("audio-default-spice",  QEMU_CAPS_SPICE, QEMU_CAPS_DEVICE_CIRRUS_VGA);
+    DO_TEST_CAPS_VER("audio-default-spice", "4.2.0");
     DO_TEST_CAPS_LATEST("audio-default-spice");
 
     g_setenv("QEMU_AUDIO_DRV", "alsa", TRUE);
@@ -1082,13 +1040,24 @@ mymain(void)
     DO_TEST_CAPS_LATEST("firmware-manual-bios-stateless");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-manual-bios-not-stateless");
     DO_TEST_CAPS_LATEST("firmware-manual-efi");
-    DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-manual-efi-no-path");
-    DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-manual-efi-features");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-features");
+    DO_TEST_CAPS_ARCH_LATEST_FULL("firmware-manual-efi-features", "x86_64",
+                                  ARG_FLAGS, FLAG_EXPECT_PARSE_ERROR,
+                                  ARG_PARSEFLAGS, VIR_DOMAIN_DEF_PARSE_ABI_UPDATE,
+                                  ARG_END);
     DO_TEST_CAPS_LATEST("firmware-manual-efi-rw");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-rw-legacy-paths");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-rw-modern-paths");
     DO_TEST_CAPS_LATEST("firmware-manual-efi-rw-implicit");
-    DO_TEST_CAPS_LATEST("firmware-manual-efi-secure");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-loader-secure");
+    DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-manual-efi-loader-no-path");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-loader-path-nonstandard");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-secboot");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-no-enrolled-keys");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-no-secboot");
     DO_TEST_CAPS_LATEST("firmware-manual-efi-stateless");
     DO_TEST_CAPS_LATEST("firmware-manual-efi-nvram-template");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-nvram-template-nonstandard");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-manual-efi-nvram-template-stateless");
     DO_TEST_CAPS_LATEST("firmware-manual-efi-nvram-network-iscsi");
     DO_TEST_CAPS_LATEST("firmware-manual-efi-nvram-network-nbd");
@@ -1105,16 +1074,26 @@ mymain(void)
     DO_TEST_CAPS_ARCH_LATEST("firmware-manual-noefi-noacpi-aarch64", "aarch64");
     DO_TEST_CAPS_LATEST("firmware-manual-noefi-noacpi-q35");
 
+    /* Ensure that legacy firmware paths keep working */
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-secboot-legacy-paths");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-no-enrolled-keys-legacy-paths");
+    DO_TEST_CAPS_LATEST("firmware-manual-efi-no-secboot-legacy-paths");
+    DO_TEST_CAPS_ARCH_LATEST("firmware-manual-efi-aarch64-legacy-paths", "aarch64");
+
     DO_TEST_CAPS_LATEST("firmware-auto-bios");
     DO_TEST_CAPS_LATEST("firmware-auto-bios-stateless");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-auto-bios-not-stateless");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-auto-bios-nvram");
     DO_TEST_CAPS_LATEST("firmware-auto-efi");
+    DO_TEST_CAPS_LATEST_ABI_UPDATE("firmware-auto-efi-abi-update");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-stateless");
-    DO_TEST_CAPS_LATEST("firmware-auto-efi-nvram");
+    DO_TEST_CAPS_LATEST_FAILURE("firmware-auto-efi-rw");
+    DO_TEST_CAPS_LATEST_ABI_UPDATE_PARSE_ERROR("firmware-auto-efi-rw-abi-update");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-loader-secure");
-    DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-auto-efi-loader-insecure");
-    DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-auto-efi-loader-path");
+    DO_TEST_CAPS_LATEST_ABI_UPDATE("firmware-auto-efi-loader-secure-abi-update");
+    DO_TEST_CAPS_LATEST("firmware-auto-efi-loader-insecure");
+    DO_TEST_CAPS_LATEST("firmware-auto-efi-loader-path");
+    DO_TEST_CAPS_LATEST_FAILURE("firmware-auto-efi-loader-path-nonstandard");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-secboot");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-no-secboot");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-enrolled-keys");
@@ -1122,15 +1101,21 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-auto-efi-enrolled-keys-no-secboot");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-smm-off");
     DO_TEST_CAPS_ARCH_LATEST("firmware-auto-efi-aarch64", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE("firmware-auto-efi-abi-update-aarch64", "aarch64");
+    DO_TEST_CAPS_LATEST("firmware-auto-efi-nvram-path");
+    DO_TEST_CAPS_LATEST("firmware-auto-efi-nvram-template");
+    DO_TEST_CAPS_LATEST_FAILURE("firmware-auto-efi-nvram-template-nonstandard");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-nvram-file");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-nvram-network-nbd");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-nvram-network-iscsi");
 
     DO_TEST_CAPS_LATEST("firmware-auto-efi-format-loader-qcow2");
+    DO_TEST_CAPS_LATEST("firmware-auto-efi-format-loader-qcow2-nvram-path");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-format-nvram-qcow2");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-format-nvram-qcow2-path");
     DO_TEST_CAPS_LATEST("firmware-auto-efi-format-nvram-qcow2-network-nbd");
     DO_TEST_CAPS_ARCH_LATEST("firmware-auto-efi-format-loader-raw", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE("firmware-auto-efi-format-loader-raw-abi-update", "aarch64");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("firmware-auto-efi-format-mismatch");
 
     DO_TEST_NOCAPS("clock-utc");
@@ -1247,6 +1232,10 @@ mymain(void)
     DO_TEST_CAPS_LATEST("disk-network-rbd");
     DO_TEST_CAPS_VER_PARSE_ERROR("disk-network-rbd-encryption", "6.0.0");
     DO_TEST_CAPS_LATEST("disk-network-rbd-encryption");
+    DO_TEST_CAPS_VER_PARSE_ERROR("disk-network-rbd-encryption-layering", "7.2.0");
+    DO_TEST_CAPS_LATEST("disk-network-rbd-encryption-layering");
+    DO_TEST_CAPS_VER_PARSE_ERROR("disk-network-rbd-encryption-luks-any", "7.2.0");
+    DO_TEST_CAPS_LATEST("disk-network-rbd-encryption-luks-any");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("disk-encryption-wrong");
     DO_TEST_CAPS_LATEST("disk-network-rbd-no-colon");
     /* qemu-6.0 is the last qemu version supporting sheepdog */
@@ -1273,7 +1262,7 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PARSE_ERROR("disk-device-lun-type-invalid");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("disk-attaching-partition-nosupport");
     DO_TEST_CAPS_LATEST("disk-usb-device");
-    DO_TEST_CAPS_LATEST("disk-usb-device-removable");
+    DO_TEST_CAPS_LATEST("disk-device-removable");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("disk-usb-pci");
     DO_TEST_CAPS_LATEST("disk-scsi");
     DO_TEST_CAPS_LATEST("disk-scsi-device-auto");
@@ -1291,6 +1280,7 @@ mymain(void)
     DO_TEST_CAPS_LATEST("disk-copy_on_read");
     DO_TEST_CAPS_LATEST("disk-discard");
     DO_TEST_CAPS_LATEST("disk-detect-zeroes");
+    DO_TEST_CAPS_LATEST("disk-discard_no_unref");
     DO_TEST_CAPS_LATEST("disk-snapshot");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("disk-same-targets");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("disk-missing-target-invalid");
@@ -1431,6 +1421,7 @@ mymain(void)
     DO_TEST_NOCAPS("net-user-addr");
     DO_TEST_CAPS_LATEST("net-user-passt");
     DO_TEST_CAPS_VER("net-user-passt", "7.2.0");
+    DO_TEST_CAPS_LATEST_PARSE_ERROR("net-user-slirp-portforward");
     DO_TEST_NOCAPS("net-virtio");
     DO_TEST_NOCAPS("net-virtio-device");
     DO_TEST_NOCAPS("net-virtio-disable-offloads");
@@ -1725,19 +1716,19 @@ mymain(void)
     DO_TEST("balloon-device-deflate",
             QEMU_CAPS_VIRTIO_BALLOON_AUTODEFLATE);
     DO_TEST_CAPS_ARCH_LATEST("balloon-ccw-deflate", "s390x");
-    DO_TEST("balloon-mmio-deflate",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO,
-            QEMU_CAPS_VIRTIO_BALLOON_AUTODEFLATE);
+    DO_TEST_FULL("balloon-mmio-deflate", ".aarch64-latest",
+                 ARG_CAPS_ARCH, "aarch64",
+                 ARG_CAPS_VER, "latest",
+                 ARG_QEMU_CAPS_DEL,
+                 QEMU_CAPS_OBJECT_GPEX, QEMU_CAPS_DEVICE_PCI_BRIDGE,
+                 QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE, QEMU_CAPS_DEVICE_IOH3420,
+                 QEMU_CAPS_LAST, ARG_END);
     DO_TEST("balloon-device-deflate-off",
             QEMU_CAPS_VIRTIO_BALLOON_AUTODEFLATE);
     DO_TEST_NOCAPS("balloon-device-auto");
     DO_TEST_NOCAPS("balloon-device-period");
-    DO_TEST_NOCAPS("sound");
-    DO_TEST("sound-device",
-            QEMU_CAPS_HDA_DUPLEX, QEMU_CAPS_HDA_MICRO,
-            QEMU_CAPS_HDA_OUTPUT,
-            QEMU_CAPS_DEVICE_ICH9_INTEL_HDA,
-            QEMU_CAPS_OBJECT_USB_AUDIO);
+    DO_TEST_CAPS_VER("sound-device", "4.2.0");
+    DO_TEST_CAPS_LATEST("sound-device");
     DO_TEST_CAPS_LATEST("fs9p");
     DO_TEST_CAPS_ARCH_LATEST("fs9p-ccw", "s390x");
 
@@ -1772,31 +1763,16 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PARSE_ERROR("hostdev-mdev-display-ramfb-multiple");
     DO_TEST_PARSE_ERROR("hostdev-vfio-zpci-wrong-arch",
                         QEMU_CAPS_DEVICE_VFIO_PCI);
-    DO_TEST("hostdev-vfio-zpci",
-            QEMU_CAPS_DEVICE_VFIO_PCI,
-            QEMU_CAPS_DEVICE_ZPCI);
-    DO_TEST_PARSE_ERROR("hostdev-vfio-zpci-autogenerate-fids",
-                        QEMU_CAPS_DEVICE_VFIO_PCI);
+    DO_TEST_CAPS_ARCH_LATEST("hostdev-vfio-zpci", "s390x");
     DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-vfio-zpci-invalid-uid-valid-fid", "s390x");
     DO_TEST_CAPS_ARCH_LATEST("hostdev-vfio-zpci-multidomain-many", "s390x");
     DO_TEST_CAPS_ARCH_LATEST("hostdev-vfio-zpci-autogenerate", "s390x");
     DO_TEST_CAPS_ARCH_LATEST("hostdev-vfio-zpci-autogenerate-uids", "s390x");
     DO_TEST_CAPS_ARCH_LATEST("hostdev-vfio-zpci-autogenerate-fids", "s390x");
-    DO_TEST_PARSE_ERROR("hostdev-vfio-zpci-uid-set-zero",
-                        QEMU_CAPS_DEVICE_VFIO_PCI,
-                        QEMU_CAPS_DEVICE_ZPCI);
-    DO_TEST("hostdev-vfio-zpci-boundaries",
-            QEMU_CAPS_DEVICE_VFIO_PCI,
-            QEMU_CAPS_DEVICE_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_ZPCI);
-    DO_TEST_PARSE_ERROR("hostdev-vfio-zpci",
-                        QEMU_CAPS_DEVICE_VFIO_PCI);
-    DO_TEST_PARSE_ERROR("hostdev-vfio-zpci-duplicate",
-                        QEMU_CAPS_DEVICE_VFIO_PCI,
-                        QEMU_CAPS_DEVICE_ZPCI);
-    DO_TEST_PARSE_ERROR("hostdev-vfio-zpci-set-zero",
-                        QEMU_CAPS_DEVICE_VFIO_PCI,
-                        QEMU_CAPS_DEVICE_ZPCI);
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-vfio-zpci-uid-set-zero", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("hostdev-vfio-zpci-boundaries", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-vfio-zpci-duplicate", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-vfio-zpci-set-zero", "s390x");
     DO_TEST_CAPS_ARCH_LATEST("hostdev-vfio-zpci-ccw-memballoon", "s390x");
 
     DO_TEST("pci-rom", QEMU_CAPS_DEVICE_VFIO_PCI);
@@ -1804,18 +1780,12 @@ mymain(void)
     DO_TEST_NOCAPS("pci-rom-disabled-invalid");
 
     DO_TEST_CAPS_ARCH_LATEST("hostdev-subsys-mdev-vfio-ccw", "s390x");
-    DO_TEST_CAPS_ARCH_LATEST("hostdev-subsys-mdev-vfio-ccw-boot",
-                             "s390x");
-    DO_TEST_PARSE_ERROR_NOCAPS("hostdev-subsys-mdev-vfio-ccw");
-    DO_TEST_PARSE_ERROR("hostdev-subsys-mdev-vfio-ccw-duplicate-address",
-            QEMU_CAPS_DEVICE_VFIO_CCW);
-    DO_TEST_PARSE_ERROR("hostdev-subsys-mdev-vfio-ccw-invalid-address",
-            QEMU_CAPS_DEVICE_VFIO_CCW);
+    DO_TEST_CAPS_ARCH_LATEST("hostdev-subsys-mdev-vfio-ccw-boot", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-subsys-mdev-vfio-ccw-duplicate-address", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-subsys-mdev-vfio-ccw-invalid-address", "s390x");
 
-    DO_TEST_CAPS_ARCH_LATEST("hostdev-subsys-mdev-vfio-ap",
-                             "s390x");
-    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-subsys-mdev-vfio-ap-boot-fail",
-                                         "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("hostdev-subsys-mdev-vfio-ap", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("hostdev-subsys-mdev-vfio-ap-boot-fail", "s390x");
 
     DO_TEST_FULL("restore-v2", "",
                  ARG_MIGRATE_FROM, "exec:cat",
@@ -1901,11 +1871,8 @@ mymain(void)
     DO_TEST("cpu-host-passthrough", QEMU_CAPS_KVM);
     DO_TEST_FAILURE("cpu-qemu-host-passthrough", QEMU_CAPS_KVM);
 
-    qemuTestSetHostArch(&driver, VIR_ARCH_S390X);
-    DO_TEST("cpu-s390-zEC12", QEMU_CAPS_KVM);
-    DO_TEST("cpu-s390-features", QEMU_CAPS_KVM, QEMU_CAPS_QUERY_CPU_MODEL_EXPANSION);
-    DO_TEST_FAILURE("cpu-s390-features", QEMU_CAPS_KVM);
-    qemuTestSetHostArch(&driver, VIR_ARCH_NONE);
+    DO_TEST_CAPS_ARCH_LATEST("cpu-s390-zEC12", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("cpu-s390-features", "s390x");
 
     qemuTestSetHostCPU(&driver, driver.hostarch, qemuTestGetCPUDef(QEMU_CPU_DEF_HASWELL));
     DO_TEST("cpu-Haswell", QEMU_CAPS_KVM);
@@ -1937,6 +1904,7 @@ mymain(void)
     DO_TEST_CAPS_LATEST("numatune-memnode");
     DO_TEST_PARSE_ERROR_NOCAPS("numatune-memnode-invalid-mode");
     DO_TEST_CAPS_LATEST("numatune-memnode-restrictive-mode");
+    DO_TEST_CAPS_LATEST_PARSE_ERROR("numatune-memnode-restrictive-mode-err-mixed");
     DO_TEST_CAPS_LATEST("numatune-system-memory");
 
     DO_TEST_NOCAPS("numatune-memnode-no-memory");
@@ -1944,6 +1912,7 @@ mymain(void)
     DO_TEST_NOCAPS("numatune-distances");
     DO_TEST_NOCAPS("numatune-no-vcpu");
     DO_TEST_CAPS_LATEST("numatune-hmat");
+    DO_TEST_CAPS_LATEST("numatune-hmat-none");
 
     DO_TEST_NOCAPS("numatune-auto-nodeset-invalid");
     DO_TEST_NOCAPS("numatune-auto-prefer");
@@ -1980,6 +1949,7 @@ mymain(void)
     DO_TEST_NOCAPS("seclabel-dac-none");
     DO_TEST_PARSE_ERROR_NOCAPS("seclabel-multiple");
     DO_TEST_PARSE_ERROR_NOCAPS("seclabel-device-duplicates");
+    DO_TEST_PARSE_ERROR_NOCAPS("seclabel-device-relabel-invalid");
 
     DO_TEST_CAPS_LATEST_PPC64("pseries-basic");
     DO_TEST_CAPS_LATEST_PPC64("pseries-vio");
@@ -1989,7 +1959,7 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PPC64("pseries-nvram");
     DO_TEST_CAPS_LATEST_PPC64("pseries-usb-kbd");
     DO_TEST_CAPS_LATEST_PPC64("pseries-cpu-exact");
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-no-parallel");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("pseries-no-parallel", "ppc64");
     DO_TEST_CAPS_LATEST_PPC64("pseries-cpu-le");
 
     qemuTestSetHostArch(&driver, VIR_ARCH_PPC64);
@@ -2015,9 +1985,9 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PPC64("pseries-phb-numa-node");
     DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("pseries-default-phb-numa-node",
                                          "ppc64");
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-phb-invalid-target-index-1");
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-phb-invalid-target-index-2");
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-phb-invalid-target-index-3");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("pseries-phb-invalid-target-index-1", "ppc64");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("pseries-phb-invalid-target-index-2", "ppc64");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("pseries-phb-invalid-target-index-3", "ppc64");
 
     DO_TEST_CAPS_LATEST_PPC64("pseries-many-devices");
     DO_TEST_CAPS_LATEST_PPC64("pseries-many-buses-1");
@@ -2026,22 +1996,8 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PPC64("pseries-hostdevs-2");
     DO_TEST_CAPS_LATEST_PPC64("pseries-hostdevs-3");
 
+    DO_TEST_CAPS_ARCH_VER("pseries-features", "ppc64", "4.2.0");
     DO_TEST_CAPS_LATEST_PPC64("pseries-features");
-
-    /* parse error: no QEMU_CAPS_MACHINE_PSERIES_CAP_HPT_MAX_PAGE_SIZE */
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-hpt-pagesize");
-    /* parse error: no QEMU_CAPS_MACHINE_PSERIES_CAP_HTM */
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-htm");
-    /* parse error: no QEMU_CAPS_MACHINE_PSERIES_CAP_NESTED_HV */
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-nested-hv");
-    /* parse error: no QEMU_CAPS_MACHINE_PSERIES_CAP_CCF_ASSIST */
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-ccf");
-    /* parse error: no QEMU_CAPS_MACHINE_PSERIES_CFPC */
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-cfpc");
-    /* parse error: no QEMU_CAPS_MACHINE_PSERIES_SBBC */
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-sbbc");
-    /* parse error: no QEMU_CAPS_MACHINE_PSERIES_IBS */
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-ibs");
 
     DO_TEST_PARSE_ERROR_NOCAPS("pseries-features-invalid-machine");
 
@@ -2053,30 +2009,16 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PPC64("pseries-console-native");
     DO_TEST_CAPS_LATEST_PPC64("pseries-console-virtio");
     DO_TEST_PARSE_ERROR_NOCAPS("pseries-serial-invalid-machine");
-    DO_TEST_PARSE_ERROR_NOCAPS("pseries-spaprvio-invalid");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("pseries-spaprvio-invalid", "ppc64");
 
-    DO_TEST("mach-virt-serial-native",
-            QEMU_CAPS_DEVICE_PL011);
-    DO_TEST("mach-virt-serial+console-native",
-            QEMU_CAPS_DEVICE_PL011);
-    DO_TEST("mach-virt-serial-compat",
-            QEMU_CAPS_DEVICE_PL011);
-    DO_TEST("mach-virt-serial-pci",
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_DEVICE_PCIE_ROOT_PORT,
-            QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_PCI_SERIAL);
-    DO_TEST("mach-virt-serial-usb",
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_DEVICE_PCIE_ROOT_PORT,
-            QEMU_CAPS_DEVICE_QEMU_XHCI,
-            QEMU_CAPS_DEVICE_USB_SERIAL);
-    DO_TEST("mach-virt-console-native",
-            QEMU_CAPS_DEVICE_PL011);
-    DO_TEST("mach-virt-console-virtio",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO);
-    DO_TEST_PARSE_ERROR_NOCAPS("mach-virt-serial-invalid-machine");
+    DO_TEST_CAPS_ARCH_LATEST("mach-virt-serial-native", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("mach-virt-serial+console-native", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("mach-virt-serial-compat", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("mach-virt-serial-pci", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("mach-virt-serial-usb", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("mach-virt-console-native", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("mach-virt-console-virtio", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("mach-virt-serial-invalid-machine", "x86_64");
 
     DO_TEST("video-device-pciaddr-default",
             QEMU_CAPS_KVM,
@@ -2123,6 +2065,8 @@ mymain(void)
     DO_TEST("video-virtio-vga",
             QEMU_CAPS_DEVICE_VIRTIO_GPU,
             QEMU_CAPS_DEVICE_VIRTIO_VGA);
+    DO_TEST_CAPS_LATEST("video-virtio-blob-on");
+    DO_TEST_CAPS_LATEST("video-virtio-blob-off");
     DO_TEST_CAPS_LATEST("video-virtio-vga-gpu-gl");
     DO_TEST_CAPS_LATEST("video-bochs-display-device");
     DO_TEST_CAPS_LATEST("video-ramfb-display-device");
@@ -2166,16 +2110,13 @@ mymain(void)
     DO_TEST_CAPS_ARCH_LATEST("s390-allow-bogus-usb-none", "s390x");
     DO_TEST_CAPS_ARCH_LATEST("s390-allow-bogus-usb-controller", "s390x");
 
-    DO_TEST_NOCAPS("s390-panic-no-address");
-    DO_TEST_PARSE_ERROR_NOCAPS("s390-panic-address");
-    DO_TEST_NOCAPS("s390-panic-missing");
-    DO_TEST_PARSE_ERROR_NOCAPS("s390-no-parallel");
-    DO_TEST("s390-serial", QEMU_CAPS_DEVICE_SCLPCONSOLE);
-    DO_TEST("s390-serial-2",
-            QEMU_CAPS_DEVICE_SCLPCONSOLE,
-            QEMU_CAPS_DEVICE_SCLPLMCONSOLE);
-    DO_TEST("s390-serial-console",
-            QEMU_CAPS_DEVICE_SCLPCONSOLE);
+    DO_TEST_CAPS_ARCH_LATEST("s390-panic-no-address", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("s390-panic-address", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("s390-panic-missing", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("s390-no-parallel", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("s390-serial", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("s390-serial-2", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("s390-serial-console", "s390x");
 
     DO_TEST_CAPS_ARCH_LATEST("ppc-dtb", "ppc");
     DO_TEST_CAPS_ARCH_LATEST("ppce500-serial", "ppc");
@@ -2190,7 +2131,7 @@ mymain(void)
     DO_TEST_CAPS_LATEST("tpm-emulator-tpm2-pstate");
     DO_TEST_CAPS_LATEST_PPC64("tpm-emulator-spapr");
     DO_TEST_CAPS_ARCH_LATEST("aarch64-tpm", "aarch64");
-    DO_TEST_PARSE_ERROR_NOCAPS("aarch64-tpm-wrong-model");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("aarch64-tpm-wrong-model", "aarch64");
     DO_TEST_CAPS_LATEST("tpm-external");
 
     g_setenv(TEST_TPM_ENV_VAR, TPM_VER_2_0, true);
@@ -2376,8 +2317,7 @@ mymain(void)
     DO_TEST_CAPS_LATEST("hostdev-scsi-lsi");
     DO_TEST_CAPS_LATEST("hostdev-scsi-virtio-scsi");
 
-    DO_TEST("hostdev-scsi-vhost-scsi-ccw",
-            QEMU_CAPS_VIRTIO_SCSI, QEMU_CAPS_DEVICE_VHOST_SCSI);
+    DO_TEST_CAPS_ARCH_LATEST("hostdev-scsi-vhost-scsi-ccw", "s390x");
     DO_TEST("hostdev-scsi-vhost-scsi-pci",
             QEMU_CAPS_VIRTIO_SCSI,
             QEMU_CAPS_DEVICE_VHOST_SCSI);
@@ -2410,10 +2350,17 @@ mymain(void)
     DO_TEST_CAPS_ARCH_LATEST("arm-vexpressa9-virtio", "aarch64");
     DO_TEST_CAPS_ARCH_LATEST("arm-virt-virtio", "aarch64");
 
-    DO_TEST("aarch64-virt-virtio",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO,
-            QEMU_CAPS_DEVICE_PL011,
-            QEMU_CAPS_DEVICE_VIRTIO_RNG, QEMU_CAPS_OBJECT_RNG_RANDOM);
+    /* test default config if pcie bus is not available */
+    DO_TEST_FULL("aarch64-virt-virtio", "-MMIO.aarch64.latest",
+                 ARG_CAPS_ARCH, "aarch64",
+                 ARG_CAPS_VER, "latest",
+                 ARG_QEMU_CAPS_DEL,
+                 QEMU_CAPS_OBJECT_GPEX, QEMU_CAPS_DEVICE_PCI_BRIDGE,
+                 QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE, QEMU_CAPS_DEVICE_IOH3420,
+                 QEMU_CAPS_LAST, ARG_END);
+
+    DO_TEST_CAPS_ARCH_VER("aarch64-virt-virtio", "aarch64", "4.2.0");
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-virt-virtio", "aarch64");
 
     /* Demonstrates the virtio-pci default... namely that there isn't any!
        q35 style PCI controllers will be added if the binary supports it,
@@ -2421,101 +2368,64 @@ mymain(void)
        specified. */
     DO_TEST_CAPS_ARCH_VER("aarch64-virtio-pci-default", "aarch64", "4.2.0");
     DO_TEST_CAPS_ARCH_LATEST("aarch64-virtio-pci-default", "aarch64");
-    DO_TEST("aarch64-virt-2.6-virtio-pci-default",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO,
-            QEMU_CAPS_DEVICE_VIRTIO_RNG, QEMU_CAPS_OBJECT_RNG_RANDOM,
-            QEMU_CAPS_OBJECT_GPEX, QEMU_CAPS_DEVICE_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_PL011,
-            QEMU_CAPS_DEVICE_IOH3420);
     /* Example of using virtio-pci with no explicit PCI controller
        but with manual PCI addresses */
-    DO_TEST("aarch64-virtio-pci-manual-addresses",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO,
-            QEMU_CAPS_DEVICE_VIRTIO_RNG, QEMU_CAPS_OBJECT_RNG_RANDOM,
-            QEMU_CAPS_OBJECT_GPEX, QEMU_CAPS_DEVICE_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_IOH3420,
-            QEMU_CAPS_VIRTIO_SCSI);
-    DO_TEST("aarch64-video-virtio-gpu-pci",
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_DEVICE_PCI_BRIDGE, QEMU_CAPS_DEVICE_IOH3420,
-            QEMU_CAPS_DEVICE_VIRTIO_GPU);
-    DO_TEST("aarch64-video-default",
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_DEVICE_PCI_BRIDGE, QEMU_CAPS_DEVICE_IOH3420,
-            QEMU_CAPS_DEVICE_VIRTIO_GPU, QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE,
-            QEMU_CAPS_VNC);
-    DO_TEST("aarch64-aavmf-virtio-mmio",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO,
-            QEMU_CAPS_DEVICE_VIRTIO_RNG, QEMU_CAPS_OBJECT_RNG_RANDOM);
-    DO_TEST("aarch64-virt-default-nic",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO);
-    qemuTestSetHostArch(&driver, VIR_ARCH_AARCH64);
-    DO_TEST("aarch64-cpu-passthrough",
-            QEMU_CAPS_DEVICE_VIRTIO_MMIO,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-none", GIC_NONE,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-none-v2", GIC_V2,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-none-v3", GIC_V3,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-none-both", GIC_BOTH,
-            QEMU_CAPS_KVM);
-    DO_TEST_FULL("aarch64-gic-none-tcg", "", ARG_GIC, GIC_BOTH, ARG_END);
-    DO_TEST_GIC("aarch64-gic-default", GIC_NONE,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-default-v2", GIC_V2,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-default-v3", GIC_V3,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-default-both", GIC_BOTH,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v2", GIC_NONE,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v2", GIC_V2,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v2", GIC_V3,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v2", GIC_BOTH,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v3", GIC_NONE,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v3", GIC_V2,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v3", GIC_V3,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-v3", GIC_BOTH,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-host", GIC_NONE,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-host", GIC_V2,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-host", GIC_V3,
-            QEMU_CAPS_KVM);
-    DO_TEST_GIC("aarch64-gic-host", GIC_BOTH,
-            QEMU_CAPS_KVM);
-    DO_TEST_PARSE_ERROR("aarch64-gic-invalid",
-            QEMU_CAPS_KVM);
-    DO_TEST_PARSE_ERROR("aarch64-gic-not-virt",
-                        QEMU_CAPS_KVM);
-    DO_TEST_PARSE_ERROR("aarch64-gic-not-arm",
-                        QEMU_CAPS_KVM);
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-virtio-pci-manual-addresses", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-video-virtio-gpu-pci", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-video-default", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-aavmf-virtio-mmio", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-virt-default-nic", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-cpu-passthrough", "aarch64");
+    DO_TEST_FULL("aarch64-gic-none", ".aarch64-4.2.0",
+                 ARG_GIC, GIC_NONE,
+                 ARG_CAPS_ARCH, "aarch64",
+                 ARG_CAPS_VER, "4.2.0",
+                 ARG_END);
+    DO_TEST_FULL("aarch64-gic-none", ".aarch64-latest",
+                 ARG_GIC, GIC_NONE,
+                 ARG_CAPS_ARCH, "aarch64",
+                 ARG_CAPS_VER, "latest",
+                 ARG_END);
+    DO_TEST_GIC("aarch64-gic-none-v2", GIC_V2);
+    DO_TEST_GIC("aarch64-gic-none-v3", GIC_V3);
+    DO_TEST_GIC("aarch64-gic-none-both", GIC_BOTH);
+    DO_TEST_FULL("aarch64-gic-none-tcg", "",
+                 ARG_GIC, GIC_BOTH,
+                 ARG_CAPS_ARCH, "aarch64",
+                 ARG_CAPS_VER, "latest",
+                 ARG_QEMU_CAPS_DEL, QEMU_CAPS_KVM, QEMU_CAPS_LAST,
+                 ARG_END);
+    DO_TEST_FULL("aarch64-gic-default", ".aarch64-4.2.0",
+                 ARG_GIC, GIC_NONE,
+                 ARG_CAPS_ARCH, "aarch64",
+                 ARG_CAPS_VER, "4.2.0",
+                 ARG_END);
+    DO_TEST_FULL("aarch64-gic-default", ".aarch64-latest",
+                 ARG_GIC, GIC_NONE,
+                 ARG_CAPS_ARCH, "aarch64",
+                 ARG_CAPS_VER, "latest",
+                 ARG_END);
+    DO_TEST_GIC("aarch64-gic-default-v2", GIC_V2);
+    DO_TEST_GIC("aarch64-gic-default-v3", GIC_V3);
+    DO_TEST_GIC("aarch64-gic-default-both", GIC_BOTH);
+    DO_TEST_GIC("aarch64-gic-v2", GIC_NONE);
+    DO_TEST_GIC("aarch64-gic-v2", GIC_V2);
+    DO_TEST_GIC("aarch64-gic-v2", GIC_V3);
+    DO_TEST_GIC("aarch64-gic-v2", GIC_BOTH);
+    DO_TEST_GIC("aarch64-gic-v3", GIC_NONE);
+    DO_TEST_GIC("aarch64-gic-v3", GIC_V2);
+    DO_TEST_GIC("aarch64-gic-v3", GIC_V3);
+    DO_TEST_GIC("aarch64-gic-v3", GIC_BOTH);
+    DO_TEST_GIC("aarch64-gic-host", GIC_NONE);
+    DO_TEST_GIC("aarch64-gic-host", GIC_V2);
+    DO_TEST_GIC("aarch64-gic-host", GIC_V3);
+    DO_TEST_GIC("aarch64-gic-host", GIC_BOTH);
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("aarch64-gic-invalid", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("aarch64-gic-not-virt", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("aarch64-gic-not-arm", "ppc64");
     DO_TEST_CAPS_ARCH_LATEST("aarch64-kvm-32-on-64", "aarch64");
-    DO_TEST("aarch64-pci-serial",
-            QEMU_CAPS_DEVICE_PCI_SERIAL,
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_DEVICE_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_PCIE_ROOT_PORT);
-    DO_TEST("aarch64-traditional-pci",
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_DEVICE_PCIE_ROOT_PORT,
-            QEMU_CAPS_DEVICE_DMI_TO_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_PCIE_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_PCI_BRIDGE,
-            QEMU_CAPS_DEVICE_PCI_SERIAL);
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-pci-serial", "aarch64");
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-traditional-pci", "aarch64");
 
     /* aarch64 doesn't support the same CPU features as x86 */
     DO_TEST_CAPS_ARCH_LATEST_FAILURE("aarch64-features-wrong", "aarch64");
@@ -2564,15 +2474,8 @@ mymain(void)
     DO_TEST("memory-hotplug", QEMU_CAPS_DEVICE_PC_DIMM);
     DO_TEST("memory-hotplug-dimm", QEMU_CAPS_DEVICE_PC_DIMM);
     DO_TEST_CAPS_LATEST("memory-hotplug-dimm-addr");
-    DO_TEST("memory-hotplug-ppc64-nonuma", QEMU_CAPS_KVM, QEMU_CAPS_DEVICE_PC_DIMM,
-            QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE);
-    DO_TEST_FULL("memory-hotplug-ppc64-nonuma-abi-update", "",
-                 ARG_PARSEFLAGS, VIR_DOMAIN_DEF_PARSE_ABI_UPDATE,
-                 ARG_QEMU_CAPS,
-                 QEMU_CAPS_KVM, QEMU_CAPS_DEVICE_PC_DIMM,
-                 QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-                 QEMU_CAPS_LAST,
-                 ARG_END);
+    DO_TEST_CAPS_ARCH_LATEST("memory-hotplug-ppc64-nonuma", "ppc64");
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE("memory-hotplug-ppc64-nonuma-abi-update", "ppc64");
     DO_TEST_CAPS_LATEST("memory-hotplug-nvdimm");
     DO_TEST_CAPS_LATEST("memory-hotplug-nvdimm-access");
     DO_TEST_CAPS_VER("memory-hotplug-nvdimm-label", "5.2.0");
@@ -2583,51 +2486,28 @@ mymain(void)
     DO_TEST_CAPS_LATEST("memory-hotplug-nvdimm-pmem");
     DO_TEST_CAPS_VER("memory-hotplug-nvdimm-readonly", "5.2.0");
     DO_TEST_CAPS_LATEST("memory-hotplug-nvdimm-readonly");
-    DO_TEST("memory-hotplug-nvdimm-ppc64", QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-                                           QEMU_CAPS_DEVICE_NVDIMM);
-    DO_TEST_FULL("memory-hotplug-nvdimm-ppc64-abi-update", "",
-                 ARG_PARSEFLAGS, VIR_DOMAIN_DEF_PARSE_ABI_UPDATE,
-                 ARG_QEMU_CAPS,
-                 QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-                 QEMU_CAPS_DEVICE_NVDIMM,
-                 QEMU_CAPS_LAST,
-                 ARG_END);
+    DO_TEST_CAPS_ARCH_LATEST("memory-hotplug-nvdimm-ppc64", "ppc64");
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE("memory-hotplug-nvdimm-ppc64-abi-update", "ppc64");
     DO_TEST_CAPS_VER("memory-hotplug-virtio-pmem", "5.2.0");
     DO_TEST_CAPS_LATEST("memory-hotplug-virtio-pmem");
     DO_TEST_CAPS_LATEST("memory-hotplug-virtio-mem");
+    DO_TEST_CAPS_LATEST("memory-hotplug-multiple");
 
-    DO_TEST("machine-aeskeywrap-on-caps",
-            QEMU_CAPS_VIRTIO_SCSI);
+    DO_TEST_CAPS_ARCH_LATEST("machine-aeskeywrap-on-caps", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-aeskeywrap-on-cap", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-aeskeywrap-off-caps", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-aeskeywrap-off-cap", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-deakeywrap-on-caps", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-deakeywrap-on-cap", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-deakeywrap-off-caps", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-deakeywrap-off-cap", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-keywrap-none-caps", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-keywrap-none", "s390x");
 
-    DO_TEST("machine-aeskeywrap-on-cap",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST("machine-aeskeywrap-off-caps",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST("machine-aeskeywrap-off-cap",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST("machine-deakeywrap-on-caps",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST("machine-deakeywrap-on-cap",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST("machine-deakeywrap-off-caps",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST("machine-deakeywrap-off-cap",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST("machine-keywrap-none-caps",
-            QEMU_CAPS_VIRTIO_SCSI);
-    DO_TEST("machine-keywrap-none",
-            QEMU_CAPS_VIRTIO_SCSI);
-
-    DO_TEST_NOCAPS("machine-loadparm-s390");
-    DO_TEST_NOCAPS("machine-loadparm-net-s390");
-    DO_TEST_NOCAPS("machine-loadparm-multiple-disks-nets-s390");
+    DO_TEST_CAPS_ARCH_LATEST("machine-loadparm-s390", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-loadparm-net-s390", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-loadparm-hostdev", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("machine-loadparm-multiple-disks-nets-s390", "s390x");
     DO_TEST_PARSE_ERROR_NOCAPS("machine-loadparm-s390-char-invalid");
     DO_TEST_PARSE_ERROR_NOCAPS("machine-loadparm-s390-len-invalid");
 
@@ -2644,44 +2524,17 @@ mymain(void)
 
     DO_TEST_CAPS_LATEST("input-linux");
 
-    DO_TEST("ppc64-usb-controller",
-            QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-            QEMU_CAPS_PCI_OHCI);
-    DO_TEST("ppc64-usb-controller-legacy",
-            QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-            QEMU_CAPS_PIIX3_USB_UHCI);
-    DO_TEST_FULL("ppc64-usb-controller-qemu-xhci", "",
-                 ARG_PARSEFLAGS, VIR_DOMAIN_DEF_PARSE_ABI_UPDATE,
-                 ARG_QEMU_CAPS,
-                 QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-                 QEMU_CAPS_NEC_USB_XHCI,
-                 QEMU_CAPS_DEVICE_QEMU_XHCI,
-                 QEMU_CAPS_LAST,
-                 ARG_END);
+    DO_TEST_CAPS_ARCH_LATEST("ppc64-usb-controller", "ppc64");
+    DO_TEST_CAPS_ARCH_LATEST("ppc64-usb-controller-legacy", "ppc64");
+    DO_TEST_CAPS_ARCH_LATEST_ABI_UPDATE("ppc64-usb-controller-qemu-xhci", "ppc64");
 
-    DO_TEST_PARSE_ERROR("ppc64-tpmproxy-double",
-                        QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-                        QEMU_CAPS_PCI_OHCI,
-                        QEMU_CAPS_DEVICE_TPM_PASSTHROUGH,
-                        QEMU_CAPS_DEVICE_SPAPR_TPM_PROXY);
-
-    DO_TEST_PARSE_ERROR("ppc64-tpm-double",
-                        QEMU_CAPS_DEVICE_SPAPR_PCI_HOST_BRIDGE,
-                        QEMU_CAPS_PCI_OHCI,
-                        QEMU_CAPS_DEVICE_TPM_PASSTHROUGH,
-                        QEMU_CAPS_DEVICE_SPAPR_TPM_PROXY);
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("ppc64-tpmproxy-double", "ppc64");
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("ppc64-tpm-double", "ppc64");
 
     DO_TEST_CAPS_LATEST_PPC64("ppc64-tpmproxy-single");
     DO_TEST_CAPS_LATEST_PPC64("ppc64-tpmproxy-with-tpm");
 
-    DO_TEST("aarch64-usb-controller-qemu-xhci",
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_NEC_USB_XHCI,
-            QEMU_CAPS_DEVICE_QEMU_XHCI);
-
-    DO_TEST("aarch64-usb-controller-nec-xhci",
-            QEMU_CAPS_OBJECT_GPEX,
-            QEMU_CAPS_NEC_USB_XHCI);
+    DO_TEST_CAPS_ARCH_LATEST("aarch64-usb-controller", "aarch64");
 
     DO_TEST_CAPS_ARCH_LATEST("sparc-minimal", "sparc");
 
@@ -2713,8 +2566,7 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PARSE_ERROR("virtio-iommu-invalid-address");
 
     DO_TEST("cpu-hotplug-startup", QEMU_CAPS_QUERY_HOTPLUGGABLE_CPUS);
-    DO_TEST_PARSE_ERROR("cpu-hotplug-granularity",
-                        QEMU_CAPS_QUERY_HOTPLUGGABLE_CPUS);
+    DO_TEST_CAPS_ARCH_LATEST_PARSE_ERROR("cpu-hotplug-granularity", "ppc64");
 
     DO_TEST_CAPS_LATEST("virtio-options");
     DO_TEST_CAPS_LATEST("virtio-options-controller-iommu");
@@ -2781,18 +2633,8 @@ mymain(void)
     DO_TEST_CAPS_LATEST_PARSE_ERROR("tseg-i440fx");
     DO_TEST_CAPS_LATEST_PARSE_ERROR("tseg-invalid-size");
 
-    DO_TEST("video-virtio-gpu-ccw",
-            QEMU_CAPS_DEVICE_VIRTIO_GPU,
-            QEMU_CAPS_VNC,
-            QEMU_CAPS_DEVICE_VIRTIO_GPU_CCW);
-
-    DO_TEST("input-virtio-ccw",
-            QEMU_CAPS_VIRTIO_KEYBOARD,
-            QEMU_CAPS_VIRTIO_MOUSE,
-            QEMU_CAPS_VIRTIO_TABLET,
-            QEMU_CAPS_DEVICE_VIRTIO_KEYBOARD_CCW,
-            QEMU_CAPS_DEVICE_VIRTIO_MOUSE_CCW,
-            QEMU_CAPS_DEVICE_VIRTIO_TABLET_CCW);
+    DO_TEST_CAPS_ARCH_LATEST("video-virtio-gpu-ccw", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("input-virtio-ccw", "s390x");
 
     DO_TEST_CAPS_LATEST("vhost-vsock");
     DO_TEST_CAPS_LATEST("vhost-vsock-auto");
@@ -2869,33 +2711,28 @@ mymain(void)
 
     DO_TEST_CAPS_LATEST("devices-acpi-index");
 
-    DO_TEST_MACOS("hvf-x86_64-q35-headless",
-                  QEMU_CAPS_VIRTIO_PCI_TRANSITIONAL,
-                  QEMU_CAPS_DEVICE_PCIE_ROOT_PORT,
-                  QEMU_CAPS_DEVICE_VIRTIO_NET,
-                  QEMU_CAPS_DEVICE_ISA_SERIAL,
-                  QEMU_CAPS_DEVICE_VIRTIO_RNG,
-                  QEMU_CAPS_OBJECT_RNG_RANDOM);
-    DO_TEST_MACOS("hvf-aarch64-virt-headless",
-                  QEMU_CAPS_OBJECT_GPEX,
-                  QEMU_CAPS_VIRTIO_PCI_TRANSITIONAL,
-                  QEMU_CAPS_DEVICE_PCIE_ROOT_PORT,
-                  QEMU_CAPS_DEVICE_VIRTIO_NET,
-                  QEMU_CAPS_DEVICE_PL011,
-                  QEMU_CAPS_DEVICE_VIRTIO_RNG,
-                  QEMU_CAPS_OBJECT_RNG_RANDOM);
+    DO_TEST_CAPS_ARCH_LATEST_FULL("hvf-x86_64-q35-headless", "x86_64", ARG_CAPS_VARIANT, "+hvf", ARG_END);
+    DO_TEST_CAPS_ARCH_LATEST_FULL("hvf-aarch64-virt-headless", "aarch64", ARG_CAPS_VARIANT, "+hvf", ARG_END);
     /* HVF guests should not work on Linux with KVM */
     DO_TEST_CAPS_LATEST_PARSE_ERROR("hvf-x86_64-q35-headless");
 
     DO_TEST("cpu-phys-bits-passthrough", QEMU_CAPS_KVM);
     DO_TEST("cpu-phys-bits-emulate", QEMU_CAPS_KVM);
     DO_TEST("cpu-phys-bits-emulate2", QEMU_CAPS_KVM);
-    DO_TEST_PARSE_ERROR("cpu-phys-bits-emulate3", QEMU_CAPS_KVM);
     DO_TEST_PARSE_ERROR("cpu-phys-bits-passthrough2", QEMU_CAPS_KVM);
+    DO_TEST_CAPS_LATEST("cpu-phys-bits-limit");
+    DO_TEST_CAPS_LATEST("cpu-phys-bits-emulate-bare");
 
     DO_TEST_CAPS_VER("sgx-epc", "7.0.0");
 
     DO_TEST_CAPS_LATEST("crypto-builtin");
+
+    DO_TEST_CAPS_LATEST("async-teardown");
+    DO_TEST_CAPS_ARCH_LATEST("s390-async-teardown", "s390x");
+    DO_TEST_CAPS_ARCH_LATEST("s390-async-teardown-no-attrib", "s390x");
+    DO_TEST_CAPS_ARCH_VER_PARSE_ERROR("s390-async-teardown", "s390x", "6.0.0");
+    DO_TEST_CAPS_ARCH_LATEST("s390-async-teardown-disabled", "s390x");
+    DO_TEST_CAPS_ARCH_VER("s390-async-teardown-disabled", "s390x", "6.0.0");
 
     qemuTestDriverFree(&driver);
     virFileWrapperClearPrefixes();
@@ -2908,7 +2745,8 @@ VIR_TEST_MAIN_PRELOAD(mymain,
                       VIR_TEST_MOCK("domaincaps"),
                       VIR_TEST_MOCK("virrandom"),
                       VIR_TEST_MOCK("qemucpu"),
-                      VIR_TEST_MOCK("virpci"))
+                      VIR_TEST_MOCK("virpci"),
+                      VIR_TEST_MOCK("virnuma"))
 
 #else
 

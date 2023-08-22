@@ -36,6 +36,17 @@ virHostCPUGetMicrocodeVersion(virArch hostArch G_GNUC_UNUSED)
     return 0;
 }
 
+int
+virHostCPUGetPhysAddrSize(const virArch hostArch,
+                          unsigned int *size)
+{
+    if (ARCH_IS_S390(hostArch))
+        *size = 0;
+    else
+        *size = 64;
+    return 0;
+}
+
 #if WITH_QEMU
 static bool (*real_virQEMUCapsGetKVMSupportsSecureGuest)(virQEMUCaps *qemuCaps);
 
@@ -50,12 +61,6 @@ virQEMUCapsGetKVMSupportsSecureGuest(virQEMUCaps *qemuCaps)
         VIR_MOCK_REAL_INIT(virQEMUCapsGetKVMSupportsSecureGuest);
 
     return real_virQEMUCapsGetKVMSupportsSecureGuest(qemuCaps);
-}
-
-int
-virQEMUCapsProbeHVF(virQEMUCaps *qemuCaps G_GNUC_UNUSED)
-{
-    return 0;
 }
 #endif
 

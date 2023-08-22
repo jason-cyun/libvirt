@@ -2,10 +2,11 @@
 
 import argparse
 import copy
-import lark
 import os
 import re
 import xml.etree.ElementTree
+
+import lark
 
 
 def translate_vendor(name):
@@ -50,10 +51,11 @@ def translate_feature(name):
         "CPUID_7_0_EBX_SMAP": "smap",
         "CPUID_7_0_EBX_SMEP": "smep",
         "CPUID_7_0_ECX_AVX512BITALG": "avx512bitalg",
-        "CPUID_7_0_ECX_AVX512_VBMI2": "avx512vbmi2",
-        "CPUID_7_0_ECX_AVX512_VBMI": "avx512vbmi",
         "CPUID_7_0_ECX_AVX512VNNI": "avx512vnni",
+        "CPUID_7_0_ECX_AVX512_VBMI": "avx512vbmi",
+        "CPUID_7_0_ECX_AVX512_VBMI2": "avx512vbmi2",
         "CPUID_7_0_ECX_AVX512_VPOPCNTDQ": "avx512-vpopcntdq",
+        "CPUID_7_0_ECX_BUS_LOCK_DETECT": "bus-lock-detect",
         "CPUID_7_0_ECX_CLDEMOTE": "cldemote",
         "CPUID_7_0_ECX_GFNI": "gfni",
         "CPUID_7_0_ECX_LA57": "la57",
@@ -64,32 +66,49 @@ def translate_feature(name):
         "CPUID_7_0_ECX_UMIP": "umip",
         "CPUID_7_0_ECX_VAES": "vaes",
         "CPUID_7_0_ECX_VPCLMULQDQ": "vpclmulqdq",
+        "CPUID_7_0_EDX_AMX_BF16": "amx-bf16",
+        "CPUID_7_0_EDX_AMX_INT8": "amx-int8",
+        "CPUID_7_0_EDX_AMX_TILE": "amx-tile",
         "CPUID_7_0_EDX_ARCH_CAPABILITIES": "arch-capabilities",
         "CPUID_7_0_EDX_AVX512_4FMAPS": "avx512-4fmaps",
         "CPUID_7_0_EDX_AVX512_4VNNIW": "avx512-4vnniw",
+        "CPUID_7_0_EDX_AVX512_FP16": "avx512-fp16",
         "CPUID_7_0_EDX_CORE_CAPABILITY": "core-capability",
         "CPUID_7_0_EDX_FSRM": "fsrm",
+        "CPUID_7_0_EDX_SERIALIZE": "serialize",
         "CPUID_7_0_EDX_SPEC_CTRL": "spec-ctrl",
         "CPUID_7_0_EDX_SPEC_CTRL_SSBD": "ssbd",
         "CPUID_7_0_EDX_STIBP": "stibp",
-        "CPUID_7_0_EDX_AMX_BF16": "amx-bf16",
-        "CPUID_7_0_EDX_AMX_TILE": "amx-tile",
-        "CPUID_7_0_EDX_AMX_INT8": "amx-int8",
+        "CPUID_7_0_EDX_TSX_LDTRK": "tsx-ldtrk",
+        "CPUID_7_1_EAX_AMX_FP16": "amx-fp16",
         "CPUID_7_1_EAX_AVX512_BF16": "avx512-bf16",
         "CPUID_7_1_EAX_AVX_VNNI": "avx-vnni",
+        "CPUID_7_1_EAX_FSRC": "fsrc",
+        "CPUID_7_1_EAX_FSRS": "fsrs",
+        "CPUID_7_1_EAX_FZRM": "fzrm",
+        "CPUID_7_1_EDX_PREFETCHITI": "prefetchiti",
+        "CPUID_7_2_EDX_MCDT_NO": "mcdt-no",
+        "CPUID_8000_0008_EBX_AMD_PSFD": "amd-psfd",
         "CPUID_8000_0008_EBX_AMD_SSBD": "amd-ssbd",
         "CPUID_8000_0008_EBX_CLZERO": "clzero",
         "CPUID_8000_0008_EBX_IBPB": "ibpb",
         "CPUID_8000_0008_EBX_IBRS": "ibrs",
         "CPUID_8000_0008_EBX_STIBP": "amd-stibp",
+        "CPUID_8000_0008_EBX_STIBP_ALWAYS_ON": "stibp-always-on",
         "CPUID_8000_0008_EBX_WBNOINVD": "wbnoinvd",
         "CPUID_8000_0008_EBX_XSAVEERPTR": "xsaveerptr",
+        "CPUID_8000_0021_EAX_AUTO_IBRS": "auto-ibrs",
+        "CPUID_8000_0021_EAX_LFENCE_ALWAYS_SERIALIZING":
+            "lfence-always-serializing",
+        "CPUID_8000_0021_EAX_NULL_SEL_CLR_BASE": "null-sel-clr-base",
+        "CPUID_8000_0021_EAX_No_NESTED_DATA_BP": "no-nested-data-bp",
         "CPUID_ACPI": "acpi",
         "CPUID_APIC": "apic",
         "CPUID_CLFLUSH": "clflush",
         "CPUID_CMOV": "cmov",
         "CPUID_CX8": "cx8",
         "CPUID_DE": "de",
+        "CPUID_D_1_EAX_XFD": "xfd",
         "CPUID_EXT2_3DNOW": "3dnow",
         "CPUID_EXT2_3DNOWEXT": "3dnowext",
         "CPUID_EXT2_FFXSR": "fxsr_opt",
@@ -138,25 +157,30 @@ def translate_feature(name):
         "CPUID_PAE": "pae",
         "CPUID_PAT": "pat",
         "CPUID_PGE": "pge",
-        "CPUID_PSE36": "pse36",
         "CPUID_PSE": "pse",
+        "CPUID_PSE36": "pse36",
         "CPUID_SEP": "sep",
-        "CPUID_SSE2": "sse2",
-        "CPUID_SSE": "sse",
         "CPUID_SS": "ss",
+        "CPUID_SSE": "sse",
+        "CPUID_SSE2": "sse2",
         "CPUID_SVM_NPT": "npt",
         "CPUID_SVM_NRIPSAVE": "nrip-save",
         "CPUID_SVM_SVME_ADDR_CHK": "svme-addr-chk",
+        "CPUID_SVM_VNMI": "vnmi",
         "CPUID_TSC": "tsc",
         "CPUID_VME": "vme",
         "CPUID_XSAVE_XGETBV1": "xgetbv1",
         "CPUID_XSAVE_XSAVEC": "xsavec",
         "CPUID_XSAVE_XSAVEOPT": "xsaveopt",
         "CPUID_XSAVE_XSAVES": "xsaves",
+        "MSR_ARCH_CAP_FBSDP_NO": "fbsdp-no",
         "MSR_ARCH_CAP_IBRS_ALL": "ibrs-all",
         "MSR_ARCH_CAP_MDS_NO": "mds-no",
+        "MSR_ARCH_CAP_PBRSB_NO": "pbrsb-no",
         "MSR_ARCH_CAP_PSCHANGE_MC_NO": "pschange-mc-no",
+        "MSR_ARCH_CAP_PSDP_NO": "psdp-no",
         "MSR_ARCH_CAP_RDCL_NO": "rdctl-no",
+        "MSR_ARCH_CAP_SBDR_SSDP_NO": "sbdr-ssdp-no",
         "MSR_ARCH_CAP_SKIP_L1DFL_VMENTRY": "skip-l1dfl-vmentry",
         "MSR_ARCH_CAP_TAA_NO": "taa-no",
         "MSR_CORE_CAP_SPLIT_LOCK_DETECT": "split-lock-detect",
@@ -200,7 +224,8 @@ def read_builtin_x86_defs(filename):
     """Extract content between begin_mark and end_mark from file `filename` as
     string, while expanding shorthand macros like "I486_FEATURES"."""
 
-    begin_mark = re.compile("^static( const)? X86CPUDefinition builtin_x86_defs\\[\\] = {$")
+    begin_mark = re.compile(
+        "^static( const)? X86CPUDefinition builtin_x86_defs\\[\\] = {$")
     end_mark = "};\n"
     shorthand = re.compile("^#define ([A-Z0-9_]+_FEATURES) (.*)$")
     lines = list()

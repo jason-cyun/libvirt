@@ -97,7 +97,7 @@ static int vboxStoragePoolNumOfVolumes(virStoragePoolPtr pool)
                                       gVBoxAPI.UArray.handleGetHardDisks(data->vboxObj));
     if (NS_FAILED(rc)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("could not get number of volumes in the pool: %s, rc=%08x"),
+                       _("could not get number of volumes in the pool: %1$s, rc=%2$08x"),
                        pool->name, (unsigned)rc);
         return -1;
     }
@@ -135,7 +135,7 @@ vboxStoragePoolListVolumes(virStoragePoolPtr pool, char **const names, int nname
                                       gVBoxAPI.UArray.handleGetHardDisks(data->vboxObj));
     if (NS_FAILED(rc)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("could not get the volume list in the pool: %s, rc=%08x"),
+                       _("could not get the volume list in the pool: %1$s, rc=%2$08x"),
                        pool->name, (unsigned)rc);
         return -1;
     }
@@ -267,7 +267,7 @@ vboxStorageVolLookupByKey(virConnectPtr conn, const char *key)
 
     if (virUUIDParse(key, uuid) < 0) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Could not parse UUID from '%s'"), key);
+                       _("Could not parse UUID from '%1$s'"), key);
         return NULL;
     }
 
@@ -396,7 +396,7 @@ vboxStorageVolCreateXML(virStoragePoolPtr pool,
     struct _vboxDriver *data = pool->conn->privateData;
     PRUnichar *hddFormatUtf16 = NULL;
     PRUnichar *hddNameUtf16 = NULL;
-    virStoragePoolDef poolDef;
+    virStoragePoolDef poolDef = { 0 };
     nsresult rc;
     vboxIID hddIID;
     unsigned char uuid[VIR_UUID_BUFLEN];
@@ -424,7 +424,6 @@ vboxStorageVolCreateXML(virStoragePoolPtr pool,
      * so just assign it for now, change the behaviour
      * when vbox supports pools.
      */
-    memset(&poolDef, 0, sizeof(poolDef));
     poolDef.type = VIR_STORAGE_POOL_DIR;
 
     if ((def = virStorageVolDefParse(&poolDef, xml, NULL, parseFlags)) == NULL)
@@ -457,7 +456,7 @@ vboxStorageVolCreateXML(virStoragePoolPtr pool,
     rc = gVBoxAPI.UIVirtualBox.CreateHardDisk(data->vboxObj, hddFormatUtf16, hddNameUtf16, &hardDisk);
     if (NS_FAILED(rc)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not create harddisk, rc=%08x"),
+                       _("Could not create harddisk, rc=%1$08x"),
                        (unsigned)rc);
         goto cleanup;
     }
@@ -470,7 +469,7 @@ vboxStorageVolCreateXML(virStoragePoolPtr pool,
     rc = gVBoxAPI.UIMedium.CreateBaseStorage(hardDisk, logicalSize, variant, &progress);
     if (NS_FAILED(rc) || !progress) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not create base storage, rc=%08x"),
+                       _("Could not create base storage, rc=%1$08x"),
                        (unsigned)rc);
         goto cleanup;
     }
@@ -479,7 +478,7 @@ vboxStorageVolCreateXML(virStoragePoolPtr pool,
     gVBoxAPI.UIProgress.GetResultCode(progress, &resultCode);
     if (RC_FAILED(resultCode)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not create base storage, rc=%08x"),
+                       _("Could not create base storage, rc=%1$08x"),
                        (unsigned)resultCode.uResultCode);
         goto cleanup;
     }
@@ -525,7 +524,7 @@ static int vboxStorageVolDelete(virStorageVolPtr vol, unsigned int flags)
 
     if (virUUIDParse(vol->key, uuid) < 0) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Could not parse UUID from '%s'"), vol->key);
+                       _("Could not parse UUID from '%1$s'"), vol->key);
         return -1;
     }
 
@@ -676,7 +675,7 @@ static int vboxStorageVolGetInfo(virStorageVolPtr vol, virStorageVolInfoPtr info
 
     if (virUUIDParse(vol->key, uuid) < 0) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Could not parse UUID from '%s'"), vol->key);
+                       _("Could not parse UUID from '%1$s'"), vol->key);
         return ret;
     }
 
@@ -720,8 +719,8 @@ static char *vboxStorageVolGetXMLDesc(virStorageVolPtr vol, unsigned int flags)
     char *hddFormatUtf8 = NULL;
     PRUint64 hddLogicalSize = 0;
     PRUint64 hddActualSize = 0;
-    virStoragePoolDef pool;
-    virStorageVolDef def;
+    virStoragePoolDef pool = { 0 };
+    virStorageVolDef def = { 0 };
     vboxIID hddIID;
     PRUint32 hddstate;
     nsresult rc;
@@ -732,12 +731,9 @@ static char *vboxStorageVolGetXMLDesc(virStorageVolPtr vol, unsigned int flags)
 
     virCheckFlags(0, NULL);
 
-    memset(&pool, 0, sizeof(pool));
-    memset(&def, 0, sizeof(def));
-
     if (virUUIDParse(vol->key, uuid) < 0) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Could not parse UUID from '%s'"), vol->key);
+                       _("Could not parse UUID from '%1$s'"), vol->key);
         return ret;
     }
 
@@ -818,7 +814,7 @@ static char *vboxStorageVolGetPath(virStorageVolPtr vol)
 
     if (virUUIDParse(vol->key, uuid) < 0) {
         virReportError(VIR_ERR_INVALID_ARG,
-                       _("Could not parse UUID from '%s'"), vol->key);
+                       _("Could not parse UUID from '%1$s'"), vol->key);
         return ret;
     }
 

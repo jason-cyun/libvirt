@@ -350,7 +350,7 @@ libvirt_syms = custom_target(
   input: [ public_sym_file ] + used_sym_files + generated_sym_files,
   output: 'libvirt.syms',
   command: [
-    meson_python_prog, python3_prog, meson_gen_sym_prog,
+    meson_gen_sym_prog,
     '@OUTPUT@', 'LIBVIRT_PRIVATE_' + meson.project_version(), '@INPUT@',
   ],
 )
@@ -361,7 +361,7 @@ if host_machine.system() == 'windows'
     input: libvirt_syms,
     output: 'libvirt.def',
     command: [
-      meson_python_prog, python3_prog, meson_gen_def_prog,
+      meson_gen_def_prog,
       '@INPUT@', '@OUTPUT@',
     ],
   )
@@ -417,7 +417,7 @@ if host_machine.system() == 'windows'
     input: libvirt_qemu_syms,
     output: 'libvirt_qemu.def',
     command: [
-      meson_python_prog, python3_prog, meson_gen_def_prog,
+      meson_gen_def_prog,
       '@INPUT@', '@OUTPUT@',
     ],
   )
@@ -476,7 +476,7 @@ if host_machine.system() == 'windows'
     input: libvirt_lxc_syms,
     output: 'libvirt_lxc.def',
     command: [
-      meson_python_prog, python3_prog, meson_gen_def_prog,
+      meson_gen_def_prog,
       '@INPUT@', '@OUTPUT@',
     ],
   )
@@ -808,6 +808,7 @@ if conf.has('WITH_LIBVIRTD')
         'runstatedir': runstatedir,
         'sbindir': sbindir,
         'sysconfdir': sysconfdir,
+        'initconfdir': initconfdir,
         'name': unit['name'],
         'service': unit['service'],
         'sockprefix': unit['sockprefix'],
@@ -922,6 +923,7 @@ if host_machine.system() == 'linux'
     python3_prog,
     args: [ check_symfile_prog.full_path(), libvirt_syms, libvirt_lib ],
     env: runutf8,
+    suite: 'script'
   )
 
   if conf.has('WITH_REMOTE')
@@ -930,6 +932,7 @@ if host_machine.system() == 'linux'
       python3_prog,
       args: [ check_symfile_prog.full_path(), libvirt_admin_syms, libvirt_admin_lib ],
       env: runutf8,
+      suite: 'script'
     )
   endif
 endif
@@ -943,6 +946,7 @@ test(
     files(sym_files, used_sym_files),
   ],
   env: runutf8,
+  suite: 'script'
 )
 
 test(
@@ -954,6 +958,7 @@ test(
     libvirt_admin_private_syms,
   ],
   env: runutf8,
+  suite: 'script'
 )
 
 test(
@@ -964,6 +969,7 @@ test(
     files('libvirt_public.syms'), libvirt_qemu_syms, libvirt_lxc_syms,
   ],
   env: runutf8,
+  suite: 'script'
 )
 
 test(
@@ -973,6 +979,7 @@ test(
     check_drivername_prog.full_path(), libvirt_admin_public_syms,
   ],
   env: runutf8,
+  suite: 'script'
 )
 
 test(
@@ -980,6 +987,7 @@ test(
   python3_prog,
   args: [ check_driverimpls_prog.full_path(), driver_source_files ],
   env: runutf8,
+  suite: 'script'
 )
 
 test(
@@ -987,6 +995,7 @@ test(
   python3_prog,
   args: [ check_aclrules_prog.full_path(), files('remote/remote_protocol.x'), stateful_driver_source_files ],
   env: runutf8,
+  suite: 'script'
 )
 
 if augparse_prog.found()
@@ -999,6 +1008,7 @@ if augparse_prog.found()
         '-I', data['builddir'],
         data['file'].full_path(),
       ],
+      suite: 'script'
     )
   endforeach
 endif
@@ -1019,6 +1029,7 @@ if pdwtags_prog.found() and cc.get_id() != 'clang'
       ],
       env: runutf8,
       depends: [ lib ],
+      suite: 'script'
     )
   endforeach
 endif

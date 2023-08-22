@@ -8,7 +8,7 @@ the changes introduced by each of them.
 For a more fine-grained view, use the `git log`_.
 
 
-v9.2.0 (unreleased)
+v9.7.0 (unreleased)
 ===================
 
 * **Security**
@@ -17,11 +17,268 @@ v9.2.0 (unreleased)
 
 * **New features**
 
+* **Improvements**
+
+* **Bug fixes**
+
+  * qemu: Various fixes to firmware selection
+
+    The changes made to firmware selection in libvirt 9.2.0 have unfortunately
+    introduced a number of regressions. All known issues in this area have now
+    been resolved.
+
+
+v9.6.0 (2023-08-01)
+===================
+
+* **Security**
+
+  * ``CVE-2023-3750``: Fix race condition in storage driver leading to a crash
+
+   In **libvirt-8.3** a bug was introduced which in rare cases could cause
+   ``libvirtd`` or ``virtstoraged`` to crash if multiple clients attempted to
+   look up a storage volume by key, path or target path, while other clients
+   attempted to access something from the same storage pool.
+
+* **Improvements**
+
+  * apparmor: All profiles and abstractions now support local overrides
+
+    This has long been the case for the ``virt-aa-helper`` profile, but has
+    now been extended to all other profiles and abstractions. The mechanism
+    used is the standard AppArmor 3.x one, where the contents of ``foo`` and
+    ``abstractions/foo`` can be overridden by creating ``local/foo`` and
+    ``abstractions/foo.d`` respectively.
+
+  * qemu: Support ``removable`` attribute for scsi disk
+
+    Now the scsi disk device (``/disk@device='disk'`` and
+    ``/disk/target@bus='scsi'``) supports the ``removable`` attribute at
+    ``/disk/target@removable```.
+
+  * qemu: Add NUMA node automatically for memory hotplug
+
+    Users no longer need to specify guest NUMA node in the domain XML when
+    enabling memory hotplug, libvirt automatically adds one when it is missing.
+
+  * qemu: Consider ``BeeGFS`` as a shared filesystem
+
+    Allow migration with non-shared storage for VMs accessing storage via
+    ``BeeGFS``.
+
+* **Bug fixes**
+
+  * qemu: Adapt to new way of specifying PC speaker
+
+    PC speaker is now usable again with newer QEMU since the change of how it
+    is specified on the command line.
+
+  * qemu_tpm: Try harder to create emulator state
+
+    Libvirt no longer considers empty directory valid SWTPM state and setup is
+    now run properly in such case.
+
+
+v9.5.0 (2023-07-03)
+===================
+
+* **New features**
+
+  * qemu: Allow configuring the ``discard-no-unref`` feature of ``qcow2`` driver
+
+    The new ``discard_no_unref`` attribute of the ``disk`` ``driver`` element
+    controls whether the ``qcow2`` driver in qemu unrefs clusters inside the
+    image on discard requests. Disabling cluster unrefing decreases fragmentation
+    of the image.
+
+* **Improvements**
+
+  * qemu: Include maximum physical address size in baseline CPU
+
+    When computing a baseline CPU definition for a set of hosts, we need to
+    include maximum physical address size in the result to make sure it is
+    compatible with all hosts even if their supported physical address sizes
+    differ.
+
+  * conf: Properly handle slots for non-DIMM ``<memory>`` devices
+
+    Memory devices such as ``virtio-mem`` don't need a memory slot as they are
+    PCI devices. ``libvirt`` now properly accounts the memory slots for such
+    devices as well as specifying the ``slots`` attribute of the ``<maxMemory>``
+    element is no longer needed unless DIMM-like devices are to be used.
+
+  * ``passt`` log and port forwarding improvements
+
+    Libvirt now ensures that the ``passt`` helper process can access the
+    configured log file even when it's placed in a directory without permissions.
+
+    The ``<portForward>`` element of a passt-backed interface can now omit the
+    ``address`` attribute as it's enough to specify a ``dev``.
+
+* **Bug fixes**
+
+  * lxc: Allow seeking in ``/proc/meminfo`` to resove failure with new ``procps`` package
+
+    New version of the ``free`` command from ``procps`` package seeks into the
+    ``/proc/meminfo`` file, which was not supported by the instance of the file
+    exposed via LXC causing a failure.
+
+  * qemu: Fix rare race-condition when detaching a device
+
+    The device removal handler callback function didn't re-check the state of
+    the unplug operation after a timeout, which could rarely cause that the
+    device was removed from the VM but not the definition.
+
+  * qemu: Fix NUMA memory allocation logic
+
+    QEMU allocates memory via the emulator thread thus that has to be allowed
+    to access all configured NUMA nodes of the VM rather than just the one where
+    it's supposed to be pinned.
+
+  * qemu: Fix setup of ``hostdev`` backed ``<interface>``
+
+    The proper steps to initialize the host device were skipped for interfaces
+    due to a logic bug preventing start of VM which used them.
+
+
+v9.4.0 (2023-06-01)
+===================
+
+* **New features**
+
+  * qemu: Support compression for parallel migration
+
+    QEMU supports parallel migration to be compressed using either zstd or zlib.
+
+  * cpu_map: Add SapphireRapids cpu model
+
+    This model is introduced since QEMU 8.0.
+
+* **Improvements**
+
+  * Adapt to musl-1.2.4
+
+    The latest version of musl stopped declaring some symbols that libvirt's
+    test suite used (for redirecting ``stat()`` family of functions), leaving
+    the tests broken. This is now fixed and the test suite works even with the
+    latest version of musl.
+
+  * conf: Introduce ``<address/>`` for virtio-mem and virtio-pmem
+
+    To ensure guest ABI stability, libvirt persists address for memory devices,
+    now including ``virtio-mem`` and ``virtio-pmem``. The address can be also
+    specified by user.
+
+* **Bug fixes**
+
+  * qemu: Account for NVMe disks when calculating memlock limit on hotplug
+
+    When no ``<hard_limit/>`` is set, libvirt still tries to guess a sensible
+    limit for memlock for domains. But this limit was not calculated properly
+    on a hotplug of ``<disk type='nvme'/>``.
+
+  * numa: Deny other memory modes than ``restrictive``` if a memnode is ``restrictive``
+
+    Due to a missing check it was possible to define a domain with incorrect
+    ``<numatune/>``. For instance it was possible to have a ``<memnode
+    mode="restrictive"/>`` and ``<memory/>`` of a different mode. This is now
+    forbidden and if either all ``<memnode/>``-s and ``<memory/>`` have to have
+    ``restrictive`` mode, or none.
+
+  * qemu: Start emulator thread with more generous ``cpuset.mems``
+
+    To ensure memory is allocated only from configured NUMA nodes, libvirt sets
+    up cpuset CGgroup controller, even before QEMU is executed. But this may
+    prevent QEMU from setting affinity of threads that allocate memory. Since
+    these threads are spawned from the emulator thread, the initial set up must
+    be more generous and include union of all host NUMA nodes that are allowed
+    in the domain definition. Once QEMU has allocated all its memory, the
+    emulator thread is restricted further, as it otherwise would be.
+
+
+v9.3.0 (2023-05-02)
+===================
+
+* **New features**
+
+  * qemu: Introduce support for ``igb`` network interface model
+
+    ``igb`` is a successor to the ``e1000e`` network device using PCIe interface.
+    It was introduced in QEMU 8.0
+
+  * qemu: Improve handling of maximum physical address configuration
+
+* **Improvements**
+
+  * qemu: Change default machine type for ARM and RISC-V
+
+    ARM and RISC-V architectures now use the ``virt`` machine type by default.
+    The previous defaults were nearly unusable and had to be overridden in most
+    cases.
+
+  * Improve translatable strings format substitutions
+
+    All translatable error messages with substitution strings were converted to
+    use positional modifiers to allow translators to shuffle around words in
+    the translation. The translations in Weblate were also updated to match.
+
+  * qemu: Improve validation of ``watchdog`` devices
+
+    Certain invalid configurations of ``watchdog`` device are now properly
+    detected:
+
+     - hotplug of always-present platform watchdogs is forbidden
+     - ``iTCO`` watchdog can be configured only once
+     - ``ib700`` watchdog is allowed only on ``i440fx`` machines
+
+  * Improved output of ``virt-host-validate`` on ARM
+
+    Our validation tool now parses the ``IORT`` data on ARM to properly detect
+    presence of SMMU and other features.
+
+* **Bug fixes**
+
+  * qemu: Fix inactive internal snapshots of VM with UEFI firmware
+
+    Recent changes to UEFI firmware handling resulted into breaking support
+    for inactive internal snapshots of VMs with UEFI which historically worked.
+    (Although the intention was to disallow them together with active ones, but
+    the check did not work properly.)
+
+    Preserve existing functionality by allowing such snapshots explicitly.
+
+  * qemu: Properly configure locked memory limit for VMs with ``<disk type='nvme'``
+
+    The NVMe driver in qemu requires some memory to be locked. This was not
+    taken into account in the code which calculates the memory limits based
+    on devices present in the configuration
+
+  * Fix native build on win32
+
+    Various improvements to the build system now allow users to build the client
+    library of libvirt on win32 natively.
+
+  * qemu: Properly detect tray of hotplugged CD-ROM devices
+
+    Media in a CD-ROM device which was hotplugged could not be changed as the
+    presence of the tray was not detected properly on hotplug.
+
+
+v9.2.0 (2023-04-01)
+===================
+
+* **New features**
+
   * qemu: Add support for QCOW2 formatted firmware
 
     This type of firmware can be picked up either automatically, if the
     corresponding JSON descriptor has the highest priority, or manually by
     using ``<loader format='qcow2'/>`` in the domain XML.
+
+  * qemu: Implement QEMU NBD reconnect delay attribute
+
+    Support the nbd reconnect-delay of QEMU. It will set the delay time for
+    reconnect after an unexpected disconnect or a serious error.
 
 * **Improvements**
 
@@ -35,12 +292,41 @@ v9.2.0 (unreleased)
     when the domain is defined, and its results are stored in the domain XML
     to be reused, unchanged, for all subsequent boots.
 
+  * qemu: passt now works when SELinux/AppArmor is enabled
+
+    In the case of SELinux, this requires passt-specific support code to be
+    present in the host policy, so it might only work with upcoming operating
+    systems and not with existing ones.
+
+  * xen: Support custom UEFI firmware paths
+
+    The Xen libxl driver now supports specifying a custom UEFI firmware path.
+    Previously the Xen default was used in all cases.
+
 * **Bug fixes**
 
   * qemu: Fix validation of the HPET timer
 
     Due to a logic bug introduced in libvirt 9.0.0, VM configurations
     explicitly enabling the HPET timer were rejected.
+
+  * qemu: Fix thread-context .host-nodes generation
+
+    With new enough QEMU, libvirt instructs QEMU to set affinity of memory
+    allocation threads. But this may have resulted in QEMU being unable to do
+    so, as affinity to NUMA nodes inaccessible to emulator thread might have
+    been requested.
+
+  * rpc: fix typo in admin code generation
+
+    Fix the bug in the remote ``virt-admin`` code generator, that resulted
+    in a crash. Introduced in libvirt 9.1.0.
+
+  * qemu: relax shared memory check for vhostuser daemons
+
+    Fix hotplug of virtiofs ``filesystem`` after restarting libvirtd.
+    Before, libvirtd would incorrectly complain about missing shared
+    memory.
 
 
 v9.1.0 (2023-03-01)
@@ -258,7 +544,7 @@ v8.10.0 (2022-12-01)
 
   * Support for SGX EPC (enclave page cache)
 
-    Users can add a ``<memory model='sgx-epc'>`` device to lauch a VM with
+    Users can add a ``<memory model='sgx-epc'>`` device to launch a VM with
     ``Intel Software Guard Extensions``.
 
   * Support migration of vTPM state of QEMU vms on shared storage
@@ -295,7 +581,7 @@ v8.10.0 (2022-12-01)
 
   * RPM packaging changes
 
-    - add optional dependancy of ``libvirt-daemon`` on ``libvirt-client``
+    - add optional dependency of ``libvirt-daemon`` on ``libvirt-client``
 
       The ``libvirt-guests.`` tool requires the ``virsh`` client to work
       properly, but we don't want to require the installation of the daemon
@@ -321,7 +607,7 @@ v8.10.0 (2022-12-01)
   * Allow incoming connections to guests on routed networks w/firewalld
 
     A change in handling of implicit rules in ``firewalld 1.0.0`` broke
-    incomming connections to VMs when using ``routed`` network. This is fixed
+    incoming connections to VMs when using ``routed`` network. This is fixed
     by adding a new ``libvirt-routed`` zone configured to once again allow
     incoming sessions to guests on routed networks.
 
@@ -329,6 +615,7 @@ v8.10.0 (2022-12-01)
 
     Certain udev entries might be of a size that makes libudev emit EINVAL
     which caused a busy loop burning CPU. Fix it by ignoring the return code.
+
 
 v8.9.0 (2022-11-01)
 ===================
@@ -507,6 +794,7 @@ v8.6.0 (2022-08-01)
 
     The firmware autoselection feature now behaves more intuitively, reports
     better error messages on failure and comes with high-level documentation.
+
 
 v8.5.0 (2022-07-01)
 ===================

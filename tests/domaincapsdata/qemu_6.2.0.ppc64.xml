@@ -8,9 +8,8 @@
   <os supported='yes'>
     <enum name='firmware'/>
     <loader supported='yes'>
-      <value>/usr/share/AAVMF/AAVMF_CODE.fd</value>
-      <value>/usr/share/AAVMF/AAVMF32_CODE.fd</value>
-      <value>/usr/share/OVMF/OVMF_CODE.fd</value>
+      <value>/obviously/fake/firmware1.fd</value>
+      <value>/obviously/fake/firmware2.fd</value>
       <enum name='type'>
         <value>rom</value>
         <value>pflash</value>
@@ -38,6 +37,7 @@
     </mode>
     <mode name='host-model' supported='yes'>
       <model fallback='allow'>POWER8</model>
+      <maxphysaddr mode='passthrough' limit='64'/>
     </mode>
     <mode name='custom' supported='yes'>
       <model usable='unknown' vendor='IBM'>POWER10</model>
@@ -167,6 +167,7 @@
     <genid supported='no'/>
     <backingStoreInput supported='yes'/>
     <backup supported='yes'/>
+    <async-teardown supported='no'/>
     <sev supported='no'/>
     <sgx supported='no'/>
   </features>

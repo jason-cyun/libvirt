@@ -69,7 +69,7 @@ bhyveFirmwareFillDomain(bhyveConn *driver,
     if (!matching_firmware) {
         if (!first_found) {
             virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("no firmwares found in %s"),
+                           _("no firmwares found in %1$s"),
                            firmware_dir);
             return -1;
         } else {
@@ -80,9 +80,12 @@ bhyveFirmwareFillDomain(bhyveConn *driver,
     if (!def->os.loader)
         def->os.loader = virDomainLoaderDefNew();
 
+    if (!def->os.loader->format)
+        def->os.loader->format = VIR_STORAGE_FILE_RAW;
+
     if (def->os.loader->format != VIR_STORAGE_FILE_RAW) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("Unsupported loader format '%s'"),
+                       _("Unsupported loader format '%1$s'"),
                        virStorageFileFormatTypeToString(def->os.loader->format));
         return -1;
     }

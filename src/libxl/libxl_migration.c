@@ -471,7 +471,7 @@ libxlDomainMigrationPrepareAny(virConnectPtr dconn,
 
     if ((*mig)->xenMigStreamVer > LIBXL_SAVE_VERSION) {
         virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
-                       _("Xen migration stream version '%d' is not supported on this host"),
+                       _("Xen migration stream version '%1$d' is not supported on this host"),
                        (*mig)->xenMigStreamVer);
         return -1;
     }
@@ -702,14 +702,14 @@ libxlDomainMigrationDstPrepare(virConnectPtr dconn,
 
         if (uri == NULL) {
             virReportError(VIR_ERR_INVALID_ARG,
-                           _("unable to parse URI: %s"),
+                           _("unable to parse URI: %1$s"),
                            uri_in);
             goto endjob;
         }
 
         if (uri->server == NULL) {
             virReportError(VIR_ERR_INVALID_ARG,
-                           _("missing host in migration URI: %s"),
+                           _("missing host in migration URI: %1$s"),
                            uri_in);
             goto endjob;
         }
@@ -1342,7 +1342,6 @@ libxlDomainMigrationSrcConfirm(libxlDriverPrivate *driver,
     libxlDriverConfig *cfg = libxlDriverConfigGet(driver);
     libxlDomainObjPrivate *priv = vm->privateData;
     virObjectEvent *event = NULL;
-    int ret = -1;
 
     if (cancelled) {
         /* Resume lock process that was paused in MigrationSrcPerform */
@@ -1351,17 +1350,6 @@ libxlDomainMigrationSrcConfirm(libxlDriverPrivate *driver,
                                    vm,
                                    priv->lockState);
         priv->lockProcessRunning = true;
-        if (libxl_domain_resume(cfg->ctx, vm->def->id, 1, 0) == 0) {
-            ret = 0;
-        } else {
-            VIR_DEBUG("Unable to resume domain '%s' after failed migration",
-                      vm->def->name);
-            virDomainObjSetState(vm, VIR_DOMAIN_PAUSED,
-                                 VIR_DOMAIN_PAUSED_MIGRATION);
-            event = virDomainEventLifecycleNewFromObj(vm, VIR_DOMAIN_EVENT_SUSPENDED,
-                                     VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED);
-            ignore_value(virDomainObjSave(vm, driver->xmlopt, cfg->stateDir));
-        }
         goto cleanup;
     }
 
@@ -1380,12 +1368,10 @@ libxlDomainMigrationSrcConfirm(libxlDriverPrivate *driver,
     if (!vm->persistent || (flags & VIR_MIGRATE_UNDEFINE_SOURCE))
         virDomainObjListRemove(driver->domains, vm);
 
-    ret = 0;
-
  cleanup:
     /* EndJob for corresponding BeginJob in begin phase */
     virDomainObjEndJob(vm);
     virObjectEventStateQueue(driver->domainEventState, event);
     virObjectUnref(cfg);
-    return ret;
+    return 0;
 }

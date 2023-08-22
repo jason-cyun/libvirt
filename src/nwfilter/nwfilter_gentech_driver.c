@@ -463,15 +463,13 @@ virNWFilterDoInstantiate(virNWFilterTechDriver *techdriver,
                          bool forceWithPendingReq)
 {
     int rc;
-    virNWFilterInst inst;
+    virNWFilterInst inst = { 0 };
     bool instantiate = true;
     g_autofree char *buf = NULL;
     virNWFilterVarValue *lv;
     const char *learning;
     bool reportIP = false;
     g_autoptr(GHashTable) missing_vars = virHashNew(virNWFilterVarValueHashFree);
-
-    memset(&inst, 0, sizeof(inst));
 
     rc = virNWFilterDetermineMissingVarsRec(filter,
                                             binding->filterparams,
@@ -514,8 +512,7 @@ virNWFilterDoInstantiate(virNWFilterTechDriver *techdriver,
             } else {
                 rc = -1;
                 virReportError(VIR_ERR_PARSE_FAILED,
-                               _("filter '%s' "
-                                 "learning value '%s' invalid."),
+                               _("filter '%1$s' learning value '%2$s' invalid."),
                                filter->name, learning);
                 goto error;
             }
@@ -576,8 +573,8 @@ virNWFilterDoInstantiate(virNWFilterTechDriver *techdriver,
     buf = virNWFilterPrintVars(missing_vars, ", ", false, reportIP);
     if (buf) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Cannot instantiate filter due to unresolvable "
-                         "variables or unavailable list elements: %s"), buf);
+                       _("Cannot instantiate filter due to unresolvable variables or unavailable list elements: %1$s"),
+                       buf);
     }
 
     rc = -1;
@@ -632,8 +629,7 @@ virNWFilterInstantiateFilterUpdate(virNWFilterDriverState *driver,
 
     if (!techdriver) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not get access to ACL tech "
-                         "driver '%s'"),
+                       _("Could not get access to ACL tech driver '%1$s'"),
                        drvname);
         return -1;
     }
@@ -779,8 +775,7 @@ virNWFilterRollbackUpdateFilter(virNWFilterBindingDef *binding)
     techdriver = virNWFilterTechDriverForName(drvname);
     if (!techdriver) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not get access to ACL tech "
-                         "driver '%s'"),
+                       _("Could not get access to ACL tech driver '%1$s'"),
                        drvname);
         return -1;
     }
@@ -805,8 +800,7 @@ virNWFilterTearOldFilter(virNWFilterBindingDef *binding)
     techdriver = virNWFilterTechDriverForName(drvname);
     if (!techdriver) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not get access to ACL tech "
-                         "driver '%s'"),
+                       _("Could not get access to ACL tech driver '%1$s'"),
                        drvname);
         return -1;
     }
@@ -830,8 +824,7 @@ _virNWFilterTeardownFilter(const char *ifname)
 
     if (!techdriver) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("Could not get access to ACL tech "
-                         "driver '%s'"),
+                       _("Could not get access to ACL tech driver '%1$s'"),
                        drvname);
         return -1;
     }

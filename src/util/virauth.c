@@ -135,7 +135,7 @@ virAuthGetUsernamePath(const char *path,
                        const char *hostname)
 {
     unsigned int ncred;
-    virConnectCredential cred;
+    virConnectCredential cred = { 0 };
     g_autofree char *prompt = NULL;
     char *ret = NULL;
 
@@ -150,13 +150,11 @@ virAuthGetUsernamePath(const char *path,
         return NULL;
     }
 
-    memset(&cred, 0, sizeof(virConnectCredential));
-
     if (defaultUsername != NULL) {
-        prompt = g_strdup_printf(_("Enter username for %s [%s]"), hostname,
+        prompt = g_strdup_printf(_("Enter username for %1$s [%2$s]"), hostname,
                                  defaultUsername);
     } else {
-        prompt = g_strdup_printf(_("Enter username for %s"), hostname);
+        prompt = g_strdup_printf(_("Enter username for %1$s"), hostname);
     }
 
     for (ncred = 0; ncred < auth->ncredtype; ncred++) {
@@ -176,7 +174,8 @@ virAuthGetUsernamePath(const char *path,
         cred.result = NULL;
         cred.resultlen = 0;
 
-        if ((*(auth->cb))(&cred, 1, auth->cbdata) < 0) {
+        if ((*(auth->cb))(&cred, 1, auth->cbdata) < 0 ||
+            !cred.result) {
             virReportError(VIR_ERR_AUTH_FAILED, "%s",
                            _("Username request failed"));
             VIR_FREE(cred.result);
@@ -230,7 +229,7 @@ virAuthGetPasswordPath(const char *path,
         return NULL;
     }
 
-    prompt = g_strdup_printf(_("Enter %s's password for %s"), username, hostname);
+    prompt = g_strdup_printf(_("Enter %1$s's password for %2$s"), username, hostname);
 
     if (!(cred = virAuthAskCredential(auth, prompt, false)))
         return NULL;
@@ -310,7 +309,8 @@ virAuthAskCredential(virConnectAuthPtr auth,
 
     ret->prompt = prompt;
 
-    if (auth->cb(ret, 1, auth->cbdata) < 0) {
+    if (auth->cb(ret, 1, auth->cbdata) < 0 ||
+        !ret->result) {
         virReportError(VIR_ERR_OPERATION_FAILED, "%s",
                        _("failed to retrieve user response for authentication callback"));
         return NULL;

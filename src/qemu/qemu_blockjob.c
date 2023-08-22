@@ -175,7 +175,7 @@ qemuBlockJobRegister(qemuBlockJobData *job,
 
     if (disk && QEMU_DOMAIN_DISK_PRIVATE(disk)->blockjob) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("disk '%s' has a blockjob assigned"), disk->dst);
+                       _("disk '%1$s' has a blockjob assigned"), disk->dst);
         return -1;
     }
 
@@ -1336,9 +1336,15 @@ qemuBlockJobProcessEventConcludedCreate(virQEMUDriver *driver,
     /* the format node part was not attached yet, so we don't need to detach it */
     backend->formatAttached = false;
     if (job->data.create.storage) {
+        size_t i;
+
         backend->storageAttached = false;
         backend->storageSliceAttached = false;
+        for (i = 0; i < backend->encryptsecretCount; ++i) {
+            VIR_FREE(backend->encryptsecretAlias[i]);
+        }
         VIR_FREE(backend->encryptsecretAlias);
+        VIR_FREE(backend->encryptsecretProps);
     }
 
     if (qemuDomainObjEnterMonitorAsync(vm, asyncJob) < 0)

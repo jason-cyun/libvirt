@@ -606,6 +606,7 @@ struct _virDomainDiskDef {
     virDomainDiskDiscard discard;
     unsigned int iothread; /* unused = 0, > 0 specific thread # */
     virDomainDiskDetectZeroes detect_zeroes;
+    virTristateSwitch discard_no_unref;
     char *domain_name; /* backend domain name */
     unsigned int queues;
     unsigned int queue_size;
@@ -943,6 +944,7 @@ typedef enum {
     VIR_DOMAIN_NET_MODEL_VIRTIO,
     VIR_DOMAIN_NET_MODEL_E1000,
     VIR_DOMAIN_NET_MODEL_E1000E,
+    VIR_DOMAIN_NET_MODEL_IGB,
     VIR_DOMAIN_NET_MODEL_VIRTIO_TRANSITIONAL,
     VIR_DOMAIN_NET_MODEL_VIRTIO_NON_TRANSITIONAL,
     VIR_DOMAIN_NET_MODEL_USB_NET,
@@ -1509,6 +1511,7 @@ typedef enum {
 } virDomainInputType;
 
 typedef enum {
+    VIR_DOMAIN_INPUT_BUS_DEFAULT,
     VIR_DOMAIN_INPUT_BUS_PS2,
     VIR_DOMAIN_INPUT_BUS_USB,
     VIR_DOMAIN_INPUT_BUS_XEN,
@@ -1593,6 +1596,10 @@ struct _virDomainSoundDef {
 
     size_t ncodecs;
     virDomainSoundCodecDef **codecs;
+
+    /* VIR_DOMAIN_SOUND_MODEL_USB can be optionally switched to
+     * multi-channel mode */
+    virTristateBool multichannel;
 
     unsigned int audioId;
 };
@@ -1768,7 +1775,7 @@ typedef enum {
 
 
 typedef enum {
-    VIR_DOMAIN_VIDEO_TYPE_DEFAULT,
+    VIR_DOMAIN_VIDEO_TYPE_DEFAULT = 0,
     VIR_DOMAIN_VIDEO_TYPE_VGA,
     VIR_DOMAIN_VIDEO_TYPE_CIRRUS,
     VIR_DOMAIN_VIDEO_TYPE_VMVGA,
@@ -1815,7 +1822,7 @@ struct _virDomainVideoDriverDef {
 struct _virDomainVideoDef {
     virObject *privateData;
 
-    int type;   /* enum virDomainVideoType */
+    virDomainVideoType type;
     unsigned int ram;  /* kibibytes (multiples of 1024) */
     unsigned int vram; /* kibibytes (multiples of 1024) */
     unsigned int vram64; /* kibibytes (multiples of 1024) */
@@ -1824,6 +1831,7 @@ struct _virDomainVideoDef {
     bool primary;
     virDomainVideoAccelDef *accel;
     virDomainVideoResolutionDef *res;
+    virTristateSwitch blob;
     virDomainVideoDriverDef *driver;
     virDomainDeviceInfo info;
     virDomainVirtioOptions *virtio;
@@ -2162,6 +2170,7 @@ typedef enum {
     VIR_DOMAIN_FEATURE_SBBC,
     VIR_DOMAIN_FEATURE_IBS,
     VIR_DOMAIN_FEATURE_TCG,
+    VIR_DOMAIN_FEATURE_ASYNC_TEARDOWN,
 
     VIR_DOMAIN_FEATURE_LAST
 } virDomainFeature;
@@ -2645,6 +2654,8 @@ struct _virDomainMemoryDef {
     unsigned long long currentsize; /* kibibytes, valid for VIRTIO_MEM and
                                        active domain only, only to report never
                                        parse */
+    unsigned long long address; /* address where memory is mapped, valid for
+                                   VIRTIO_PMEM and VIRTIO_MEM only. */
     bool readonly; /* valid only for NVDIMM */
 
     /* required for QEMU NVDIMM ppc64 support */
@@ -2711,6 +2722,13 @@ struct _virDomainIOThreadIDDef {
     virBitmap *cpumask;
 
     virDomainThreadSchedParam sched;
+
+    unsigned long long poll_max_ns;
+    bool set_poll_max_ns;
+    unsigned long long poll_grow;
+    bool set_poll_grow;
+    unsigned long long poll_shrink;
+    bool set_poll_shrink;
 
     int thread_pool_min;
     int thread_pool_max;
@@ -3559,6 +3577,7 @@ void virDomainSoundCodecDefFree(virDomainSoundCodecDef *def);
 ssize_t virDomainSoundDefFind(const virDomainDef *def,
                               const virDomainSoundDef *sound);
 void virDomainSoundDefFree(virDomainSoundDef *def);
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(virDomainSoundDef, virDomainSoundDefFree);
 virDomainSoundDef *virDomainSoundDefRemove(virDomainDef *def, size_t idx);
 void virDomainAudioDefFree(virDomainAudioDef *def);
 void virDomainMemballoonDefFree(virDomainMemballoonDef *def);
@@ -3573,7 +3592,6 @@ void virDomainVideoDefFree(virDomainVideoDef *def);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virDomainVideoDef, virDomainVideoDefFree);
 void virDomainVideoDefClear(virDomainVideoDef *def);
 virDomainHostdevDef *virDomainHostdevDefNew(void);
-void virDomainHostdevDefClear(virDomainHostdevDef *def);
 void virDomainHostdevDefFree(virDomainHostdevDef *def);
 void virDomainHubDefFree(virDomainHubDef *def);
 void virDomainRedirdevDefFree(virDomainRedirdevDef *def);

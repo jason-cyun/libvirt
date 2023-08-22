@@ -19,7 +19,7 @@ targets:
           RPM: skip
           CC: clang
 
-  alpine-315: x86_64
+  alpine-317: x86_64
 
   alpine-edge:
     jobs:
@@ -43,6 +43,46 @@ targets:
             - libvirt-rpms
 
   debian-11:
+    jobs:
+      - arch: x86_64
+        builds: false
+
+      - arch: x86_64
+        suffix: -clang
+        builds: false
+
+      - arch: aarch64
+        containers: false
+        builds: false
+
+      - arch: armv6l
+        containers: false
+        builds: false
+
+      - arch: armv7l
+        builds: false
+
+      - arch: i686
+        containers: false
+        builds: false
+
+      - arch: mips64el
+        containers: false
+        builds: false
+
+      - arch: mipsel
+        containers: false
+        builds: false
+
+      - arch: ppc64le
+        containers: false
+        builds: false
+
+      - arch: s390x
+        containers: false
+        builds: false
+
+  debian-12:
     jobs:
       - arch: x86_64
 
@@ -116,7 +156,7 @@ targets:
         containers: false
         builds: false
 
-  fedora-36:
+  fedora-37:
     jobs:
       - arch: x86_64
         artifacts:
@@ -124,7 +164,7 @@ targets:
           paths:
             - libvirt-rpms
 
-  fedora-37:
+  fedora-38:
     jobs:
       - arch: x86_64
         artifacts:
@@ -160,7 +200,7 @@ targets:
 
   freebsd-13: x86_64
 
-  opensuse-leap-153:
+  opensuse-leap-15:
     jobs:
       - arch: x86_64
         variables:

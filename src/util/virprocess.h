@@ -81,6 +81,7 @@ int virProcessSetMaxMemLock(pid_t pid, unsigned long long bytes) G_NO_INLINE;
 int virProcessSetMaxProcesses(pid_t pid, unsigned int procs);
 int virProcessSetMaxFiles(pid_t pid, unsigned int files);
 int virProcessSetMaxCoreSize(pid_t pid, unsigned long long bytes);
+void virProcessActivateMaxFiles(void);
 
 int virProcessGetMaxMemLock(pid_t pid, unsigned long long *bytes) G_NO_INLINE;
 
@@ -198,7 +199,7 @@ int virProcessGetStatInfo(unsigned long long *cpuTime,
                           unsigned long long *userTime,
                           unsigned long long *sysTime,
                           int *lastCpu,
-                          long *vm_rss,
+                          unsigned long long *vm_rss,
                           pid_t pid,
                           pid_t tid);
 int virProcessGetSchedInfo(unsigned long long *cpuWait,
